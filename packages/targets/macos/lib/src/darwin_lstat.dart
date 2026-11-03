@@ -76,20 +76,17 @@ final class DarwinTimestamp {
   /// // 500000
   /// ```
   DateTime? to_utc_datetime() {
-    if (nanoseconds < 0 ||
-        nanoseconds >= _nanoseconds_per_second) {
+    if (nanoseconds < 0 || nanoseconds >= _nanoseconds_per_second) {
       return null;
     }
 
     // Check before multiplication to prevent signed integer
     // overflow when handling malformed native observations.
-    if (seconds < -_maximum_date_seconds ||
-        seconds > _maximum_date_seconds) {
+    if (seconds < -_maximum_date_seconds || seconds > _maximum_date_seconds) {
       return null;
     }
 
-    final microseconds =
-        seconds * _microseconds_per_second +
+    final microseconds = seconds * _microseconds_per_second +
         nanoseconds ~/ _nanoseconds_per_microsecond;
 
     if (microseconds < -_maximum_date_microseconds ||
@@ -313,17 +310,7 @@ final class DarwinLStat {
   ///
   /// print(result.inode);
   /// ```
-  DarwinStatSnapshot inspect(
-    String path,
-    access_time: DarwinTimestamp(
-      seconds: stat.st_atimespec.tv_sec,
-      nanoseconds: stat.st_atimespec.tv_nsec,
-    ),
-    modification_time: DarwinTimestamp(
-      seconds: stat.st_mtimespec.tv_sec,
-      nanoseconds: stat.st_mtimespec.tv_nsec,
-    ),
-  ) {
+  DarwinStatSnapshot inspect(String path) {
     if (path.isEmpty ||
         !path.startsWith('/') ||
         path.contains('\u0000') ||
@@ -364,6 +351,14 @@ final class DarwinLStat {
           inode: stat.st_ino,
           logical_size_bytes: stat.st_size,
           allocated_blocks: stat.st_blocks,
+          access_time: DarwinTimestamp(
+            seconds: stat.st_atimespec.tv_sec,
+            nanoseconds: stat.st_atimespec.tv_nsec,
+          ),
+          modification_time: DarwinTimestamp(
+            seconds: stat.st_mtimespec.tv_sec,
+            nanoseconds: stat.st_mtimespec.tv_nsec,
+          ),
         );
       } finally {
         calloc.free(native_path);
