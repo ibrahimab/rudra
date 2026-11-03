@@ -6,6 +6,12 @@ import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 import 'package:rudra_target_macos/rudra_target_macos.dart';
 import 'package:test/test.dart';
 
+/// Darwin allocation unit used by the independent stat comparison.
+const int _darwin_allocation_block_bytes = 512;
+
+/// POSIX mode 0640: owner read/write, group read, others none.
+const int _fixture_posix_mode = 0x1A0;
+
 void main() {
   group('MacOsTargetInspector.inspect', () {
     late Directory fixture;
@@ -254,6 +260,149 @@ void main() {
         entry.metadata.permissions?.effective_executable,
         isNull,
       );
+    });
+
+    test('reports filesystem-allocated bytes', () async {
+      final file = File('${fixture.path}/allocated.txt');
+      await file.writeAsString('Rudra allocation test');
+
+      final command = await Process.run(
+        '/usr/bin/stat',
+        ['-f', '%b', file.path],
+      );
+
+      expect(
+        command.exitCode,
+        0,
+        reason: '${command.stderr}',
+      );
+
+      final allocated_blocks = int.parse(
+        (command.stdout as String).trim(),
+      );
+
+      final entry = await inspector.inspect(
+        TargetPath(file.path),
+      );
+
+      // Compare against the operating system's independent
+      // report, not against an assumed APFS allocation size.
+      expect(
+        entry.metadata.allocated_size_bytes,
+        allocated_blocks * _darwin_allocation_block_bytes,
+      );
+
+      expect(
+        entry.metadata.logical_size_bytes,
+        await file.length(),
+      );
+    });
+
+    test('identifies hard links as the same object', () async {
+      final original = File('${fixture.path}/original.txt');
+      await original.writeAsString('Shared inode');
+
+      final hard_link_path = '${fixture.path}/hard-link.txt';
+
+      final command = await Process.run(
+        '/bin/ln',
+        [original.path, hard_link_path],
+      );
+
+      expect(
+        command.exitCode,
+        0,
+        reason: '${command.stderr}',
+      );
+
+      final original_entry = await inspector.inspect(
+        TargetPath(original.path),
+      );
+
+      final hard_link_entry = await inspector.inspect(
+        TargetPath(hard_link_path),
+      );
+
+      final original_identity = original_entry.metadata.identity;
+      final hard_link_identity = hard_link_entry.metadata.identity;
+
+      expect(original_identity, isNotNull);
+      expect(hard_link_identity, original_identity);
+
+      // Matching identities do not imply that removing one
+      // directory entry would reclaim the allocated bytes.
+    });
+
+    test('identifies symbolic links independently', () async {
+      final original = File('${fixture.path}/original.txt');
+      await original.writeAsString('Original data');
+
+      final link = Link('${fixture.path}/symbolic-link');
+      await link.create('original.txt');
+
+      final original_entry = await inspector.inspect(
+        TargetPath(original.path),
+      );
+
+      final link_entry = await inspector.inspect(
+        TargetPath(link.path),
+      );
+
+      final original_identity = original_entry.metadata.identity;
+      final link_identity = link_entry.metadata.identity;
+
+      expect(original_identity, isNotNull);
+      expect(link_identity, isNotNull);
+
+      expect(
+        link_identity,
+        isNot(original_identity),
+      );
+
+      expect(
+        link_identity!.filesystem_id,
+        original_identity!.filesystem_id,
+      );
+
+      expect(
+        link_entry.kind,
+        FilesystemEntryKind.symbolicLink,
+      );
+    });
+
+    test('reports POSIX mode without inferring access', () async {
+      final file = File('${fixture.path}/permissions.txt');
+      await file.writeAsString('Permission test');
+
+      // Restrict only this disposable test fixture.
+      final command = await Process.run(
+        '/bin/chmod',
+        ['640', file.path],
+      );
+
+      expect(
+        command.exitCode,
+        0,
+        reason: '${command.stderr}',
+      );
+
+      final entry = await inspector.inspect(
+        TargetPath(file.path),
+      );
+
+      final permissions = entry.metadata.permissions;
+
+      expect(permissions, isNotNull);
+
+      expect(
+        permissions!.posix_mode,
+        _fixture_posix_mode,
+      );
+
+      // Mode bits alone do not establish effective access.
+      expect(permissions.effective_readable, isNull);
+      expect(permissions.effective_writable, isNull);
+      expect(permissions.effective_executable, isNull);
     });
   });
 }

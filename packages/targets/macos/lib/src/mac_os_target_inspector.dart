@@ -15,6 +15,18 @@ const int _block_device_type = 0x6000;
 const int _socket_type = 0xC000;
 const int _whiteout_type = 0xE000;
 
+// Darwin st_mode uses the low 12 bits for POSIX permissions
+// and special permission flags, excluding the file type.
+const int _posix_permission_mask = 0x0FFF;
+
+// Darwin st_blocks counts allocation in 512-byte units,
+// independent of the filesystem's physical block size.
+const int _darwin_allocation_block_bytes = 512;
+
+// Prevent signed 64-bit overflow when converting block counts
+// to byte counts. An unrepresentable observation remains unknown.
+const int _maximum_signed_int64 = 0x7FFFFFFFFFFFFFFF;
+
 // Darwin errno constants from sys/errno.h.
 const int _errno_operation_not_permitted = 1;
 const int _errno_not_found = 2;
@@ -90,7 +102,17 @@ final class MacOsTargetInspector {
   /// entry, not a recursive directory size. A negative value is
   /// represented as null rather than fabricated as zero.
   ///
-  /// Metadata not implemented in this block remains null.
+  /// Allocated size is derived from native 512-byte block counts.
+  /// It does not represent exclusively owned or recoverable storage.
+  ///
+  /// Filesystem identity combines the native device and inode
+  /// identifiers. It is meaningful only within the same live
+  /// macOS target identity namespace. Identity reuse is possible.
+  ///
+  /// POSIX permission bits are reported without inferring effective
+  /// access. Effective access fields remain null.
+  ///
+  /// Timestamps are not yet exposed by this adapter and remain null.
   ///
   /// Completes with [TargetInspectionException] when inspection
   /// fails. The operation is always
@@ -139,6 +161,32 @@ final class MacOsTargetInspector {
 
     final kind = _entry_kind(snapshot.mode, path);
 
+    // st_blocks is signed. Negative or unrepresentable values
+    // must not become fabricated allocated-size observations.
+    final allocated_blocks = snapshot.allocated_blocks;
+
+    final allocated_size_bytes = allocated_blocks >= 0 &&
+            allocated_blocks <=
+                _maximum_signed_int64 ~/ _darwin_allocation_block_bytes
+        ? allocated_blocks * _darwin_allocation_block_bytes
+        : null;
+
+    // An inode of zero is treated conservatively as an
+    // unavailable identity. Device numbers are scoped to the
+    // current macOS target and may be reused over time.
+    final identity = snapshot.inode > 0
+        ? FilesystemIdentity(
+            filesystem_id: 'darwin-dev:${snapshot.device_id}',
+            entry_id: snapshot.inode.toString(),
+          )
+        : null;
+
+    // POSIX mode records permission and special bits.
+    // No effective-access checks have been performed.
+    final permissions = FilesystemPermissions(
+      posix_mode: snapshot.mode & _posix_permission_mask,
+    );
+
     return FilesystemEntry(
       path: path,
       kind: kind,
@@ -146,6 +194,9 @@ final class MacOsTargetInspector {
         logical_size_bytes: snapshot.logical_size_bytes >= 0
             ? snapshot.logical_size_bytes
             : null,
+        allocated_size_bytes: allocated_size_bytes,
+        identity: identity,
+        permissions: permissions,
       ),
     );
   }
