@@ -968,6 +968,222 @@ void main() {
       expect(destination.value, target);
     });
   });
+
+  group('MacOsTargetInspector.capabilities_for', () {
+    late Directory fixture;
+    late MacOsTargetInspector inspector;
+
+    setUp(() async {
+      fixture = await Directory.systemTemp.createTemp(
+        'rudra_capabilities_test_',
+      );
+
+      inspector = MacOsTargetInspector();
+    });
+
+    tearDown(() async {
+      await fixture.delete(recursive: true);
+    });
+
+    test('reports every supported and unavailable feature', () async {
+      final capabilities = await inspector.capabilities_for(
+        TargetPath(fixture.path),
+      );
+
+      const expected = <TargetInspectionFeature, TargetCapabilityStatus>{
+        TargetInspectionFeature.logicalFileSize:
+            TargetCapabilityStatus.supported,
+        TargetInspectionFeature.allocatedSize: TargetCapabilityStatus.supported,
+        TargetInspectionFeature.creationTime: TargetCapabilityStatus.unknown,
+        TargetInspectionFeature.modificationTime:
+            TargetCapabilityStatus.supported,
+        TargetInspectionFeature.accessTime: TargetCapabilityStatus.supported,
+        TargetInspectionFeature.filesystemIdentity:
+            TargetCapabilityStatus.supported,
+        TargetInspectionFeature.posixMode: TargetCapabilityStatus.supported,
+        TargetInspectionFeature.effectiveAccess:
+            TargetCapabilityStatus.unsupported,
+        TargetInspectionFeature.symbolicLinkTarget:
+            TargetCapabilityStatus.supported,
+      };
+
+      // Require coverage of every feature defined by the
+      // target contracts. New features must be classified
+      // deliberately rather than silently assumed supported.
+      expect(
+        expected.keys.toSet(),
+        TargetInspectionFeature.values.toSet(),
+      );
+
+      for (final feature in TargetInspectionFeature.values) {
+        expect(
+          capabilities.status_for(feature),
+          expected[feature],
+          reason: 'Unexpected capability status for ${feature.name}',
+        );
+      }
+    });
+
+    test('returns immutable capability observations', () async {
+      final capabilities = await inspector.capabilities_for(
+        TargetPath(fixture.path),
+      );
+
+      expect(
+        () => capabilities.statuses[TargetInspectionFeature.effectiveAccess] =
+            TargetCapabilityStatus.supported,
+        throwsUnsupportedError,
+      );
+
+      // A caller must not be able to promote unsupported
+      // functionality to supported by changing the result.
+      expect(
+        capabilities.status_for(
+          TargetInspectionFeature.effectiveAccess,
+        ),
+        TargetCapabilityStatus.unsupported,
+      );
+    });
+
+    test('discovers capabilities for a regular file', () async {
+      final file = File('${fixture.path}/example.txt');
+      await file.writeAsString('Rudra');
+
+      final capabilities = await inspector.capabilities_for(
+        TargetPath(file.path),
+      );
+
+      expect(
+        capabilities.status_for(
+          TargetInspectionFeature.logicalFileSize,
+        ),
+        TargetCapabilityStatus.supported,
+      );
+
+      expect(
+        capabilities.status_for(
+          TargetInspectionFeature.filesystemIdentity,
+        ),
+        TargetCapabilityStatus.supported,
+      );
+    });
+
+    test('accepts dangling symbolic links', () async {
+      final link = Link('${fixture.path}/dangling');
+      await link.create('missing-destination');
+
+      // Capability discovery uses lstat, which observes the
+      // symbolic link itself without resolving its target.
+      final capabilities = await inspector.capabilities_for(
+        TargetPath(link.path),
+      );
+
+      expect(
+        capabilities.status_for(
+          TargetInspectionFeature.symbolicLinkTarget,
+        ),
+        TargetCapabilityStatus.supported,
+      );
+
+      expect(
+        await File('${fixture.path}/missing-destination').exists(),
+        isFalse,
+      );
+    });
+
+    test('does not require directory children to be valid', () async {
+      final directory = Directory('${fixture.path}/parent');
+      await directory.create();
+
+      // A dangling child does not prevent capability discovery
+      // for its parent. The adapter must inspect only the
+      // requested location, not recursively validate children.
+      final dangling = Link('${directory.path}/dangling');
+      await dangling.create('missing-destination');
+
+      final capabilities = await inspector.capabilities_for(
+        TargetPath(directory.path),
+      );
+
+      expect(
+        capabilities.status_for(
+          TargetInspectionFeature.symbolicLinkTarget,
+        ),
+        TargetCapabilityStatus.supported,
+      );
+    });
+
+    test('rejects missing locations with a typed error', () async {
+      final path = TargetPath('${fixture.path}/missing');
+
+      await expectLater(
+        inspector.capabilities_for(path),
+        throwsA(
+          _capability_error(
+            TargetInspectionErrorCode.notFound,
+            path,
+          ).having(
+            (error) => error.cause,
+            'native cause',
+            isA<FileSystemException>(),
+          ),
+        ),
+      );
+    });
+
+    test('rejects invalid macOS paths', () async {
+      final relative = TargetPath('relative/location');
+      final trailing = TargetPath('${fixture.path}/');
+
+      for (final path in [relative, trailing]) {
+        await expectLater(
+          inspector.capabilities_for(path),
+          throwsA(
+            _capability_error(
+              TargetInspectionErrorCode.invalidPath,
+              path,
+            ),
+          ),
+        );
+      }
+    });
+
+    test('reports non-directory intermediate components', () async {
+      final file = File('${fixture.path}/regular.txt');
+      await file.writeAsString('Data');
+
+      final path = TargetPath('${file.path}/child');
+
+      await expectLater(
+        inspector.capabilities_for(path),
+        throwsA(
+          _capability_error(
+            TargetInspectionErrorCode.notDirectory,
+            path,
+          ),
+        ),
+      );
+    });
+
+    test('reports intermediate symbolic-link cycles', () async {
+      final link = Link('${fixture.path}/cycle');
+      await link.create('cycle');
+
+      // macOS must resolve the intermediate component to
+      // inspect the final child, revealing the link cycle.
+      final path = TargetPath('${link.path}/child');
+
+      await expectLater(
+        inspector.capabilities_for(path),
+        throwsA(
+          _capability_error(
+            TargetInspectionErrorCode.symbolicLinkLoop,
+            path,
+          ),
+        ),
+      );
+    });
+  });
 }
 
 /// Matches an inspection failure using its typed contract fields.
@@ -1063,6 +1279,44 @@ TypeMatcher<TargetInspectionException> _symbolic_link_error(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.readSymbolicLink,
+      )
+      .having(
+        (error) => error.path,
+        'original path',
+        same(path),
+      );
+}
+
+/// Matches a capability-discovery failure by its public contract.
+///
+/// Checks the error classification, operation, and original
+/// TargetPath object. Native diagnostic messages are deliberately
+/// excluded from programmatic classification.
+///
+/// Returns a TypeMatcher so additional assertions can be chained
+/// with having(), including checks of the preserved native cause.
+///
+/// Example:
+/// ```dart
+/// final matcher = _capability_error(
+///   TargetInspectionErrorCode.notFound,
+///   TargetPath('/tmp/missing'),
+/// );
+/// ```
+TypeMatcher<TargetInspectionException> _capability_error(
+  TargetInspectionErrorCode code,
+  TargetPath path,
+) {
+  return isA<TargetInspectionException>()
+      .having(
+        (error) => error.code,
+        'error code',
+        code,
+      )
+      .having(
+        (error) => error.operation,
+        'operation',
+        TargetInspectionOperation.capabilitiesFor,
       )
       .having(
         (error) => error.path,

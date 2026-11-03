@@ -44,11 +44,15 @@ const int _errno_name_too_long = 63;
 /// entries without following symbolic links in their final path
 /// component.
 ///
-/// This is an incremental implementation providing [inspect],
-/// [list_directory], and [read_symbolic_link].
+/// Provides [capabilities_for], [inspect], [list_directory],
+/// and [read_symbolic_link] using native macOS operations.
 ///
-/// Capability discovery will be added in a subsequent block.
-/// Until then, this class is not a complete TargetInspector.
+/// The implementation remains read-only and does not perform
+/// recursive aggregation or make cleanup decisions.
+///
+/// Formal TargetInspector interface conformance and the shared
+/// conformance test suite will be activated in Block 3F.
+///
 ///
 /// No filesystem modifications are performed.
 ///
@@ -59,9 +63,6 @@ const int _errno_name_too_long = 63;
 /// - Observations are not atomic filesystem snapshots.
 /// - Native `lstat` is synchronous and may block the calling isolate.
 /// - No metadata observation authorizes cleanup or deletion.
-///
-/// This class must not be registered as a complete TargetInspector
-/// until all required interface operations are implemented.
 ///
 /// Example:
 /// ```dart
@@ -148,6 +149,114 @@ final class MacOsTargetInspector {
   ///
   /// The original native exception is preserved as the cause.
   ///
+
+  /// Discovers supported inspection capabilities at a macOS path.
+  ///
+  /// [path] must identify an addressable filesystem entry using
+  /// an absolute macOS path. The final symbolic-link component
+  /// is inspected as a link rather than followed.
+  ///
+  /// This operation validates the requested location through
+  /// native lstat() before reporting the adapter's capabilities.
+  /// It does not recursively inspect directories or their children.
+  ///
+  /// The returned [TargetCapabilities] is an immutable snapshot
+  /// of features the adapter can provide where applicable.
+  ///
+  /// A supported status does not guarantee that a particular
+  /// filesystem entry has a valid value for that feature.
+  /// Filesystem-specific behavior and unavailable observations
+  /// may still cause individual metadata fields to be null.
+  ///
+  /// Creation-time support remains unknown because the native
+  /// birthtime field does not reliably distinguish actual
+  /// creation time from filesystem-dependent fallback values.
+  ///
+  /// Effective-access inspection is unsupported by this adapter.
+  /// POSIX permission bits are not used to infer effective access.
+  ///
+  /// Capability observations are not authorization guarantees.
+  /// They may become stale if a filesystem is remounted,
+  /// replaced, or otherwise changed.
+  ///
+  /// Throws [TargetInspectionException] when the requested
+  /// location cannot be inspected.
+  ///
+  /// Errors use [TargetInspectionOperation.capabilitiesFor],
+  /// retain the original [TargetPath], and preserve the native
+  /// failure as their diagnostic cause.
+  ///
+  /// No filesystem content is modified.
+  ///
+  /// Example:
+  /// ```dart
+  /// final inspector = MacOsTargetInspector();
+  ///
+  /// final capabilities = await inspector.capabilities_for(
+  ///   TargetPath('/tmp'),
+  /// );
+  ///
+  /// final status = capabilities.status_for(
+  ///   TargetInspectionFeature.allocatedSize,
+  /// );
+  ///
+  /// print(status);
+  /// // TargetCapabilityStatus.supported
+  /// ```
+  Future<TargetCapabilities> capabilities_for(
+    TargetPath path,
+  ) async {
+    try {
+      // Confirm that the requested entry is addressable.
+      // lstat does not follow the final symbolic link.
+      //
+      // A missing or inaccessible entry must produce a typed
+      // failure, never a seemingly successful capabilities map.
+      _native.inspect(path.value);
+    } on ArgumentError catch (error) {
+      throw TargetInspectionException(
+        code: TargetInspectionErrorCode.invalidPath,
+        operation: TargetInspectionOperation.capabilitiesFor,
+        path: path,
+        message: 'Invalid absolute macOS capability path.',
+        cause: error,
+      );
+    } on FileSystemException catch (error) {
+      throw TargetInspectionException(
+        code: _translate_errno(error.osError?.errorCode),
+        operation: TargetInspectionOperation.capabilitiesFor,
+        path: path,
+        message: 'macOS could not inspect the capability location.',
+        cause: error,
+      );
+    }
+
+    // These statuses describe features implemented by this
+    // adapter, not guaranteed availability of metadata for
+    // every entry or every mounted filesystem.
+    //
+    // No unsupported or unknown feature is promoted to
+    // supported based on assumptions about APFS or macOS.
+    return TargetCapabilities(
+      statuses: const {
+        TargetInspectionFeature.logicalFileSize:
+            TargetCapabilityStatus.supported,
+        TargetInspectionFeature.allocatedSize: TargetCapabilityStatus.supported,
+        TargetInspectionFeature.creationTime: TargetCapabilityStatus.unknown,
+        TargetInspectionFeature.modificationTime:
+            TargetCapabilityStatus.supported,
+        TargetInspectionFeature.accessTime: TargetCapabilityStatus.supported,
+        TargetInspectionFeature.filesystemIdentity:
+            TargetCapabilityStatus.supported,
+        TargetInspectionFeature.posixMode: TargetCapabilityStatus.supported,
+        TargetInspectionFeature.effectiveAccess:
+            TargetCapabilityStatus.unsupported,
+        TargetInspectionFeature.symbolicLinkTarget:
+            TargetCapabilityStatus.supported,
+      },
+    );
+  }
+
   /// This operation performs no filesystem mutation.
   ///
   /// Example:
