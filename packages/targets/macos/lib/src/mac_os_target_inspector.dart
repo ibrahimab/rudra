@@ -4,6 +4,7 @@ import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
 import 'darwin_directory_reader.dart';
 import 'darwin_lstat.dart';
+import 'darwin_readlink.dart';
 
 // Darwin file-type constants from sys/stat.h.
 const int _file_type_mask = 0xF000;
@@ -43,9 +44,11 @@ const int _errno_name_too_long = 63;
 /// entries without following symbolic links in their final path
 /// component.
 ///
-/// This is an incremental implementation providing [inspect]
-/// and [list_directory]. The remaining TargetInspector
-/// operations will be added in subsequent implementation blocks.
+/// This is an incremental implementation providing [inspect],
+/// [list_directory], and [read_symbolic_link].
+///
+/// Capability discovery will be added in a subsequent block.
+/// Until then, this class is not a complete TargetInspector.
 ///
 /// No filesystem modifications are performed.
 ///
@@ -88,6 +91,11 @@ final class MacOsTargetInspector {
   // Lazily initialize directory bindings only when enumeration
   // is first requested. Existing inspect() behavior is unchanged.
   late final DarwinDirectoryReader _directory_reader = DarwinDirectoryReader();
+
+  // Resolve native readlink bindings only when a symbolic-link
+  // destination is requested. Inspection and enumeration do not
+  // depend on this additional native reader.
+  late final DarwinReadLink _symbolic_link_reader = DarwinReadLink();
 
   /// Inspects one filesystem entry without following its final link.
   ///
@@ -332,6 +340,100 @@ final class MacOsTargetInspector {
         failure_stack!,
       );
     }
+  }
+
+  /// Reads the stored destination of a macOS symbolic link.
+  ///
+  /// [path] must be an absolute macOS path without a trailing
+  /// separator, except for the filesystem root.
+  ///
+  /// The returned [TargetPath] contains the destination exactly
+  /// as stored and decoded by the native reader. It may be
+  /// absolute or relative.
+  ///
+  /// This operation:
+  /// - Does not resolve the destination.
+  /// - Does not require the destination to exist.
+  /// - Does not follow the final symbolic link.
+  /// - Does not modify filesystem contents.
+  ///
+  /// Native readlink() is used directly rather than performing
+  /// a separate inspection first. This avoids introducing an
+  /// unnecessary check/use race.
+  ///
+  /// A non-symbolic-link entry produces
+  /// [TargetInspectionErrorCode.notSymbolicLink].
+  ///
+  /// Invalid input paths produce
+  /// [TargetInspectionErrorCode.invalidPath].
+  ///
+  /// Other native failures use the existing Darwin errno
+  /// translation. Unknown failures become
+  /// [TargetInspectionErrorCode.ioFailure].
+  ///
+  /// Every failure uses
+  /// [TargetInspectionOperation.readSymbolicLink] and preserves
+  /// the original requested [TargetPath].
+  ///
+  /// Native exceptions are retained as diagnostic causes.
+  ///
+  /// This operation is asynchronous at the contract boundary,
+  /// but native readlink() executes synchronously and may
+  /// briefly block the calling isolate.
+  ///
+  /// Intermediate symbolic links may still be traversed.
+  /// This operation does not establish session-root containment
+  /// or authorize any future cleanup operation.
+  ///
+  /// Example:
+  /// ```dart
+  /// final inspector = MacOsTargetInspector();
+  ///
+  /// final destination = await inspector.read_symbolic_link(
+  ///   TargetPath('/tmp/cache-link'),
+  /// );
+  ///
+  /// print(destination.value);
+  /// ```
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
+    late final String destination;
+
+    try {
+      // readlink() observes the final symbolic link without
+      // following its stored destination.
+      destination = _symbolic_link_reader.read_target(
+        path.value,
+      );
+    } on ArgumentError catch (error) {
+      throw TargetInspectionException(
+        code: TargetInspectionErrorCode.invalidPath,
+        operation: TargetInspectionOperation.readSymbolicLink,
+        path: path,
+        message: 'Invalid absolute macOS symbolic-link path.',
+        cause: error,
+      );
+    } on FileSystemException catch (error) {
+      final error_number = error.osError?.errorCode;
+
+      // For readlink(), EINVAL identifies an entry that is not
+      // a symbolic link. This differs from the generic inspect()
+      // interpretation of EINVAL as invalidPath.
+      final code = error_number == _errno_invalid_argument
+          ? TargetInspectionErrorCode.notSymbolicLink
+          : _translate_errno(error_number);
+
+      throw TargetInspectionException(
+        code: code,
+        operation: TargetInspectionOperation.readSymbolicLink,
+        path: path,
+        message: 'macOS could not read the symbolic-link destination.',
+        cause: error,
+      );
+    }
+
+    // Relative destinations are valid contract values.
+    // TargetPath deliberately does not canonicalize or resolve them.
+    return TargetPath(destination);
   }
 
   /// Converts a native directory failure into a contract error.

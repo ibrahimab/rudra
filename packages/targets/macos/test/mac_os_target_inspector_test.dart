@@ -778,6 +778,196 @@ void main() {
       expect(remaining, hasLength(16));
     });
   });
+
+  group('MacOsTargetInspector.read_symbolic_link', () {
+    late Directory fixture;
+    late MacOsTargetInspector inspector;
+
+    setUp(() async {
+      fixture = await Directory.systemTemp.createTemp(
+        'rudra_symbolic_link_inspector_test_',
+      );
+
+      inspector = MacOsTargetInspector();
+    });
+
+    tearDown(() async {
+      await fixture.delete(recursive: true);
+    });
+
+    test('preserves relative destinations exactly', () async {
+      const target = '../cache/../original.txt';
+
+      final link = Link('${fixture.path}/shortcut');
+      await link.create(target);
+
+      final destination = await inspector.read_symbolic_link(
+        TargetPath(link.path),
+      );
+
+      expect(destination.value, target);
+    });
+
+    test('preserves absolute destinations exactly', () async {
+      final target = '${fixture.path}/missing-target';
+
+      final link = Link('${fixture.path}/absolute-link');
+      await link.create(target);
+
+      final destination = await inspector.read_symbolic_link(
+        TargetPath(link.path),
+      );
+
+      expect(destination.value, target);
+    });
+
+    test('reads dangling symbolic links', () async {
+      const target = 'nonexistent-entry';
+
+      final link = Link('${fixture.path}/dangling');
+      await link.create(target);
+
+      final destination = await inspector.read_symbolic_link(
+        TargetPath(link.path),
+      );
+
+      expect(destination.value, target);
+
+      // The destination does not have to exist.
+      expect(
+        await File('${fixture.path}/$target').exists(),
+        isFalse,
+      );
+    });
+
+    test('does not follow self-referencing links', () async {
+      final link = Link('${fixture.path}/self-reference');
+      await link.create('self-reference');
+
+      final destination = await inspector.read_symbolic_link(
+        TargetPath(link.path),
+      );
+
+      // Resolving this link would encounter a cycle.
+      // Reading its stored target must succeed.
+      expect(destination.value, 'self-reference');
+    });
+
+    test('preserves Unicode destinations', () async {
+      const target = '../café/日本語/über.txt';
+
+      final link = Link('${fixture.path}/unicode-link');
+      await link.create(target);
+
+      final destination = await inspector.read_symbolic_link(
+        TargetPath(link.path),
+      );
+
+      expect(destination.value, target);
+    });
+
+    test('rejects regular files as non-symbolic links', () async {
+      final file = File('${fixture.path}/regular.txt');
+      await file.writeAsString('Regular file');
+
+      final path = TargetPath(file.path);
+
+      await expectLater(
+        inspector.read_symbolic_link(path),
+        throwsA(
+          _symbolic_link_error(
+            TargetInspectionErrorCode.notSymbolicLink,
+            path,
+          ),
+        ),
+      );
+    });
+
+    test('rejects directories as non-symbolic links', () async {
+      final path = TargetPath(fixture.path);
+
+      await expectLater(
+        inspector.read_symbolic_link(path),
+        throwsA(
+          _symbolic_link_error(
+            TargetInspectionErrorCode.notSymbolicLink,
+            path,
+          ),
+        ),
+      );
+    });
+
+    test('reports missing links and preserves the native cause', () async {
+      final path = TargetPath('${fixture.path}/missing');
+
+      await expectLater(
+        inspector.read_symbolic_link(path),
+        throwsA(
+          _symbolic_link_error(
+            TargetInspectionErrorCode.notFound,
+            path,
+          ).having(
+            (error) => error.cause,
+            'native cause',
+            isA<FileSystemException>(),
+          ),
+        ),
+      );
+    });
+
+    test('rejects invalid macOS input paths', () async {
+      final relative = TargetPath('relative/link');
+      final trailing = TargetPath('${fixture.path}/');
+
+      for (final path in [relative, trailing]) {
+        await expectLater(
+          inspector.read_symbolic_link(path),
+          throwsA(
+            _symbolic_link_error(
+              TargetInspectionErrorCode.invalidPath,
+              path,
+            ),
+          ),
+        );
+      }
+    });
+
+    test('reports intermediate symbolic-link cycles', () async {
+      final link = Link('${fixture.path}/cycle');
+      await link.create('cycle');
+
+      // The final component is "child", so macOS must
+      // resolve the cyclic intermediate symbolic link.
+      final path = TargetPath('${link.path}/child');
+
+      await expectLater(
+        inspector.read_symbolic_link(path),
+        throwsA(
+          _symbolic_link_error(
+            TargetInspectionErrorCode.symbolicLinkLoop,
+            path,
+          ),
+        ),
+      );
+    });
+
+    test('preserves noncanonical source path spelling', () async {
+      const target = '../original.txt';
+
+      final link = Link('${fixture.path}/shortcut');
+      await link.create(target);
+
+      final path = TargetPath(
+        '${fixture.path}/./shortcut',
+      );
+
+      final destination = await inspector.read_symbolic_link(path);
+
+      // Reading a link must not normalize or resolve the
+      // stored destination based on the source path.
+      expect(destination.value, target);
+    });
+  });
 }
 
 /// Matches an inspection failure using its typed contract fields.
@@ -835,6 +1025,44 @@ Matcher _directory_error(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.listDirectory,
+      )
+      .having(
+        (error) => error.path,
+        'original path',
+        same(path),
+      );
+}
+
+/// Matches a symbolic-link reading failure by its public contract.
+///
+/// Checks the platform-independent error code, the required
+/// operation, and the exact original TargetPath object.
+///
+/// Native diagnostics and messages are excluded from this matcher
+/// because applications must not classify failures by parsing
+/// operating-system messages.
+///
+/// Example:
+/// ```dart
+/// final matcher = _symbolic_link_error(
+///   TargetInspectionErrorCode.notSymbolicLink,
+///   TargetPath('/tmp/regular.txt'),
+/// );
+/// ```
+TypeMatcher<TargetInspectionException> _symbolic_link_error(
+  TargetInspectionErrorCode code,
+  TargetPath path,
+) {
+  return isA<TargetInspectionException>()
+      .having(
+        (error) => error.code,
+        'error code',
+        code,
+      )
+      .having(
+        (error) => error.operation,
+        'operation',
+        TargetInspectionOperation.readSymbolicLink,
       )
       .having(
         (error) => error.path,
