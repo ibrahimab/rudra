@@ -1,0 +1,13 @@
+name: rudra_cli
+publish_to: none
+version: 0.1.0
+resolution: workspace
+environment:
+  sdk: ^3.6.0
+dependencies:
+  rudra_sdk:
+    path: ../../packages/sdk
+  rudra_target_macos:
+    path: ../../packages/targets/macos
+  rudra_persistence_sqlite:
+    path: ../../packages/persistence/sqlite

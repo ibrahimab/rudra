@@ -1,0 +1,6 @@
+name: rudra_target_contracts
+publish_to: none
+version: 0.1.0
+resolution: workspace
+environment:
+  sdk: ^3.6.0

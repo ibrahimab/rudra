@@ -1,0 +1,10 @@
+name: rudra_workspace
+publish_to: none
+environment:
+  sdk: ^3.6.0
+workspace:
+  - apps/cli
+  - packages/sdk
+  - packages/targets/contracts
+  - packages/targets/macos
+  - packages/persistence/sqlite
