@@ -50,8 +50,12 @@ const int _errno_name_too_long = 63;
 /// The implementation remains read-only and does not perform
 /// recursive aggregation or make cleanup decisions.
 ///
-/// Formal TargetInspector interface conformance and the shared
-/// conformance test suite will be activated in Block 3F.
+/// Implements [TargetInspector], allowing the platform-independent
+/// SDK to consume macOS filesystem observations without depending
+/// on the concrete adapter.
+///
+/// All four contract operations are implemented. Their behavior
+/// is verified by native and contract-level integration tests.
 ///
 ///
 /// No filesystem modifications are performed.
@@ -74,7 +78,8 @@ const int _errno_name_too_long = 63;
 ///
 /// print(entry.kind);
 /// ```
-final class MacOsTargetInspector {
+
+final class MacOsTargetInspector implements TargetInspector {
   /// Creates a macOS filesystem inspector.
   ///
   /// Initializes the private Darwin native inspection bridge.
@@ -203,6 +208,7 @@ final class MacOsTargetInspector {
   /// print(status);
   /// // TargetCapabilityStatus.supported
   /// ```
+  @override
   Future<TargetCapabilities> capabilities_for(
     TargetPath path,
   ) async {
@@ -269,6 +275,7 @@ final class MacOsTargetInspector {
   ///
   /// print(entry.metadata.logical_size_bytes);
   /// ```
+  @override
   Future<FilesystemEntry> inspect(TargetPath path) async {
     late final DarwinStatSnapshot snapshot;
 
@@ -376,6 +383,7 @@ final class MacOsTargetInspector {
   ///   print(child.value);
   /// }
   /// ```
+  @override
   Stream<TargetPath> list_directory(TargetPath path) async* {
     DarwinDirectoryCursor? cursor;
 
@@ -504,6 +512,7 @@ final class MacOsTargetInspector {
   ///
   /// print(destination.value);
   /// ```
+  @override
   Future<TargetPath> read_symbolic_link(TargetPath path) async {
     late final String destination;
 
