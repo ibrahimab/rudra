@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
+import 'darwin_directory_reader.dart';
 import 'darwin_lstat.dart';
 
 // Darwin file-type constants from sys/stat.h.
@@ -42,9 +43,9 @@ const int _errno_name_too_long = 63;
 /// entries without following symbolic links in their final path
 /// component.
 ///
-/// This is an incremental implementation. Block 3A.2 provides
-/// [inspect] only. The remaining TargetInspector operations will
-/// be added in subsequent implementation blocks.
+/// This is an incremental implementation providing [inspect]
+/// and [list_directory]. The remaining TargetInspector
+/// operations will be added in subsequent implementation blocks.
 ///
 /// No filesystem modifications are performed.
 ///
@@ -83,6 +84,10 @@ final class MacOsTargetInspector {
   MacOsTargetInspector() : _native = DarwinLStat();
 
   final DarwinLStat _native;
+
+  // Lazily initialize directory bindings only when enumeration
+  // is first requested. Existing inspect() behavior is unchanged.
+  late final DarwinDirectoryReader _directory_reader = DarwinDirectoryReader();
 
   /// Inspects one filesystem entry without following its final link.
   ///
@@ -211,6 +216,172 @@ final class MacOsTargetInspector {
         modified_at: snapshot.modification_time.to_utc_datetime(),
         accessed_at: snapshot.access_time.to_utc_datetime(),
       ),
+    );
+  }
+
+  /// Lazily enumerates immediate children of a macOS directory.
+  ///
+  /// The returned stream is single-subscription. No directory
+  /// descriptor is opened until a listener subscribes.
+  ///
+  /// Enumeration:
+  /// - Is non-recursive and unordered.
+  /// - Does not inspect child metadata.
+  /// - Does not follow the final directory symbolic link.
+  /// - Omits synthetic "." and ".." entries.
+  /// - Preserves the requested parent path spelling.
+  /// - Performs no filesystem modifications.
+  ///
+  /// A native directory cursor is closed after normal completion,
+  /// failure, or cancellation. Cancellation cannot interrupt an
+  /// individual synchronous native readdir call.
+  ///
+  /// Each emitted path is an observation, not a stable reference
+  /// to a filesystem object. Concurrent directory renames or
+  /// replacements can make emitted paths stale immediately.
+  ///
+  /// Failures produce a [TargetInspectionException] stream error
+  /// using [TargetInspectionOperation.listDirectory].
+  ///
+  /// Already emitted entries remain partial observations if
+  /// enumeration subsequently fails.
+  ///
+  /// This operation does not establish session-root containment.
+  /// Intermediate symbolic links may still be traversed by macOS.
+  ///
+  /// Example:
+  /// ```dart
+  /// final inspector = MacOsTargetInspector();
+  ///
+  /// await for (final child in inspector.list_directory(
+  ///   TargetPath('/tmp'),
+  /// )) {
+  ///   print(child.value);
+  /// }
+  /// ```
+  Stream<TargetPath> list_directory(TargetPath path) async* {
+    DarwinDirectoryCursor? cursor;
+
+    TargetInspectionException? failure;
+    StackTrace? failure_stack;
+
+    try {
+      try {
+        // Native open is intentionally deferred until subscription.
+        // O_DIRECTORY and O_NOFOLLOW protect the final component.
+        final active_cursor = _directory_reader.open(path.value);
+        cursor = active_cursor;
+
+        while (true) {
+          final child_name = active_cursor.next_name();
+
+          if (child_name == null) {
+            break;
+          }
+
+          // Avoid introducing a double separator under filesystem
+          // root while preserving the caller's original spelling.
+          final child_path =
+              path.value == '/' ? '/$child_name' : '${path.value}/$child_name';
+
+          // Yielding permits backpressure and cancellation.
+          yield TargetPath(child_path);
+        }
+      } on ArgumentError catch (error, stack) {
+        failure = TargetInspectionException(
+          code: TargetInspectionErrorCode.invalidPath,
+          operation: TargetInspectionOperation.listDirectory,
+          path: path,
+          message: 'Invalid absolute macOS directory path.',
+          cause: error,
+        );
+
+        failure_stack = stack;
+      } on FileSystemException catch (error, stack) {
+        failure = _directory_failure(
+          error,
+          path,
+          during_open: cursor == null,
+        );
+
+        failure_stack = stack;
+      }
+    } finally {
+      if (cursor != null) {
+        try {
+          cursor.close();
+        } on FileSystemException catch (error, stack) {
+          // Closing can fail too. Do not discard an earlier
+          // enumeration error in favor of a cleanup failure.
+          failure ??= _directory_failure(
+            error,
+            path,
+            during_open: false,
+          );
+
+          failure_stack ??= stack;
+        }
+      }
+    }
+
+    // Emit the terminal failure after releasing native resources.
+    // A successful enumeration reaches this point without error.
+    if (failure != null) {
+      Error.throwWithStackTrace(
+        failure,
+        failure_stack!,
+      );
+    }
+  }
+
+  /// Converts a native directory failure into a contract error.
+  ///
+  /// Uses the existing Darwin errno translation shared with
+  /// inspect(), without relying on diagnostic message parsing.
+  ///
+  /// When open() reports ELOOP, a read-only lstat observation
+  /// distinguishes a final symbolic link from an intermediate
+  /// symbolic-link cycle where possible.
+  ///
+  /// A final symbolic link maps to notDirectory, as required
+  /// by TargetInspector. A path-resolution cycle maps to
+  /// symbolicLinkLoop.
+  ///
+  /// The additional lstat is observational and may itself race
+  /// with concurrent filesystem changes. It never authorizes
+  /// traversal or cleanup.
+  ///
+  /// The original native error remains the diagnostic cause.
+  TargetInspectionException _directory_failure(
+    FileSystemException error,
+    TargetPath path, {
+    required bool during_open,
+  }) {
+    final error_number = error.osError?.errorCode;
+    var code = _translate_errno(error_number);
+
+    if (during_open && error_number == _errno_symbolic_link_loop) {
+      try {
+        final observation = _native.inspect(path.value);
+
+        if ((observation.mode & _file_type_mask) == _symbolic_link_type) {
+          code = TargetInspectionErrorCode.notDirectory;
+        }
+      } on FileSystemException {
+        // Preserve the original open failure classification
+        // when another read-only observation is unavailable.
+      } on ArgumentError {
+        // An invalid follow-up observation must not replace
+        // the original native failure.
+      }
+    }
+
+    return TargetInspectionException(
+      code: code,
+      operation: TargetInspectionOperation.listDirectory,
+      path: path,
+      message: 'macOS could not enumerate the requested directory.',
+      cause: error,
     );
   }
 

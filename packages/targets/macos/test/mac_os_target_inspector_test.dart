@@ -1,6 +1,7 @@
 @TestOn('mac-os')
 
 import 'dart:io';
+import 'dart:async';
 
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 import 'package:rudra_target_macos/rudra_target_macos.dart';
@@ -489,6 +490,294 @@ void main() {
       expect(entry.metadata.created_at, isNull);
     });
   });
+
+  group('MacOsTargetInspector.list_directory', () {
+    late Directory fixture;
+    late MacOsTargetInspector inspector;
+
+    setUp(() async {
+      fixture = await Directory.systemTemp.createTemp(
+        'rudra_directory_inspector_test_',
+      );
+
+      inspector = MacOsTargetInspector();
+    });
+
+    tearDown(() async {
+      await fixture.delete(recursive: true);
+    });
+
+    test('enumerates immediate children without recursion', () async {
+      final file = File('${fixture.path}/file.txt');
+      await file.writeAsString('Rudra');
+
+      final directory = Directory('${fixture.path}/child');
+      await directory.create();
+
+      final nested = File('${directory.path}/nested.txt');
+      await nested.writeAsString('Nested');
+
+      final link = Link('${fixture.path}/shortcut');
+      await link.create('child');
+
+      final dangling = Link('${fixture.path}/dangling');
+      await dangling.create('missing-target');
+
+      final paths = await inspector
+          .list_directory(TargetPath(fixture.path))
+          .map((path) => path.value)
+          .toList();
+
+      expect(
+        paths,
+        unorderedEquals([
+          file.path,
+          directory.path,
+          link.path,
+          dangling.path,
+        ]),
+      );
+
+      // The nested child must not be discovered.
+      expect(paths, isNot(contains(nested.path)));
+    });
+
+    test('returns an empty stream for an empty directory', () async {
+      final empty = Directory('${fixture.path}/empty');
+      await empty.create();
+
+      final paths =
+          await inspector.list_directory(TargetPath(empty.path)).toList();
+
+      expect(paths, isEmpty);
+    });
+
+    test('defers enumeration until subscription', () async {
+      final path = TargetPath(fixture.path);
+
+      // Construct the stream before creating the child.
+      final stream = inspector.list_directory(path);
+
+      final file = File('${fixture.path}/created-later.txt');
+      await file.writeAsString('Created after stream construction');
+
+      final paths = await stream.toList();
+
+      expect(paths, hasLength(1));
+      expect(paths.single.value, file.path);
+    });
+
+    test('reports a directory removed before subscription', () async {
+      final directory = Directory('${fixture.path}/temporary');
+      await directory.create();
+
+      final path = TargetPath(directory.path);
+      final stream = inspector.list_directory(path);
+
+      // Remove only our disposable test directory.
+      // The stream must discover the removal when subscribed.
+      await directory.delete();
+
+      await expectLater(
+        stream,
+        emitsInOrder([
+          emitsError(
+            _directory_error(
+              TargetInspectionErrorCode.notFound,
+              path,
+            ),
+          ),
+          emitsDone,
+        ]),
+      );
+    });
+
+    test('rejects regular files as directories', () async {
+      final file = File('${fixture.path}/regular.txt');
+      await file.writeAsString('Not a directory');
+
+      final path = TargetPath(file.path);
+
+      await expectLater(
+        inspector.list_directory(path),
+        emitsInOrder([
+          emitsError(
+            _directory_error(
+              TargetInspectionErrorCode.notDirectory,
+              path,
+            ),
+          ),
+          emitsDone,
+        ]),
+      );
+    });
+
+    test('does not follow directory symbolic links', () async {
+      final directory = Directory('${fixture.path}/actual');
+      await directory.create();
+
+      final link = Link('${fixture.path}/shortcut');
+      await link.create('actual');
+
+      final path = TargetPath(link.path);
+
+      await expectLater(
+        inspector.list_directory(path),
+        emitsInOrder([
+          emitsError(
+            _directory_error(
+              TargetInspectionErrorCode.notDirectory,
+              path,
+            ),
+          ),
+          emitsDone,
+        ]),
+      );
+    });
+
+    test('rejects dangling symbolic links', () async {
+      final link = Link('${fixture.path}/dangling');
+      await link.create('missing-target');
+
+      final path = TargetPath(link.path);
+
+      await expectLater(
+        inspector.list_directory(path),
+        emitsInOrder([
+          emitsError(
+            _directory_error(
+              TargetInspectionErrorCode.notDirectory,
+              path,
+            ),
+          ),
+          emitsDone,
+        ]),
+      );
+    });
+
+    test('reports missing directories with typed errors', () async {
+      final path = TargetPath('${fixture.path}/missing');
+
+      await expectLater(
+        inspector.list_directory(path),
+        emitsInOrder([
+          emitsError(
+            _directory_error(
+              TargetInspectionErrorCode.notFound,
+              path,
+            ),
+          ),
+          emitsDone,
+        ]),
+      );
+    });
+
+    test('rejects relative paths and trailing separators', () async {
+      final relative = TargetPath('relative/directory');
+      final trailing = TargetPath('${fixture.path}/');
+
+      for (final path in [relative, trailing]) {
+        await expectLater(
+          inspector.list_directory(path),
+          emitsInOrder([
+            emitsError(
+              _directory_error(
+                TargetInspectionErrorCode.invalidPath,
+                path,
+              ),
+            ),
+            emitsDone,
+          ]),
+        );
+      }
+    });
+
+    test('creates a single-subscription stream', () async {
+      final stream = inspector.list_directory(
+        TargetPath(fixture.path),
+      );
+
+      await stream.toList();
+
+      // Reusing the same stream must not silently reopen
+      // the directory and create another subscription.
+      expect(
+        () => stream.listen((_) {}),
+        throwsStateError,
+      );
+    });
+
+    test('preserves the original parent path spelling', () async {
+      final directory = Directory('${fixture.path}/child');
+      await directory.create();
+
+      final file = File('${directory.path}/example.txt');
+      await file.writeAsString('Data');
+
+      // The inspector must not silently canonicalize this path.
+      final path = TargetPath('${fixture.path}/./child');
+
+      final paths = await inspector.list_directory(path).toList();
+
+      expect(paths, hasLength(1));
+      expect(
+        paths.single.value,
+        '${path.value}/example.txt',
+      );
+    });
+
+    test('supports cancellation after the first child', () async {
+      // Provide several entries so there is more work to cancel.
+      for (var index = 0; index < 16; index++) {
+        final file = File('${fixture.path}/entry_$index.txt');
+        await file.writeAsString('$index');
+      }
+
+      final canceled = Completer<void>();
+      var received = 0;
+
+      late final StreamSubscription<TargetPath> subscription;
+
+      subscription = inspector.list_directory(TargetPath(fixture.path)).listen(
+        (path) async {
+          received++;
+
+          try {
+            // Cancel immediately after the first observation.
+            // The native cursor must be released by finally.
+            await subscription.cancel();
+
+            if (!canceled.isCompleted) {
+              canceled.complete();
+            }
+          } catch (error, stack) {
+            if (!canceled.isCompleted) {
+              canceled.completeError(error, stack);
+            }
+          }
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!canceled.isCompleted) {
+            canceled.completeError(error, stack);
+          }
+        },
+      );
+
+      await canceled.future.timeout(
+        const Duration(seconds: 5),
+      );
+
+      expect(received, 1);
+
+      // A new enumeration remains possible after cancellation.
+      // This is a functional check, not a direct descriptor-leak
+      // measurement.
+      final remaining =
+          await inspector.list_directory(TargetPath(fixture.path)).toList();
+
+      expect(remaining, hasLength(16));
+    });
+  });
 }
 
 /// Matches an inspection failure using its typed contract fields.
@@ -509,6 +798,43 @@ Matcher _inspection_error(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.inspect,
+      )
+      .having(
+        (error) => error.path,
+        'original path',
+        same(path),
+      );
+}
+
+/// Matches a directory enumeration failure by its public contract.
+///
+/// The matcher checks the platform-independent error category,
+/// the required operation, and the exact original TargetPath.
+///
+/// Diagnostic text and native errno are deliberately excluded:
+/// callers must not depend on operating-system error messages.
+///
+/// Example:
+/// ```dart
+/// final matcher = _directory_error(
+///   TargetInspectionErrorCode.notFound,
+///   TargetPath('/tmp/missing'),
+/// );
+/// ```
+Matcher _directory_error(
+  TargetInspectionErrorCode code,
+  TargetPath path,
+) {
+  return isA<TargetInspectionException>()
+      .having(
+        (error) => error.code,
+        'error code',
+        code,
+      )
+      .having(
+        (error) => error.operation,
+        'operation',
+        TargetInspectionOperation.listDirectory,
       )
       .having(
         (error) => error.path,
