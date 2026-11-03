@@ -11,3 +11,6 @@ dependencies:
     path: ../../packages/targets/macos
   rudra_persistence_sqlite:
     path: ../../packages/persistence/sqlite
+  args: ^2.7.0
+dev_dependencies:
+  test: ^1.33.0

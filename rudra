@@ -1,0 +1,20 @@
+
+#!/usr/bin/env sh
+
+# Rudra development launcher.
+#
+# Resolve the repository root independently of the calling directory.
+# Delegate command handling to the shared Dart CLI framework.
+#
+# This script is for local development, not the production distribution.
+#
+# Examples:
+#   ./rudra check
+#   ./rudra test
+#   ./rudra build
+
+set -eu
+
+cd "$(dirname "$0")"
+
+exec dart run apps/cli/tool/rudra_dev.dart "$@"
