@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
+import '../rudra_exit_code.dart';
 
 /// Displays basic information about the Rudra application.
 ///
@@ -33,6 +34,6 @@ final class AboutCommand extends Command<int> {
       '$application_name - User-directed filesystem exploration.',
     );
 
-    return 0;
+    return RudraExitCode.success.value;
   }
 }
