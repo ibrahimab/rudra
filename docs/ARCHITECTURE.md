@@ -1,351 +1,1083 @@
-# mac-cleaner — Architecture
 
-**Status:** Accepted baseline (v1 architecture)  
-**Date:** 2026-11-03  
-**Initial delivery:** Local macOS CLI/TUI  
-**Language:** Dart  
-**Repository:** Monorepo using Dart Pub Workspaces
+# Rudra — Software Architecture
 
-## 1. Purpose and product principles
+**Version:** 1.1  
+**Last updated:** 2026-11-03  
+**Status:** Architectural baseline
 
-mac-cleaner is a **user-directed, interactive filesystem inspection and cleanup wizard**. It helps a person navigate disk usage, inspect nested directories, understand potential cleanup candidates, explicitly select what to remove, review an execution plan, and authorize its execution.
+## 1. Purpose
 
-It is **not** an autonomous cleanup utility or a background disk optimizer.
+Rudra is a cross-platform, safety-first filesystem inspection and cleanup application.
 
-### Non-negotiable principles
+Its primary purpose is to help users understand filesystem storage consumption, explore directories interactively, identify cleanup candidates, and make informed decisions about removing unnecessary data.
 
-1. **No automated actions.** The application must never independently select files for removal, schedule cleanup, start destructive work, or resume interrupted work. Scans and navigation are initiated by the user; read-only inspection may progress within a scope the user explicitly requested.
-2. **The user decides.** No inferred classification, heuristic, or large directory size constitutes permission to delete anything.
-3. **Explicit conflict resolution.** Conflicts between parent-directory selections and child-directory decisions always result in an explicit user prompt. Never silently convert a complete deletion into a partial one or override an exclusion.
-4. **One persistent session.** Navigation contexts, directory decisions, and the cleanup list are different views of one persisted session, not independent wizards with independent state.
-5. **Review before execution.** Marking a candidate is not approval to execute. Every destructive job requires a review and a final, explicit authorization.
-6. **Target-specific execution behind contracts.** The SDK describes intent and enforces universal safety policy; target adapters implement filesystem and OS-specific inspection, validation, and operations.
-7. **Auditable and recoverable.** Jobs and operation outcomes are durably recorded. Interrupted work is reconciled and may resume **only after renewed user authorization**.
-8. **Fail closed.** Ambiguous scope, changed targets, unresolved selection conflicts, missing capabilities, or failed validations block the affected destructive operation.
+Rudra is not an autonomous disk cleaner.
 
-These principles apply to **every** frontend and target adapter. UI dialogs are not the only enforcement point.
+The user remains the authority over what is selected, reviewed, approved, and ultimately removed.
 
-## 2. Chosen technology and delivery order
+The initial implementation targets macOS and provides a command-line interface with an interactive terminal wizard.
 
-| Concern | Decision |
-| --- | --- |
-| Shared language | Dart |
-| Initial frontend | Dart terminal UI (TUI) / CLI wizard |
-| TUI framework | **Nocterm is the leading candidate**, subject to a small cross-terminal compatibility prototype; not yet a permanent dependency decision |
-| Future graphical frontends | Flutter for desktop, mobile, and web as capabilities justify them |
-| Shared application and domain code | Pure Dart, with **no Flutter or TUI-framework dependency** |
-| Monorepo management | Dart Pub Workspaces, one workspace lockfile |
-| Durable local data | SQLite, including session state, execution jobs, operation state, and audit events |
-| First supported target | Local macOS filesystem |
-| Later targets | Windows and Linux; user-context, protected, external-volume, and remote capabilities may be added later |
-| Distribution | Native compiled CLI executable; graphical packaging later |
+The architecture must support future Windows and Linux adapters, graphical applications built with Flutter, and reusable functionality through a pure-Dart SDK.
 
-**Important boundary:** Flutter is the future **graphical** UI framework. Nocterm, if accepted, provides a **terminal** widget model inspired by Flutter. The two view trees are not interchangeable; they reuse the same SDK, workflows, state transitions, and target contracts.
+## 2. Foundational Principles
 
-Do not create a second application for each OS. `cli + macOS` and `desktop + macOS` use the same macOS target adapter. `cli + Windows` uses the same CLI frontend and the Windows target adapter.
+The following principles are architectural invariants.
 
-### Delivery sequence
+### 2.1 User authority
 
-1. Monorepo setup, target contracts, and architecture tests.
-2. macOS read-only target adapter and directory exploration.
-3. Persistent wizard/session model and keyboard-driven TUI.
-4. Central cleanup list, selection conflict prompts, and review workflow.
-5. Safe execution-plan construction and read-only dry runs.
-6. Explicit final authorization, durable worker, audit journal, interruption detection, and user-authorized recovery.
-7. Further target adapters and Flutter frontends only when useful.
+Rudra must never autonomously decide to remove filesystem content.
 
-Destructive execution is **not** part of the first scanning prototype. It is enabled only after the invariants and failure-mode tests in this document are met.
+Every cleanup candidate is explicitly selected by the user.
 
-## 3. Architectural overview
+Every cleanup execution requires explicit approval of the complete cleanup plan.
 
-```text
-                          APPLICATIONS / FRONTENDS
-                +-------------------------------------+
-                | CLI/TUI (Dart; initial)              |
-                | Desktop / Mobile / Web (Flutter)     |
-                +------------------+------------------+
-                                   |
-                        Application API / Commands
-                                   |
-                 +-----------------v------------------+
-                 |          Pure-Dart SDK              |
-                 |                                    |
-                 |  Session and navigation             |
-                 |  Inspection orchestration          |
-                 |  Selection + conflict policy       |
-                 |  Cleanup list + review             |
-                 |  Plan construction + authorization  |
-                 |  Job lifecycle + reconciliation     |
-                 |  Audit/event definitions            |
-                 +----------+---------------+---------+
-                            |               |
-                    Target contracts    Persistence ports
-                            |               |
-              +-------------+----------+    SQLite adapter
-              |             |          |
-           macOS          Windows     Linux
-           adapter         adapter    adapter
+The following actions never authorize filesystem deletion:
+
+- Inspecting a file or directory.
+- Navigating through the wizard.
+- Marking an item for cleanup.
+- Saving or pausing a session.
+- Resuming a session.
+- Cancelling a session.
+- Generating a cleanup preview.
+
+Marking an item expresses intent, not authorization to execute.
+
+### 2.2 Read-only exploration
+
+The entire interactive inspection wizard is a dry-run collection process.
+
+During exploration, Rudra may:
+
+- Inspect filesystem entries.
+- Enumerate directory contents.
+- Collect available metadata.
+- Calculate or estimate storage consumption.
+- Identify potentially unnecessary files.
+- Explain risks associated with cleanup candidates.
+- Record the user's cleanup selections.
+- Persist wizard progress and inspection observations.
+
+The wizard must not modify, move, truncate, or delete filesystem content.
+
+Writing session state to Rudra's own persistence database is permitted and does not constitute cleanup of the inspected target.
+
+### 2.3 Explicit execution boundary
+
+Cleanup execution is architecturally separate from exploration and planning.
+
+No filesystem mutation may occur until:
+
+1. The user has completed the desired exploration.
+2. A complete cleanup plan has been assembled.
+3. Every candidate has been validated.
+4. The complete plan has been presented for review.
+5. The user has explicitly confirmed execution.
+
+Rudra must never perform unattended, scheduled, inferred, or background cleanup.
+
+Execution is limited to the explicitly approved plan.
+
+### 2.4 Filesystem state verification
+
+Filesystem state may change between inspection, selection, approval, and execution.
+
+Rudra must not assume that a previously inspected path still references the same filesystem object.
+
+Each cleanup candidate must be revalidated before execution.
+
+If relevant filesystem state has changed, or cannot be reliably verified, the cleanup execution must be blocked.
+
+The user must inspect the affected candidate again and explicitly approve the updated cleanup plan.
+
+### 2.5 Fail-closed behavior
+
+Uncertainty must not be interpreted as safety.
+
+Missing metadata, inaccessible entries, changed identities, incomplete directory scans, unsupported safeguards, and unexpected errors must prevent unsafe cleanup.
+
+Rudra must never silently skip validation or treat an incomplete scan as complete.
+
+### 2.6 Platform independence
+
+The core SDK must remain independent of:
+
+- Command-line presentation.
+- Terminal UI frameworks.
+- Flutter widgets.
+- Platform-specific filesystem implementations.
+- SQLite implementation details.
+
+Operating-system differences are isolated behind explicit contracts and adapters.
+
+### 2.7 Auditable decisions
+
+User decisions, relevant inspection observations, cleanup-plan changes, confirmations, and execution outcomes must be persistable as auditable events.
+
+Rudra must distinguish between:
+
+- What was discovered.
+- What the user selected.
+- What the user approved.
+- What Rudra attempted.
+- What actually happened.
+
+These are different facts and must not be conflated.
+
+## 3. Technology Stack
+
+Rudra uses a Dart Pub Workspaces monorepo.
+
+### 3.1 Core technologies
+
+- Dart 3.6 or newer, subject to the workspace SDK constraint.
+- Dart Pub Workspaces.
+- Pure-Dart domain and SDK packages.
+- A modular command-line application.
+- Platform-specific filesystem adapters.
+- SQLite for persistent sessions and audit records.
+- `package:test` for automated testing.
+- Flutter for future graphical applications.
+
+### 3.2 Terminal interface
+
+The initial product is CLI-first.
+
+An interactive terminal wizard will provide directory exploration, inspection results, cleanup marking, review, and session navigation.
+
+Nocterm is a leading candidate for the terminal UI framework, but its adoption is subject to prototype validation.
+
+The SDK must not depend on Nocterm or another presentation framework.
+
+### 3.3 Future graphical interfaces
+
+Flutter applications must reuse the same SDK, inspection contracts, session orchestration, cleanup plans, and safety policies.
+
+A graphical interface must not implement separate cleanup business rules.
+
+All application interfaces must use the same domain-level approval and execution mechanisms.
+
+## 4. Repository Structure
+
+The repository is rooted at:
+
+`~/projects/rudra`
+
+The established package organization is:
+
+    rudra/
+      rudra
+      pubspec.yaml
+
+      apps/
+        cli/
+          bin/
+            rudra.dart
+          tool/
+            rudra_dev.dart
+
+      packages/
+        sdk/
+        targets/
+          contracts/
+          macos/
+        persistence/
+          sqlite/
+
+      docs/
+        ARCHITECTURE.md
+        DEVELOPMENT.md
+        decisions/
+
+This describes the established architectural layout, not an exhaustive inventory of every implementation file.
+
+### 4.1 rudra_cli
+
+Responsible for:
+
+- Production command registration.
+- Development command registration.
+- Command-line argument handling.
+- Interactive wizard presentation.
+- User input and confirmation.
+- Presentation of inspection results.
+- Translating application outcomes into process exit codes.
+
+The CLI must not contain filesystem inspection algorithms, persistence rules, or cleanup safety policy.
+
+The CLI is a consumer of the SDK.
+
+### 4.2 rudra_sdk
+
+Responsible for:
+
+- Inspection orchestration.
+- Directory traversal.
+- Storage aggregation.
+- Scan boundaries.
+- Session lifecycle rules.
+- Wizard domain state.
+- Cleanup candidate selection.
+- Cleanup-plan construction.
+- Conflict detection and resolution.
+- Cleanup validation policy.
+- Execution authorization policy.
+- Coordination of explicit cleanup execution.
+
+The SDK owns application behavior, not operating-system-specific filesystem operations.
+
+### 4.3 rudra_target_contracts
+
+Responsible for platform-independent filesystem inspection types and interfaces.
+
+Current contracts include:
+
+- `TargetPath`
+- `FilesystemEntry`
+- `FilesystemEntryKind`
+- `FilesystemMetadata`
+- `FilesystemPermissions`
+- `FilesystemIdentity`
+- `TargetCapabilities`
+- `TargetCapabilityStatus`
+- `TargetInspectionFeature`
+- `TargetInspectionErrorCode`
+- `TargetInspectionOperation`
+- `TargetInspectionException`
+- `TargetInspector`
+
+The contracts package must remain independent of the CLI, SDK implementation, Flutter, and platform-specific adapters.
+
+### 4.4 rudra_target_macos
+
+Implements target contracts using macOS filesystem facilities.
+
+The macOS adapter is responsible for translating native filesystem observations and errors into Rudra's platform-independent models.
+
+It must not decide what the user should delete.
+
+### 4.5 rudra_persistence_sqlite
+
+Provides SQLite-backed persistence for domain state.
+
+Its responsibilities will include:
+
+- Session records.
+- Wizard checkpoints.
+- Cleanup selections.
+- Inspection snapshots.
+- Cleanup-plan revisions.
+- User decisions.
+- Validation results.
+- Execution journals.
+- Audit events.
+
+SQLite must not become the owner of domain policy.
+
+The SDK defines the rules; the persistence adapter stores and retrieves their state.
+
+### 4.6 Dependency direction
+
+The intended dependency direction is:
+
+    CLI / Future Flutter UI
               |
-         Filesystem / OS
-```
-
-Dependencies point **inward**: frontends depend on SDK APIs; SDK depends on contracts and persistence **interfaces**; platform and SQLite adapters implement those contracts. The SDK never imports platform implementations. Composition occurs in the application bootstrap.
-
-**Host** is where the frontend/process runs; **target** is the filesystem environment being inspected. They coincide in v1 but are distinct concepts to allow remote targets later. Target capabilities and execution context (identity, permissions, volume boundaries) are part of the target contract, not frontend-specific special cases.
-
-## 4. Repository structure
-
-The following structure distinguishes **initial directories** from **planned modules**. Logical SDK submodules do not have to be separate Pub packages.
-
-```text
-mac-cleaner/
-├── ARCHITECTURE.md
-├── README.md                          # Add when bootstrapping
-├── pubspec.yaml                        # Workspace root; add when bootstrapping
-├── pubspec.lock                        # Generated; commit for reproducible apps
-├── apps/
-│   ├── cli/                            # Initial executable + TUI
-│   ├── desktop/                        # Future Flutter app
-│   ├── mobile/                         # Future Flutter app
-│   └── web/                            # Future Flutter app
-├── packages/
-│   ├── sdk/                            # Pure Dart application/domain SDK
-│   │   └── lib/src/
-│   │       ├── core/                   # Domain types, policies, errors
-│   │       ├── explorer/               # Inspection orchestration
-│   │       ├── session/                # Navigation + session lifecycle
-│   │       ├── selection/              # Explicit decisions + conflicts
-│   │       ├── planning/               # Cleanup plans and validation
-│   │       ├── execution/              # Job coordination + recovery
-│   │       └── audit/                  # Audit contracts and event types
-│   ├── targets/
-│   │   ├── contracts/                  # Target ports and capability models
-│   │   ├── macos/                      # First concrete target adapter
-│   │   ├── windows/                    # Future
-│   │   └── linux/                      # Future
-│   └── persistence/
-│       └── sqlite/                     # SQLite repository implementation
-└── docs/                               # ADRs, operation semantics, test plans
-```
+              v
+          Rudra SDK
+          /       \
+         v         v
+    Target       Persistence
+    contracts    contracts
+         ^         ^
+         |         |
+    macOS adapter SQLite adapter
 
-**Create now:** `apps/cli`, `packages/sdk`, `packages/targets/contracts`, `packages/targets/macos`, `packages/persistence/sqlite`, and `docs`. The `lib/src/*` directories can be created when the corresponding code is introduced. Do not add nonfunctional placeholder apps/packages merely to mirror the diagram.
+Concrete adapters are supplied through application composition.
 
-Each actual workspace member has a `pubspec.yaml` with `resolution: workspace`. The root workspace lists only actual members. Choose the minimum Dart SDK version according to the development toolchain; Pub Workspaces require Dart 3.6 or newer (workspace globs require Dart 3.11 or newer). Prefer explicit member paths initially.
+Neither the SDK nor the target contracts may import CLI-specific types.
 
-## 5. Core domain and contract boundaries
+Persistence contracts will be introduced as needed rather than prematurely coupled to SQLite.
 
-### 5.1 SDK responsibilities
+## 5. CLI Architecture
 
-- Maintain a persistent exploration session and navigation stack.
-- Orchestrate user-requested inspection; aggregate and display results without double counting selected ancestors and descendants.
-- Store **explicit** user decisions and derive effective status for ancestors/descendants.
-- Detect and surface incompatible selections; accept a change only after explicit conflict resolution.
-- Maintain a single global cleanup list derived from session state.
-- Separate selection from review, review from plan authorization, and authorization from execution.
-- Produce an immutable, revisioned plan describing precise filesystem effects and explicit preserved paths.
-- Coordinate job creation, journal-based reconciliation, and user-approved resumption.
-- Enforce target-agnostic safety invariants even if a frontend or adapter is misused.
+Rudra uses a modular `RudraCli` framework.
 
-### 5.2 Target contracts
+Commands are registered through `RudraCliModule`.
 
-Model capabilities rather than only checking an operating-system enum. The eventual interfaces should cover:
+### 5.1 Module responsibilities
 
-- `TargetDescriptor`: target identity, OS/environment, current execution identity, filesystem context, and supported capabilities.
-- `TargetInspector`: enumerate children, inspect metadata and permissions, inspect mount boundaries, calculate disk usage, and resolve stable target identity when supported.
-- `TargetValidator`: check operation support, ownership/permission constraints, ancestor and mount safety, expected identity, exclusions, and execution preconditions.
-- `TargetExecutor`: execute only operations from an authorized, validated plan, reporting structured outcomes and errors.
-- `TargetCapabilities`: distinguish read-only, deletable, privileged/restricted, remote, and other context-specific behavior.
+A module registers commands appropriate to a specific application composition.
 
-Names above are **conceptual contracts**, not frozen Dart class names or signatures. Contracts must not expose an unrestricted `rm(path)` method to the frontend.
+Module registration must be explicit and deterministic.
 
-### 5.3 Persistence ports
+Modules must not perform destructive filesystem operations as side effects of registration or construction.
 
-The SDK depends on interfaces for `SessionRepository`, `JobRepository`, and `AuditEventRepository`; SQLite implements them. The CLI and workers do not bypass those interfaces to mutate shared state ad hoc.
+### 5.2 Production and development separation
 
-### 5.4 Dependency rules
+Production entrypoint:
 
-- No `dart:io` OS assumptions inside domain policies; platform effects go through ports. Portable Dart data structures, algorithms, and pure validation belong in the SDK.
-- No imports from Flutter/Nocterm into SDK or target contracts.
-- No SQL in UI event handlers.
-- No direct filesystem deletion from UI callbacks.
-- Application bootstrap is responsible for selecting and injecting platform/persistence adapters.
-- Platform-specific native APIs, FFI, and controlled subprocesses are implementation details of target adapters or the execution worker.
+`apps/cli/bin/rudra.dart`
 
-## 6. User workflow — v1
+Development entrypoint:
 
-The user drives the sequence; changing views does not discard session state.
+`apps/cli/tool/rudra_dev.dart`
 
-1. **Launch CLI**: open a new session or explicitly choose to inspect an existing session/interrupted job. Never auto-resume execution.
-2. **Choose starting directory**: prompt for the root directory; verify that the current target can inspect it. No silent escalation or forced access.
-3. **Explore recursively**: enter directories as nested navigation contexts. Offer choices such as inspect/scan, mark, ignore, exclude, defer, return to parent, and jump to another previously visited context. A user-requested scan may enumerate descendants, but it cannot select or delete them.
-4. **Inspect global cleanup list**: accessible from any directory through a shortcut; navigate to an item's original context; amend selections; view estimated size and warnings.
-5. **Review wizard**: explicitly walk through the proposed deletions and exclusions, with the ability to unmark or revisit an item. No hidden or implied approval.
-6. **Dry run and final confirmation**: offer a read-only dry run showing operations, preserved paths, permissions, expected failures, and scope. A completed dry run does **not** authorize real deletion. Request a separate explicit final confirmation before any execution; if the plan changes, review/authorization becomes stale.
-7. **Execute approved plan**: persist the plan and authorization, then hand it to a separate worker. The TUI can exit without signaling cancellation of the authorized worker. Report what actually completed, failed, was skipped, or remains unresolved.
+Development tooling must not be exposed accidentally as production functionality.
 
-The UI should be a **stateful terminal application**, not a series of independent linear command-line prompts. The design is inspired by k9s: contextual header, keyboard navigation, visible statuses, global shortcuts, and a persistent session behind every view. Shortcuts and visual details are to be validated in a TUI prototype, not treated as locked API.
+### 5.3 Exit codes
 
-## 7. Selection model and conflict resolution
+`RudraExitCode` provides typed process exit outcomes.
 
-Separate the following **orthogonal state dimensions**:
+Exit codes belong to the CLI application boundary.
 
-- **Inspection**: not scanned, scanning, scanned, inaccessible, stale.
-- **Explicit user directive**: unset, mark for deletion, ignore for this session, explicitly preserve/exclude, defer.
-- **Effective cleanup status** (derived): unselected, selected, partially selected, protected, unresolved conflict, blocked.
-- **Review/authorization**: pending review, reviewed, authorized for a specific immutable plan revision.
-- **Execution**: tracked per job/operation, not as a mutable directory-selection flag.
+Domain and filesystem inspection errors must remain independent of CLI exit codes.
 
-Parent status is **derived** from explicit decisions and child relationships; a displayed `PARTIAL` label must never be treated as an additional silent user decision.
+### 5.4 Development commands
 
-### Required conflict prompt
+The root `./rudra` development launcher supports:
 
-Example:
+- `./rudra format`
+- `./rudra analyze`
+- `./rudra test`
+- `./rudra check`
+- `./rudra build`
 
-```text
-Google/                [MARKED FOR DELETION]
-├── Chrome/            [new request: PRESERVE]
-├── DriveFS/
-└── SoftwareUpdate/
+`./rudra test` supports selective testing through the existing development command implementation.
 
-Conflict: Google is marked for deletion, but Chrome is to be preserved.
+`./rudra check` is the full repository verification command.
 
-1. Delete the other selected contents of Google; preserve Chrome AND
-   the necessary parent directories.
-2. Unmark Google for deletion; preserve its contents unless there are
-   separately and explicitly selected child operations.
-3. Cancel this change and keep the previous selection.
-```
+`./rudra build` builds and verifies the production executable.
 
-The wizard **must prompt in both directions**: preserving a child beneath a marked parent, and marking a parent containing preserved/ignored/deferred descendants. Treat ignored content conservatively as protected unless the user explicitly resolves the conflict. Never interpret “ignore” as permission to delete an uninspected subtree.
+## 6. TargetInspector Architecture
 
-If the user chooses option 1, the resulting operation is **not** a recursive deletion of `Google/`; it is a precise deletion plan for selected content that leaves `Chrome/` and the necessary ancestors intact. Option 2 requires a clear UI definition of what happens to separately selected descendants; do not silently erase explicit child choices. Unresolved ambiguity blocks plan authorization.
+`TargetInspector` defines read-only observations against one target environment.
 
-Do not double-count disk sizes when parent and child both appear in navigation or selections. Report approximate reclaimable bytes separately from logical directory sizes; hard links, APFS clones, sparse files, shared caches, and metadata may make them differ.
+The initial interface contains four operations:
 
-## 8. Execution design and safety
+    Future<TargetCapabilities> capabilities_for(
+      TargetPath path,
+    );
 
-### 8.1 Immutable plan
+    Future<FilesystemEntry> inspect(
+      TargetPath path,
+    );
 
-Before execution, freeze a plan containing:
+    Stream<TargetPath> list_directory(
+      TargetPath path,
+    );
 
-- Plan ID and revision/hash; originating session; target and adapter identity.
-- Explicit operation types, ordered dependencies, canonical scope/parent relationships, and protected exclusions.
-- Expected file/directory identities and relevant metadata captured during validation.
-- Capability/permission checks, boundary checks, expected outcomes, and warnings.
-- Exact user approvals for that plan revision, with timestamp.
+    Future<TargetPath> read_symbolic_link(
+      TargetPath path,
+    );
 
-Approval is invalid if the plan changes. Prior paths alone are not sufficient authority to delete whatever is later found at the same location.
+### 6.1 Inspection responsibilities
 
-### 8.2 Dry run
+An adapter may:
 
-Dry run is **read-only**: inspect, validate, report, and journal the result. It must never invoke destructive operations. It does not claim that later execution will succeed or that nothing can change between validation and execution.
+- Inspect one filesystem entry.
+- Enumerate immediate directory children.
+- Read the stored destination of a symbolic link.
+- Report available capabilities.
+- Translate platform-native errors.
 
-### 8.3 Detached execution worker
+An adapter must not:
 
-After the explicit final confirmation, a **separate process** owns execution. This prevents Ctrl+C in the interactive frontend from unintentionally signaling the running cleanup. Detachment **does not make deletion atomic** and cannot guarantee completion after a shutdown, crash, or kill signal.
+- Recursively traverse directories on behalf of the SDK.
+- Make cleanup decisions.
+- Execute cleanup operations.
+- Implicitly follow a final symbolic link.
+- Conceal inspection failures.
+- Modify filesystem contents.
 
-A target adapter may use safe native filesystem APIs or tightly controlled subprocesses. The initial design must **not** rely on a single unrestricted `rm -rf` for a tree that may contain exclusions. If `rm` is used for an approved operation, the adapter must constrain its arguments and targets and still enforce the same preconditions and journal semantics.
+### 6.2 Directory enumeration
 
-The worker:
+Directory enumeration streams immediate child paths.
 
-1. Claims the job under an exclusive lease/lock to prevent concurrent workers.
-2. Reads only the immutable, explicitly approved plan.
-3. Revalidates the current target, mount/ancestor boundary, permissions, identity, and operation preconditions.
-4. Journals the operation as started, performs it, verifies postconditions, and journals the outcome.
-5. Skips and reports any operation whose safe preconditions are no longer satisfied.
-6. Produces a final report without claiming all-or-nothing transactionality.
+The SDK determines how and when to inspect each discovered entry.
 
-**Path and symlink safety:** do not follow symlinks into a different subtree; do not traverse mount boundaries without a specific, reviewed authorization. Protect system-critical locations. Avoid time-of-check/time-of-use races using handle-relative/native APIs where appropriate; a simple `stat` followed by `rm` is not a sufficient guarantee for arbitrary directories. Permanent deletion must be blocked until this safety design is implemented and tested. No implicit `sudo` or privilege escalation.
+Enumeration is:
 
-### 8.4 Interruption and recovery
+- Lazy.
+- Single-subscription.
+- Non-recursive.
+- Unordered.
+- Cancelable.
+- Explicit about terminal failures.
 
-Filesystem mutations and SQLite transactions are not one atomic transaction. A file might be gone even if the worker crashed before writing `OPERATION_COMPLETED`.
+An enumeration failure must not be represented as successful completion.
 
-On restart:
+Successfully emitted paths may be retained as partial observations, but the scan remains incomplete.
 
-1. Detect incomplete or stale jobs; **do not execute** them.
-2. Offer the user read-only inspection of the job and audit trail.
-3. Reconcile each unfinished operation against the actual filesystem; statuses may be `COMPLETED`, `PENDING`, `FAILED`, `SKIPPED`, or `UNKNOWN / NEEDS_REVIEW`.
-4. Revalidate remaining targets, regenerate any necessary execution plan, and surface changed scope or identities.
-5. Ask the user to review and explicitly authorize a new attempt/resumption.
-6. Resume only the confirmed, still-safe remaining operations, never blindly replaying a stale path deletion.
+### 6.3 Filesystem entries
 
-The goal is **recoverability and idempotent reconciliation where possible**, not a promise that disk deletion can be rolled back or made atomic. An already absent path must not cause deletion of a different file recreated at that path.
+Filesystem entry kinds include:
 
-## 9. Persistence and event/audit journal
+- Regular files.
+- Directories.
+- Symbolic links.
+- Other special filesystem entries.
 
-SQLite is the initial durable storage implementation. Conceptual tables:
+Metadata is observational and may be incomplete.
 
-| Entity | Purpose |
-| --- | --- |
-| `sessions` | Session identity, target, current navigation context, lifecycle |
-| `session_decisions` | Explicit directory/user decisions and their revisions |
-| `inspection_results` | Observed filesystem metadata, scan progress, staleness |
-| `cleanup_jobs` | Immutable approved plan reference, job state, authorization |
-| `job_operations` | Per-operation state, preconditions, attempts, outcome |
-| `audit_events` | Append-only record of user commands and worker events |
+Unknown metadata must be represented explicitly.
 
-Persist a plan snapshot (or normalized immutable operation records) plus a stable content hash. Database transactions keep state updates and corresponding audit entries consistent **within SQLite**; they do not make external filesystem mutations transactional.
+### 6.4 Storage accounting
 
-Examples of auditable events: `SESSION_CREATED`, `DIRECTORY_SCANNED`, `SELECTION_CHANGED`, `CONFLICT_RESOLVED`, `PLAN_REVIEWED`, `DRY_RUN_COMPLETED`, `PLAN_AUTHORIZED`, `JOB_STARTED`, `OPERATION_STARTED`, `OPERATION_COMPLETED`, `OPERATION_FAILED`, `OPERATION_SKIPPED`, `JOB_RECONCILED`, `RESUME_AUTHORIZED`, `JOB_COMPLETED`.
+Logical file size, allocated storage, aggregate directory size, and estimated recoverable storage are distinct concepts.
 
-Each event records timestamp, originating actor (user vs. worker), session/job/operation IDs as appropriate, target/plan identity, and structured outcome. Protect logs against inadvertent disclosure: local restrictive permissions, no credentials/secrets in events, careful handling of paths and error output. An app-level append-only journal provides traceability; it is **not** by itself a tamper-proof security audit system.
+Rudra must not present allocated bytes or logical bytes as guaranteed recoverable space.
 
-## 10. Version-one operating boundaries
+Storage calculations must consider, where applicable:
 
-**In scope:** local macOS, one interactive user, explicitly chosen scan root, recursive exploration, persistent session and selections, conflict prompts, cleanup list, review, dry run, and eventually explicitly approved audited execution with interrupted-job recovery.
+- Hard links.
+- Sparse files.
+- Filesystem clones.
+- Compression.
+- Filesystem snapshots.
+- Shared allocation.
+- Incomplete observations.
 
-**Out of scope initially:** autonomous cleanup recommendations that become selections, scheduled jobs, automatic resumption, silent elevated privileges, a continuously running daemon, network/remote execution, Windows/Linux adapters, and full Flutter applications.
+The SDK owns aggregation and estimation.
 
-Read-only guidance may classify known SDKs or caches and explain potential risks, but must never infer approval from that classification. Protected or unsupported paths remain inspectable only to the extent allowed by target capabilities.
+### 6.5 Filesystem identity
 
-## 11. Test and acceptance invariants
+`FilesystemIdentity` represents an object using an opaque filesystem identifier and entry identifier.
 
-No destructive release until tests demonstrate the following:
+Identities are compared only within the same target and inspection context.
 
-- All destructive paths require a persisted, current, explicit authorization and accepted review.
-- No inspect, navigation, scan, dry-run, or startup path can invoke deletion.
-- Parent/child selection conflicts prompt explicitly in both directions.
-- Excluded and ignored descendants, and their necessary ancestors, remain untouched.
-- Pressing a cleanup-list shortcut cannot lose or mutate exploration context.
-- Persisted sessions survive restart and correctly rebuild effective selection state.
-- Symlinks, mount boundaries, inaccessible paths, protected locations, and changed/replaced target identities are handled conservatively.
-- Ctrl+C in the frontend does not cancel an already authorized detached worker; crashes and shutdowns are not misreported as completed jobs.
-- No interrupted job automatically resumes; reconciliation can identify uncertain operations and requires new approval before further deletion.
-- Duplicate worker startup cannot race the same job; repeated reconciliation cannot delete a replacement target.
-- Unit tests exercise SDK and selection policy without an actual filesystem; adapter integration tests use isolated temporary directories; failure injection covers interrupted operations and database write failures.
+No cross-target identity comparison or cross-target scan aggregation is permitted within a session.
 
-## 12. Decisions locked vs. decisions deferred
+Filesystem identifiers must not be treated as permanent authorization credentials.
 
-### Locked
+The persistence and execution layers must account for identity reuse and stale observations.
 
-- Monorepo with Dart Pub Workspaces.
-- Dart-first, pure-Dart SDK with ports-and-adapters architecture.
-- CLI/TUI first; macOS target first.
-- Flutter is the approach for later graphical applications.
-- Host/frontend and target/OS capabilities are independent dimensions.
-- Stateful, keyboard-driven, persistent exploration wizard and global cleanup list.
-- No automated actions; explicit decisions and selection-conflict prompts.
-- Separate marking, review, dry run, final authorization, and execution stages.
-- SQLite persistence, durable audit/events, detached worker, and explicit recovery authorization.
-- Universal safety policy enforced below the UI and target-specific enforcement through adapters.
+### 6.6 Symbolic links
 
-### Deferred / requires prototype or ADR
+Symbolic links are inspected as links, not as their destinations.
 
-- Nocterm acceptance after a macOS/Windows/Linux terminal rendering, keyboard, resize, and packaging spike.
-- Exact public SDK class names, operation schema, and event schema.
-- Precise shortcut map and layout behavior.
-- Granular filesystem operation strategy and native handle APIs needed for safe deletion.
-- Whether a reversible Trash/recycle-bin mode should be added alongside permanent deletion.
-- SQLite migration policy, retention/redaction settings, and multi-process locking implementation.
-- Future Windows/Linux, remote/privileged targets, and mobile/web deployment model.
+Reading a symbolic link returns its stored target without resolving it.
 
-Document significant deviations in `docs/adr/` before implementation changes the accepted baseline.
+A dangling symbolic link remains an inspectable filesystem entry.
 
-## 13. Reference documentation
+The SDK must not automatically traverse symbolic links during directory exploration.
 
-- [Dart Pub Workspaces](https://dart.dev/tools/pub/workspaces)
-- [Dart package layout](https://dart.dev/tools/pub/package-layout)
-- [Dart native compilation](https://dart.dev/tools/dart-compile)
-- [Flutter supported platforms](https://docs.flutter.dev/reference/supported-platforms)
-- [Nocterm package](https://pub.dev/packages/nocterm)
+Intermediate path components and filesystem mount boundaries require separate safety consideration.
+
+### 6.7 Inspection errors
+
+Platform-specific failures are translated into typed `TargetInspectionException` instances.
+
+Programmatic behavior must use typed error codes rather than parsing diagnostic messages.
+
+Incomplete inspection, unknown metadata, and operation failure must remain distinguishable.
+
+## 7. Persistent Inspection Sessions
+
+Rudra is a stateful application.
+
+An inspection session represents one user's ongoing exploration, decisions, and cleanup planning.
+
+A session is associated with exactly one originally selected root location and one target environment.
+
+### 7.1 Single unfinished session invariant
+
+Rudra permits only one unfinished inspection session per Rudra user profile.
+
+A user cannot start an independent second session while an unfinished session exists.
+
+This rule applies across CLI invocations and survives application restarts.
+
+A session may be unfinished while paused, awaiting review, or awaiting cleanup execution.
+
+It does not need to have an actively running process.
+
+### 7.2 Original root is immutable
+
+The selected root location is established when the session is created.
+
+The session's root must not change during its lifetime.
+
+Resuming a session always restores its original root.
+
+A new command-line path must not silently replace that root.
+
+### 7.3 Starting Rudra with an existing session
+
+Suppose a user starts a session at:
+
+`/Users/Application Support`
+
+Later, the user invokes Rudra with:
+
+`/Users/Downloads`
+
+Rudra must detect the existing unfinished session before creating another.
+
+It must offer these decisions:
+
+1. Continue the existing session at its original root.
+2. Cancel the existing session and proceed with the newly requested location.
+
+Continuing resumes the saved wizard and preserves all existing selections.
+
+Cancelling terminates the old session without deleting any filesystem content.
+
+Starting the new session occurs only after explicit cancellation.
+
+The original session and its historical audit records remain available.
+
+The same rule applies when reopening Rudra without specifying a new target.
+
+### 7.4 Session lifecycle
+
+The conceptual lifecycle includes:
+
+- Created.
+- Active.
+- Paused.
+- Awaiting review.
+- Awaiting final confirmation.
+- Blocked pending revalidation or review.
+- Executing an approved cleanup.
+- Completed.
+- Cancelled.
+- Interrupted execution requiring reconciliation.
+
+The exact persistence state-machine representation will be formalized during SDK session implementation.
+
+Completed and cancelled sessions are terminal.
+
+An interrupted execution must not be silently restarted.
+
+### 7.5 Session state
+
+A persistent session must retain sufficient information to restore:
+
+- Original root.
+- Target binding.
+- Lifecycle status.
+- Current wizard step.
+- Navigation position.
+- Relevant inspection observations.
+- Marked cleanup candidates.
+- User decisions.
+- Cleanup-plan revision.
+- Relevant validation status.
+- Relevant audit events.
+
+Presentation-specific information must be separated from domain decisions.
+
+A future Flutter client must be able to resume the same domain workflow without depending on CLI-specific screen state.
+
+### 7.6 Concurrent invocations
+
+Multiple Rudra processes must not be permitted to mutate the same session state concurrently.
+
+Persistent session uniqueness and active process ownership are separate concerns.
+
+SQLite transactions must enforce relevant persistent invariants.
+
+Process coordination must handle stale ownership caused by crashes or abrupt termination.
+
+Reclaiming a stale process lock must never imply authorization to resume destructive execution.
+
+## 8. Interactive Wizard
+
+The interactive wizard is the primary workflow for inspecting and selecting cleanup candidates.
+
+It is strictly read-only with respect to the inspected filesystem.
+
+### 8.1 Exploration
+
+The user can navigate through directories, inspect entries, and review available storage information.
+
+The wizard should explain:
+
+- What an entry appears to contain.
+- Why it may consume substantial space.
+- Whether it appears potentially disposable.
+- Risks associated with removing it.
+- Limitations or uncertainties in the inspection.
+
+Rudra must distinguish verified facts from heuristics and estimates.
+
+### 8.2 Marking candidates
+
+The user may mark an item for potential cleanup.
+
+A mark records a proposed action in the session.
+
+It does not delete anything.
+
+The user may unmark or revisit a candidate before final approval.
+
+Each candidate must retain enough information to identify the item and establish the state on which the decision was based.
+
+### 8.3 Global cleanup list
+
+Selections made throughout the wizard contribute to one session-wide cleanup plan.
+
+The global cleanup list must support:
+
+- Viewing all selected candidates.
+- Revisiting individual selections.
+- Removing candidates from the plan.
+- Displaying available size estimates.
+- Explaining known risks.
+- Detecting overlapping selections.
+- Resolving conflicts before approval.
+
+Marking both a parent directory and an item inside it must not result in double-counted reclaim estimates or duplicate deletion operations.
+
+### 8.4 Wizard persistence
+
+Navigation, marking, unmarking, and review progress must be persistable.
+
+The user can pause or exit the wizard without losing the cleanup plan.
+
+Restoring a session must not implicitly execute the pending cleanup.
+
+Previous observations are potentially stale and must be treated accordingly.
+
+### 8.5 Separation of presentation and domain state
+
+The wizard's visual implementation does not own cleanup authority.
+
+The SDK maintains the authoritative domain state.
+
+The terminal interface presents state and passes explicit user decisions to the SDK.
+
+Nocterm or Flutter must not introduce separate cleanup authorization rules.
+
+## 9. CleanupPlan Architecture
+
+`CleanupPlan` is a conceptual domain model representing the user's collection of proposed cleanup actions.
+
+Its implementation belongs in the SDK.
+
+The plan is not an executable script.
+
+### 9.1 Candidate observations
+
+Each selected candidate must retain sufficient baseline evidence from the selection or subsequent explicit review.
+
+Relevant evidence may include:
+
+- Target binding.
+- Original path.
+- Filesystem entry kind.
+- Available filesystem identity.
+- Logical and allocated size observations.
+- Relevant timestamps.
+- Symbolic-link destination where applicable.
+- Relevant permission observations.
+- Directory membership or subtree evidence.
+- Inspection completeness.
+- Selection and review timestamps.
+- Plan revision.
+
+The exact schema is deferred to the session and cleanup-plan implementation.
+
+### 9.2 Directory selections
+
+A directory selection must not automatically authorize deletion of files introduced after the selection.
+
+Rudra must have sufficient evidence of the selected directory's relevant contents and state to determine whether its cleanup scope has changed.
+
+A directory's own metadata is insufficient to prove that its subtree remains unchanged.
+
+If the required evidence is incomplete or unavailable, the candidate cannot be approved for execution until a sufficient current review is performed.
+
+### 9.3 Plan revisions
+
+Marking, unmarking, changing scope, or reapproving altered candidates changes the cleanup plan.
+
+Final approval must be bound to a specific, immutable plan revision.
+
+Changing the approved plan invalidates the prior execution approval.
+
+### 9.4 Planning and authorization
+
+The following must remain separate:
+
+1. A candidate was marked.
+2. A candidate was inspected and validated.
+3. The complete plan was approved.
+4. An operation was attempted.
+5. An operation succeeded or failed.
+
+Neither prior selection nor prior validation is sufficient to execute a changed plan.
+
+## 10. Pre-Execution Verification
+
+Rudra must perform a complete pre-execution validation before performing any destructive operation.
+
+### 10.1 Global preflight barrier
+
+All candidates must pass preflight validation before cleanup execution begins.
+
+If any candidate has changed, is missing required evidence, or cannot be verified, the entire cleanup execution must remain blocked.
+
+Rudra must not begin deleting other candidates while unresolved preflight failures remain.
+
+### 10.2 Detecting changes
+
+Relevant changes include, but are not limited to:
+
+- A path now refers to a different filesystem object.
+- Filesystem identity has changed.
+- Entry type has changed.
+- A file has been modified or replaced.
+- A symbolic-link destination has changed.
+- Directory contents have been added, removed, or replaced.
+- Required metadata is missing or contradictory.
+- The target filesystem has become unavailable.
+- Inspection cannot be completed.
+- A filesystem boundary or relevant access condition has changed.
+
+The exact comparison rules must be conservative and documented.
+
+Timestamps or textual path comparisons alone are insufficient to establish object identity.
+
+### 10.3 User notification
+
+When a relevant change is detected, Rudra must:
+
+1. Stop before cleanup execution.
+2. Present the originally selected candidate.
+3. Present the current observation.
+4. Explain detected differences.
+5. Identify unavailable or unverifiable information.
+6. Return the affected candidate to review.
+7. Require explicit renewed approval.
+
+The message must clearly communicate that the filesystem has changed since the original selection.
+
+Rudra must not silently update the selection and continue.
+
+### 10.4 Reapproval
+
+Reapproval is an explicit user decision.
+
+It must refer to the newly inspected state, not the original stale observation.
+
+Once all affected candidates have been reviewed, Rudra must present the complete updated plan again.
+
+The user must explicitly confirm that complete plan before execution can begin.
+
+### 10.5 Unknown state
+
+If Rudra cannot establish whether a candidate is unchanged, it must treat the candidate as unverified.
+
+Unknown is not equivalent to unchanged.
+
+A candidate without sufficient verification evidence must not be deleted.
+
+## 11. Cleanup Execution
+
+Cleanup execution is a separate, explicitly authorized workflow.
+
+The execution component must not be part of `TargetInspector`.
+
+### 11.1 Execution prerequisites
+
+Execution requires:
+
+- An existing cleanup plan.
+- A fully validated current plan revision.
+- No unresolved selection conflicts.
+- No unresolved filesystem changes.
+- No unverified required candidates.
+- Explicit user confirmation of the complete plan.
+- An available platform execution mechanism capable of enforcing required safety guarantees.
+
+### 11.2 Revalidation at the operation boundary
+
+A successful global preflight does not eliminate the possibility of subsequent filesystem changes.
+
+Immediately before each destructive operation, the executor must verify that it is operating on the approved object.
+
+Path replacement, identity changes, newly introduced contents, or unavailable safeguards must block the affected operation.
+
+Where necessary, platform-supported object handles and directory-relative operations must be used to avoid unsafe path-based check-then-act behavior.
+
+A simple inspect-then-delete sequence is not automatically race-safe.
+
+If required safeguards cannot be provided, the operation must not execute.
+
+### 11.3 No inherited authorization
+
+Approval never automatically transfers to:
+
+- A replacement file at the same path.
+- A newly created directory child.
+- A changed symbolic-link destination.
+- A different filesystem object with similar metadata.
+- Another session.
+- A revised cleanup plan.
+
+### 11.4 Execution failures
+
+Cleanup is not assumed to be atomic across multiple filesystem operations.
+
+Rudra must persist per-operation outcomes and support accurate reporting of partial execution.
+
+If execution is interrupted, the application must not claim completion.
+
+Automatic restart or continuation of interrupted destructive operations is prohibited.
+
+Recovery requires reconciliation and an explicit user decision, with fresh validation and authorization before further cleanup.
+
+### 11.5 Session cancellation
+
+Cancelling an inspection session only changes session state.
+
+It must not invoke cleanup execution.
+
+Cancelling a session and cancelling an in-progress execution are separate concerns and require separate domain semantics.
+
+The execution-cancellation model will be formalized before destructive functionality is implemented.
+
+## 12. Persistence and Audit Architecture
+
+SQLite is the initial persistence implementation.
+
+The domain model must remain independent of SQL.
+
+### 12.1 Persistence responsibilities
+
+Persistence must support:
+
+- Durable session creation and lifecycle transitions.
+- Restoration of wizard progress.
+- Cleanup candidate selection history.
+- Inspection baselines.
+- Cleanup-plan revisions.
+- Validation outcomes.
+- Explicit approval records.
+- Execution attempts and results.
+- Recovery and interruption information.
+
+### 12.2 Transactional consistency
+
+Session transitions and their associated audit events must be persisted consistently.
+
+A session must not appear approved if its corresponding approval event or plan revision was not durably recorded.
+
+Concurrent processes must not be able to create conflicting active session states.
+
+### 12.3 Audit history
+
+Audit history must preserve the distinction between user intent and actual filesystem effects.
+
+At minimum, execution history must identify which candidate was involved, the approved plan revision, validation result, attempted action, and observed outcome.
+
+Audit records must not claim successful deletion when an operation was skipped, interrupted, or failed.
+
+Sensitive filesystem paths and metadata must be handled carefully in diagnostics and exported records.
+
+### 12.4 Recovery
+
+On startup, Rudra must detect unfinished sessions and unresolved execution states.
+
+Session restoration may resume the dry-run wizard.
+
+An interrupted destructive execution must never resume automatically.
+
+Recovery must reconcile the persisted journal with current filesystem observations before any further user-authorized cleanup.
+
+## 13. Target and Scan Boundaries
+
+A session has one immutable original root.
+
+A scan must not silently change that root or start inspecting an unrelated target.
+
+The SDK owns traversal scope.
+
+### 13.1 Path semantics
+
+Target paths are interpreted according to the target operating system.
+
+Textual path-prefix checks are insufficient to enforce filesystem containment.
+
+The design must account for path normalization differences, symbolic links in intermediate components, mount points, and concurrent filesystem changes.
+
+### 13.2 Symbolic-link boundaries
+
+Recursive inspection must not automatically follow symbolic links.
+
+The presence of a symbolic link must not expand the cleanup scope.
+
+### 13.3 Mounted filesystems
+
+Filesystem mount boundaries are distinct from session boundaries.
+
+The detailed policy for crossing mounted filesystems remains a separate architectural decision.
+
+Until a safe policy and enforcement mechanism exist, the scanner must not silently expand its approved scope into another filesystem.
+
+### 13.4 Target isolation
+
+A session must not combine cleanup candidates from unrelated target environments.
+
+Filesystem identity comparisons and cleanup authorization remain scoped to the session's target.
+
+## 14. Testing Architecture
+
+Rudra uses layered testing.
+
+### 14.1 Contract tests
+
+Pure-Dart contracts must be tested without native filesystem dependencies.
+
+Tests verify:
+
+- Model invariants.
+- Typed errors.
+- Missing metadata.
+- Identity semantics.
+- Capability semantics.
+- Directory enumeration contracts.
+- Symbolic-link behavior.
+- Stream cancellation.
+- Partial enumeration failures.
+
+### 14.2 Conformance tests
+
+A shared `TargetInspector` conformance test suite verifies behavior against known fixture layouts.
+
+In-memory tests demonstrate contract usability.
+
+Concrete target adapters must run their own conformance and native integration tests.
+
+An in-memory fixture does not prove that a native adapter is safe.
+
+### 14.3 SDK tests
+
+SDK tests must cover:
+
+- Traversal and aggregation.
+- Session lifecycle.
+- Single unfinished session enforcement.
+- Wizard resume and progress restoration.
+- Marking and unmarking.
+- Cleanup-plan revisions.
+- Overlapping selections.
+- Validation failures.
+- Changed filesystem observations.
+- Approval invalidation.
+- Recovery and interruption behavior.
+
+### 14.4 Destructive-operation tests
+
+Future destructive-operation tests must use tightly controlled, disposable fixtures.
+
+They must never target arbitrary user directories or developer machine caches.
+
+Tests must prove that mutation cannot occur without explicit authorization and required validation.
+
+Fault injection must cover races, missing objects, changed identities, partial failures, and interrupted execution.
+
+## 15. Documentation and Decision Records
+
+This document defines Rudra's architectural baseline.
+
+`docs/DEVELOPMENT.md` defines implementation, testing, documentation, and verification standards.
+
+Architectural Decision Records live under:
+
+`docs/decisions/`
+
+Significant architectural choices must be documented with their context, alternatives, consequences, and current status.
+
+An architectural rule must not be silently changed through a local implementation convenience.
+
+## 16. Current Implementation Status
+
+As of 2026-11-03:
+
+### Completed
+
+- Dart Pub Workspaces monorepo.
+- Modular `RudraCli` framework.
+- `RudraCliModule` registration.
+- Production and development CLI separation.
+- Typed `RudraExitCode`.
+- Repository formatting and analysis commands.
+- Selective workspace testing.
+- Full `./rudra check` verification.
+- Production build workflow.
+- Platform-independent filesystem value models.
+- `TargetInspector` interface.
+- Typed target inspection errors.
+- Target capability contracts.
+- In-memory inspector fixtures.
+- Shared conformance tests.
+
+### Verified baseline
+
+The most recent reported verification included:
+
+- 43 Dart files formatted with zero changes.
+- Zero static analysis issues.
+- 21 CLI tests passed.
+- 82 target-contract tests passed.
+- 103 tests passed in total.
+- Four packages skipped because no tests were present.
+
+### Not yet implemented
+
+- Production macOS filesystem inspection adapter.
+- SDK directory traversal and aggregation.
+- Persistent inspection session domain model.
+- SQLite session and audit repositories.
+- Interactive terminal wizard.
+- Cleanup-plan orchestration.
+- Cleanup validation and execution safeguards.
+- Destructive cleanup execution.
+- Windows and Linux adapters.
+- Flutter graphical applications.
+
+The architectural requirements in this document are not claims that these features already exist.
+
+## 17. Deferred Decisions
+
+The following require further design work before implementation:
+
+- Final terminal UI framework selection.
+- Concrete persistent session schema.
+- Process ownership and stale-lock recovery.
+- Exact candidate snapshot representation.
+- Directory subtree fingerprinting strategy.
+- Precise cleanup-plan conflict policy.
+- Per-platform safe mutation mechanisms.
+- Mount-boundary traversal policy.
+- Execution cancellation and recovery model.
+- Audit retention and export policy.
+- Future Windows and Linux implementations.
+- Future Flutter application composition.
+
+Deferred decisions must not weaken the foundational safety invariants.
+
+## 18. Architectural Acceptance Criteria
+
+Rudra's architecture is compliant only when the following remain true:
+
+1. Exploration cannot execute cleanup.
+2. Marking a candidate cannot execute cleanup.
+3. A session has one immutable original root.
+4. Only one unfinished session exists per Rudra user profile.
+5. A new invocation cannot silently replace an unfinished session.
+6. Session decisions and wizard progress can survive restarts.
+7. The SDK remains independent of CLI and Flutter presentation.
+8. Target inspection remains separate from cleanup execution.
+9. Cleanup requires explicit approval of a complete plan.
+10. Every candidate is revalidated before execution.
+11. Changed or unverifiable candidates block global preflight.
+12. A changed plan requires renewed review and confirmation.
+13. Runtime object changes cannot inherit previous approval.
+14. Interrupted execution cannot restart automatically.
+15. Actual execution results are distinguished from intentions.
+16. No unsupported safety guarantee is silently assumed.
+
+These invariants take precedence over convenience, performance optimization, and implementation simplicity.

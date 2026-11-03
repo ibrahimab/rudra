@@ -1,788 +1,1016 @@
-# Rudra — Development Guide
 
-## 1. Overview
+# Rudra — Development Standards
 
-Rudra is a cross-platform, user-directed filesystem exploration and cleanup application.
+**Version:** 1.1  
+**Last updated:** 2026-11-03  
+**Status:** Active development standard
 
-The project is implemented as a Dart monorepo using Pub Workspaces. It follows a modular architecture consisting of:
+## 1. Purpose
 
-- A platform-independent SDK.
-- Target contracts and operating-system-specific adapters.
-- Independent application frontends.
-- A shared, extensible CLI framework.
-- Persistent sessions, cleanup plans, and audit logging.
-- A comprehensive automated testing infrastructure.
+This document establishes the mandatory coding, documentation, testing, verification, and implementation standards for Rudra.
 
-The first supported application is a terminal-based CLI, with macOS as the initial target platform.
+It applies to all packages, applications, adapters, development tools, and automated tests in the repository.
 
-Future frontends may include Flutter desktop, mobile, and web applications.
+The objectives are:
 
-### Core development principles
+- Maintain a clear and predictable codebase.
+- Preserve architectural boundaries.
+- Ensure filesystem inspection remains safe.
+- Make all cleanup behavior explicitly user-directed.
+- Prevent regressions through automated testing.
+- Produce thoroughly documented, maintainable code.
+- Support incremental development without unnecessary rewrites.
 
-1. **No automated destructive actions.** Rudra must never select or delete files without explicit user authorization.
-2. **Platform independence.** Shared business logic must not depend on operating-system implementations.
-3. **Modular architecture.** Features must expose well-defined contracts and dependencies.
-4. **Testability.** All functional changes must have appropriate automated tests.
-5. **Thorough documentation.** Public APIs, architectural decisions, and non-obvious implementation behavior must be documented.
-6. **Recoverability.** Interrupted cleanup operations must be auditable and recoverable without automatic resumption.
-7. **Minimal dependencies.** New packages and frameworks must solve a demonstrated architectural or functional requirement.
+`docs/ARCHITECTURE.md` is the architectural baseline.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the system architecture and [ADR-0001](decisions/0001-modular-cli.md) for the modular CLI design decision.
+This document governs how that architecture is implemented.
 
-## 2. Development requirements
+Architectural Decision Records are maintained under:
 
-### Required software
+`docs/decisions/`
 
-- Dart SDK 3.6 or newer.
-- Git.
-- A supported development terminal.
-- macOS for initial target-adapter development.
+## 2. Development Philosophy
 
-### Recommended software
+### 2.1 Incremental development
 
-- Visual Studio Code with the Dart extension.
-- Flutter SDK when graphical application development begins.
+Development proceeds through small, focused implementation blocks.
 
-Flutter is not required to develop or execute the current CLI.
+Each block should have:
 
-### Project location
+1. A clearly defined objective.
+2. Relevant architectural context.
+3. Explicit implementation boundaries.
+4. Documented code.
+5. Automated tests.
+6. Verification commands.
+7. A clear completion condition.
 
-The local project root is:
+Do not combine unrelated refactoring with feature implementation.
 
-`~/projects/rudra`
+### 2.2 Preserve working implementations
 
-Commands in this document assume the current working directory is the repository root unless otherwise specified.
+Existing working code must not be replaced unnecessarily.
 
-## 3. Repository organization
+Before modifying an established component:
 
-The repository separates applications, reusable packages, documentation, and development infrastructure.
+- Understand its current responsibilities.
+- Identify the specific deficiency.
+- Prefer the smallest correct change.
+- Preserve public behavior unless a deliberate change is agreed.
+- Update affected tests and documentation.
 
-```text
-rudra/
-├── apps/
-│   └── cli/
-│       ├── bin/
-│       ├── lib/
-│       │   └── src/
-│       ├── tool/
-│       │   └── src/
-│       └── test/
-├── packages/
-│   ├── sdk/
-│   ├── targets/
-│   │   ├── contracts/
-│   │   └── macos/
-│   └── persistence/
-│       └── sqlite/
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DEVELOPMENT.md
-│   └── decisions/
-├── rudra
-├── pubspec.yaml
-└── pubspec.lock
-```
+A usage error must not automatically trigger architectural refactoring.
 
-Additional application frontends and platform adapters will be introduced as they are implemented.
+Proposed architectural changes must be explained before implementation.
 
-The logical architecture may contain more modules than the current repository has physical Dart packages. Separate packages should be introduced when their dependency boundaries justify them.
+### 2.3 One file at a time
 
-## 4. Dart workspace
+Code contributions should be presented file by file.
 
-Rudra uses Dart Pub Workspaces to manage the monorepo.
+Each file must have:
 
-Each Dart package has its own `pubspec.yaml`, while the root workspace manages shared dependency resolution.
+- Its repository-relative path.
+- Complete code when creating a new file.
+- Focused changes when modifying an existing file.
+- An explanation of its responsibilities.
+- Relevant tests.
 
-### Resolve dependencies
+Generated ZIP archives are not the default delivery format.
 
-```bash
-cd ~/projects/rudra
-dart pub get
-```
+The development workflow must support manually typing or copying each file into the repository.
 
-### Discover workspace packages
+When a complete file replacement is explicitly requested, provide the entire file.
 
-```bash
-dart pub workspace list
-```
+### 2.4 No premature abstraction
 
-The workspace listing is also used by Rudra's development tooling to discover packages automatically.
+Introduce abstractions when they establish a necessary architectural boundary, support multiple implementations, or express a meaningful domain concept.
 
-New packages must be registered in the root workspace configuration.
+Do not create general-purpose frameworks merely because they might become useful later.
 
-### Dependency rules
+Prefer explicit, understandable code over speculative extensibility.
 
-The following dependency direction must be preserved:
+## 3. Language and Tooling
 
-```text
-Applications / Frontends
-          |
-          v
-     Shared SDK
-          |
-          v
-   Target Contracts
-          ^
-          |
- Platform Adapters
-```
+Rudra uses Dart with Pub Workspaces.
 
-Applications compose SDK services and platform adapters.
+### 3.1 Dart version
 
-Target contracts must not depend on concrete operating-system implementations.
+Dart 3.6 or newer is the architectural baseline.
 
-The SDK must not depend on CLI or Flutter presentation frameworks.
+The actual workspace SDK constraint remains authoritative for supported language features.
 
-Development tooling must not become a dependency of the production application.
+Do not introduce language features that violate the configured SDK constraint.
 
-## 5. CLI architecture
+### 3.2 Package management
 
-Rudra uses one shared CLI framework built around the `RudraCli` class.
+Use Dart Pub Workspaces.
 
-The underlying argument parser is provided by Dart's `args` package.
+Dependencies must be declared in the appropriate package.
 
-### Responsibilities of RudraCli
+Avoid introducing unnecessary dependencies.
 
-`RudraCli` is responsible for:
+Platform-specific dependencies must remain isolated in their corresponding adapters.
 
-- Registering CLI modules.
-- Validating module identifiers.
-- Detecting duplicate command names and aliases.
-- Managing command registration lifecycle.
-- Dispatching commands.
-- Handling argument usage errors.
-- Returning process exit statuses.
+### 3.3 Code formatting
 
-The framework does not own filesystem cleanup policies or platform-specific operations.
+All Dart code must be formatted using the Dart formatter.
 
-### CLI modules
+From the project root:
 
-Features contribute commands by implementing the `RudraCliModule` contract.
+    ./rudra format
 
-Each module provides:
+Formatting must not be treated as optional.
 
-- A stable `module_id`.
-- One or more commands through `create_commands()`.
+### 3.4 Static analysis
 
-Modules must be registered explicitly during application composition.
+All code must pass the repository's analyzer configuration.
 
-Registration must not execute commands or cause destructive filesystem changes.
+Run:
 
-### Module lifecycle
+    ./rudra analyze
 
-1. Construct the CLI framework.
-2. Construct the required modules and inject dependencies.
-3. Register each module.
-4. Validate command and alias uniqueness.
-5. Execute the requested command.
-6. Close the registration lifecycle.
+Do not suppress analyzer warnings merely to make the verification pipeline green.
 
-A CLI instance cannot register additional modules after execution begins.
+If suppression is necessary, document the reason and keep its scope minimal.
 
-A CLI instance is intended for one command invocation.
+### 3.5 Full verification
 
-### Product and development composition
+The authoritative repository verification command is:
 
-Rudra has two composition entrypoints sharing the same CLI framework.
+    ./rudra check
 
-**Production entrypoint**
+It verifies dependency resolution, formatting, static analysis, and applicable workspace tests.
 
-`apps/cli/bin/rudra.dart`
+A development block is not complete until this command passes.
 
-Registers product modules only.
+### 3.6 Selective testing
 
-**Development entrypoint**
+The root development launcher supports:
 
-`apps/cli/tool/rudra_dev.dart`
+    ./rudra test
 
-Registers the product modules and extends them with `DevToolsCliModule`.
+Use the existing command's supported filters for focused testing.
 
-This design provides a single command framework without exposing development commands in the production registry.
+Run the complete verification pipeline before considering a block complete.
 
-Development modules must not appear in the production entrypoint's import dependency graph.
+### 3.7 Production builds
 
-### Plugin discovery policy
+The production build command is:
 
-Rudra currently uses explicit, compile-time module registration.
+    ./rudra build
 
-Automatic discovery and execution of arbitrary external plugin code is not supported.
+Development-only tools must not become production commands accidentally.
 
-Future plugin discovery mechanisms must define an explicit trust and security model before implementation.
+## 4. Naming Conventions
 
-## 6. Development commands
+### 4.1 Types
 
-The repository provides a development launcher named `rudra`.
+Use PascalCase for:
 
-On macOS and Linux:
+- Classes.
+- Interfaces.
+- Enums.
+- Extensions.
+- Type aliases.
 
-```bash
-./rudra help
-```
+Examples:
 
-On Windows, development commands can be invoked directly through Dart:
+    TargetInspector
+    FilesystemEntry
+    CleanupPlan
+    InspectionSession
+    RudraExitCode
 
-```powershell
-dart run apps/cli/tool/rudra_dev.dart help
-```
+### 4.2 Variables and functions
 
-The development launcher delegates command handling to the shared `RudraCli` framework.
+Use snake_case for:
 
-### Available commands
+- Local variables.
+- Parameters.
+- Fields.
+- Functions.
+- Methods.
 
-| Command | Description |
-| --- | --- |
-| `./rudra help` | Display available commands |
-| `./rudra about` | Display Rudra application information |
-| `./rudra test` | Execute workspace test suites |
-| `./rudra analyze` | Run static analysis |
-| `./rudra format` | Format Dart source files |
-| `./rudra check` | Run the complete quality gate |
-| `./rudra build` | Compile and verify the production executable |
+Examples:
 
-Development commands must return nonzero exit statuses when their operations fail.
+    root_path
+    session_id
+    allocated_size_bytes
+    inspect_directory()
+    validate_cleanup_plan()
+    resume_session()
 
-### Full quality gate
+Private declarations retain Dart's leading underscore convention:
 
-```bash
-./rudra check
-```
+    _active_session
+    _validate_candidate()
 
-The command performs the following operations sequentially:
+### 4.3 Enum values
 
-1. Resolve workspace dependencies.
-2. Verify Dart formatting without modifying source files.
-3. Execute static analysis.
-4. Run the workspace test suites.
+Use lowerCamelCase for enum constants where required by Dart's analyzer conventions.
 
-Execution stops at the first failed stage.
+Examples:
 
-### Scoped quality gate
+    FilesystemEntryKind.regularFile
+    FilesystemEntryKind.symbolicLink
+    TargetInspectionErrorCode.permissionDenied
 
-```bash
-./rudra check --package rudra_cli
-```
+Do not disable standard analyzer rules to enforce a conflicting naming convention.
 
-Restricts formatting, analysis, and testing to the selected package.
+### 4.4 Files and directories
 
-Dependency resolution remains workspace-wide.
+Use snake_case for Dart source filenames.
 
-A scoped check is useful during feature development but does not replace the full quality gate.
+Examples:
 
-### Formatting
+    filesystem_entry.dart
+    target_inspector.dart
+    cleanup_plan.dart
+    inspection_session.dart
 
-```bash
-./rudra format
-```
+Test filenames should end in `_test.dart`.
 
-Formats Dart source files using the official Dart formatter.
+## 5. Code Quality
 
-Unlike `check`, this command modifies source files.
+### 5.1 Explicit behavior
 
-### Static analysis
+Code must express its intent clearly.
 
-```bash
-./rudra analyze
-```
+Avoid hidden side effects.
 
-Runs Dart's static analyzer.
+Constructors should establish valid object state, not initiate filesystem cleanup or other destructive actions.
 
-All analyzer errors must be resolved before committing.
+### 5.2 Strong typing
 
-Warnings and lints must be reviewed rather than suppressed without justification.
+Prefer explicit domain types over loosely structured maps or arbitrary strings.
 
-## 7. Testing framework
+Use typed enums and exceptions for decisions that affect application behavior.
 
-Rudra uses Dart's official `package:test` framework.
+Do not require consumers to parse human-readable error messages.
 
-We do not implement a custom test assertion framework or duplicate existing Dart testing functionality.
+### 5.3 Immutability
 
-The development CLI provides orchestration, workspace discovery, and filtering.
+Prefer immutable domain value objects and snapshots.
 
-### Run all tests
+Defensively copy mutable collections supplied to immutable objects.
 
-```bash
-./rudra test
-```
+Do not expose mutable internal state unintentionally.
 
-The test runner:
+### 5.4 Validation
 
-1. Discovers packages using `dart pub workspace list`.
-2. Inspects each package for `*_test.dart` files.
-3. Executes available test suites.
-4. Reports skipped packages.
-5. Stops when a suite fails.
-6. Returns a nonzero status on failure.
+Enforce domain invariants at the appropriate boundary.
 
-Tests currently execute sequentially.
+Validation that must hold in production must not rely solely on Dart assertions.
 
-### Run one package
+Invalid input should produce a clearly documented failure.
 
-```bash
-./rudra test --package rudra_target_contracts
-```
+### 5.5 Nullable values
 
-Or use the short option:
+Use nullable types when information may genuinely be unavailable.
 
-```bash
-./rudra test -p rudra_cli
-```
+Never represent unknown filesystem information with fabricated defaults.
 
-Package filters use the declared Dart package name, not the filesystem directory name.
+In particular:
 
-### Filter by test name
+- Unknown size is not zero.
+- Unknown permissions are not denied permissions.
+- Missing identity is not a path-derived identity.
+- Unknown capability support is not unsupported.
+- Incomplete enumeration is not an empty directory.
 
-```bash
-./rudra test --package rudra_cli --name "RudraCli"
-```
+### 5.6 Error handling
 
-The name filter is forwarded to Dart's test runner and supports regular-expression matching.
+Use typed error categories where meaningful.
 
-### Filter by tags
+Preserve useful diagnostic context without coupling higher layers to native implementation details.
 
-```bash
-./rudra test --tags unit
-```
+Do not silently swallow errors.
 
-Exclude tests carrying a particular tag:
+Do not convert failures into successful empty results.
 
-```bash
-./rudra test --exclude-tags slow
-```
+### 5.7 Asynchronous operations
 
-Compound tag selectors are supported through the underlying Dart test framework.
+Document asynchronous behavior, including:
 
-Tags must be explicitly assigned to tests or test groups before they can be used for filtering.
+- Stream lifecycle.
+- Cancellation.
+- Error propagation.
+- Partial results.
+- Resource cleanup.
+- Ordering guarantees.
 
-### Run package tests directly
+Do not promise atomic filesystem observations when the underlying filesystem cannot provide them.
 
-During debugging, package tests can also be run without Rudra's development command:
+### 5.8 Constants
 
-```bash
-cd apps/cli
-dart test
-```
+Avoid unexplained magic numbers.
 
-This is useful when diagnosing failures in the Rudra CLI framework itself.
+Use named constants for meaningful limits and domain thresholds.
 
-## 8. Testing strategy
+Comments should explain why a value exists, not merely repeat the code.
 
-Rudra's testing infrastructure is organized into five conceptual layers.
+### 5.9 Comments
 
-### Unit tests
+Place comments above complex logic.
 
-Verify isolated business logic and application behavior.
+Prefer comments explaining invariants, assumptions, consequences, and non-obvious decisions.
 
-Examples include:
+Avoid comments that merely restate simple expressions.
 
-- Target capability detection.
-- Directory selection policies.
-- Parent-child selection conflict handling.
-- CLI module registration.
-- Command argument validation.
-- Session state transitions.
+## 6. Documentation Standards
 
-### Contract tests
+Thorough documentation is mandatory for generated and manually written Rudra code.
 
-Verify that platform implementations satisfy shared target contracts.
+Documentation is part of implementation, not optional follow-up work.
 
-Every target adapter must pass the relevant contract test suite.
+### 6.1 Public API documentation
 
-Contract tests must not assume that every target supports the same optional capabilities.
+Every public type must include DartDoc describing:
 
-### Integration tests
+- Purpose.
+- Responsibility.
+- Important invariants.
+- Relevant limitations.
+- Usage examples.
 
-Verify interactions between multiple real components.
+Public constructors, methods, fields, and functions must be documented.
 
-Examples include:
+### 6.2 Constructor documentation
 
-- Directory enumeration through the macOS adapter.
-- SQLite session persistence.
-- Cleanup plan serialization.
-- Audit event storage and retrieval.
+Constructors must explain:
 
-Filesystem integration tests must use isolated temporary fixtures.
+- Required and optional arguments.
+- Validation performed.
+- Invalid input behavior.
+- Relevant exceptions.
+- Important state guarantees.
 
-### Recovery and failure-injection tests
+### 6.3 Method documentation
 
-Verify behavior when execution is interrupted or fails.
+Public methods must explain:
 
-Examples include:
-
-- An operation completes but its completion event is not recorded.
-- A selected target disappears before execution.
-- A file is replaced after inspection.
-- Permission changes prevent an authorized operation.
-- A worker terminates unexpectedly.
-- A previously interrupted job is reopened.
-
-Tests must demonstrate that Rudra does not automatically resume destructive execution.
-
-### End-to-end tests
-
-Verify complete user workflows.
-
-Examples include:
-
-- Starting an exploration session.
-- Navigating nested directories.
-- Marking and excluding files.
-- Resolving conflicting selections.
-- Reviewing a cleanup plan.
-- Performing a dry run.
-- Confirming authorized execution.
-
-Terminal interaction tests will be introduced when the TUI implementation begins.
-
-## 9. Test isolation and safety
-
-Tests must never delete or modify real user data.
-
-In particular, tests must not target:
-
-- Actual user home directories.
-- Real application caches.
-- Developer SDK installations.
-- System directories.
-- Mounted user volumes containing real data.
-
-Destructive-operation tests must use explicitly created, isolated test fixtures.
-
-Fixtures must be uniquely scoped to their test execution.
-
-Tests must verify their safety preconditions before performing filesystem changes.
-
-Mock adapters should be used for domain-level tests.
-
-Real filesystem fixtures should be reserved for integration tests requiring actual filesystem behavior.
-
-Temporary fixture cleanup is permitted as part of the test harness, but must remain strictly confined to verified test-owned locations.
-
-## 10. Exit code conventions
-
-Application-owned process exit statuses are represented by the `RudraExitCode` enum.
-
-| Status | Value | Meaning |
-| --- | --- | --- |
-| `success` | 0 | Operation completed successfully |
-| `invalid_usage` | 64 | Invalid arguments or command usage |
-| `missing_input` | 66 | Required input or repository resource missing |
-| `software_error` | 70 | Internal application failure |
-| `configuration_error` | 78 | Invalid application configuration |
-
-Application-owned exit values must not be scattered throughout the code as unexplained integers.
-
-External subprocesses may return statuses outside this enumeration.
-
-Those statuses should be preserved where appropriate, together with sufficient diagnostic information to identify the failing operation.
-
-Unexpected programming errors must not be silently reported as successful outcomes.
-
-Exit codes represent process outcomes; they do not replace structured domain errors or the persistent execution audit log.
-
-## 11. Building Rudra
-
-### Compile the production CLI
-
-```bash
-./rudra build
-```
-
-The build command compiles:
-
-`apps/cli/bin/rudra.dart`
-
-The development entrypoint must never be used to create a production distribution.
-
-### Build output
-
-On macOS and Linux:
-
-`build/rudra`
-
-On Windows:
-
-`build/rudra.exe`
-
-The resulting native executable does not require an installed Dart SDK.
-
-### Verify production behavior
-
-```bash
-./build/rudra --help
-./build/rudra about
-```
-
-Both commands should complete successfully.
-
-Now verify that development commands are unavailable:
-
-```bash
-./build/rudra test
-```
-
-This command must fail with a usage error.
-
-The build verification checks the production command registry. This is distinct from a binary-level audit of included code and dependencies.
-
-### Production dependency boundary
-
-Production application code must not import:
-
-- Development command modules.
-- Test runner implementations.
-- Test fixture utilities.
-- Repository maintenance tasks.
-
-Future production builds should include automated dependency-boundary verification.
-
-## 12. Code quality standards
-
-### Naming conventions
-
-Rudra follows these conventions:
-
-- Types and classes: `PascalCase`.
-- Variables and functions: `snake_case`.
-- Public and private method naming follows the same convention.
-- Constants: descriptive names without unexplained abbreviations.
-- Package names: lowercase with underscores.
-
-Names should describe the purpose of a component rather than its implementation details.
-
-### Documentation
-
-All public APIs must have DartDoc documentation.
-
-Documentation should explain:
-
-- Responsibility and intended use.
-- Parameters and return values.
-- Preconditions and invariants.
-- Error and exception behavior.
+- Their purpose.
+- Input requirements.
+- Return values.
 - Side effects.
-- Security and authorization implications.
-- Relevant usage examples.
+- Error contracts.
+- Asynchronous behavior.
+- Relevant safety guarantees.
 
-Examples should demonstrate realistic API usage.
+When appropriate, include an `Example` section or DartDoc code example.
 
-### Inline comments
+### 6.4 Interface documentation
 
-Inline comments should explain non-obvious reasoning, constraints, and safety decisions.
+Interfaces must document both method signatures and expected behavior.
 
-Avoid comments that merely repeat what the code already expresses.
+A method's contract should clarify what implementations are required to guarantee.
 
-Place explanatory comments above complex operations.
+For filesystem interfaces, document:
 
-### Error handling
+- Symbolic-link behavior.
+- Enumeration scope.
+- Error propagation.
+- Cancellation behavior.
+- Metadata limitations.
+- Ownership of recursive traversal.
 
-Errors must not be silently discarded.
+### 6.5 Domain-state documentation
 
-Platform errors should be translated into documented target-layer errors when crossing platform abstraction boundaries.
+Stateful domain models must describe:
 
-Unexpected failures should retain useful diagnostic context.
+- Valid states.
+- Permitted transitions.
+- Forbidden transitions.
+- Persistence requirements.
+- Recovery behavior.
+- Conditions that invalidate prior decisions.
 
-### Dependency management
+### 6.6 Safety documentation
 
-Prefer Dart's standard library and established packages.
+Any code involved in cleanup planning, validation, authorization, or execution must document its safety invariants.
 
-New dependencies should be justified by functionality, maintenance cost, security, and portability.
+Code must explain what it guarantees and what it cannot guarantee.
 
-Avoid introducing framework abstractions that duplicate existing Dart capabilities.
+Unsupported guarantees must never be implied.
 
-### Architectural consistency
+### 6.7 Architectural documentation
 
-Implementations must follow the accepted architecture.
+Update `docs/ARCHITECTURE.md` when an implementation changes an established architectural rule.
 
-Material design changes should be documented using architecture decision records.
+Create or amend an ADR when a significant design choice is made.
 
-Do not replace established, working components without first evaluating the existing implementation and explaining the reason for the change.
+Do not silently diverge from the architectural baseline.
 
-## 13. Documentation requirements
+## 7. Dependency Boundaries
 
-Documentation is a mandatory part of implementation.
+### 7.1 CLI
 
-The `docs/` directory contains project-level technical documentation.
+The CLI owns user interaction, command composition, and presentation.
 
-### Architecture documentation
+It must not own filesystem safety policy.
 
-`ARCHITECTURE.md` describes:
+It must not independently authorize cleanup execution.
 
-- System boundaries.
-- Dependency direction.
-- Application frontends.
-- SDK and target abstractions.
-- Session management.
-- Cleanup execution.
-- Safety and recovery principles.
+### 7.2 SDK
 
-### Development documentation
+The SDK owns application and domain behavior.
 
-`DEVELOPMENT.md` describes:
+It must remain independent of CLI and Flutter presentation.
 
-- Development setup.
-- Tooling.
-- Testing.
-- Building.
-- Coding conventions.
-- Contributor workflows.
+The SDK must not depend directly on SQLite or concrete operating-system adapters.
 
-### Architecture decision records
+### 7.3 Target contracts
 
-Architectural decisions are recorded in `docs/decisions/`.
+Target contracts must remain platform-independent.
 
-Each accepted ADR should include:
+Do not introduce native filesystem implementation dependencies into the contracts package.
 
-- Context.
-- Decision.
-- Alternatives or tradeoffs.
-- Consequences.
-- Deferred questions where applicable.
+### 7.4 Platform adapters
 
-ADRs preserve the reasoning behind decisions rather than merely describing the resulting implementation.
+Platform adapters translate native functionality into the established contracts.
 
-### Documentation maintenance
+They must not independently decide which files should be removed.
 
-Documentation must be updated alongside relevant code changes.
+### 7.5 Persistence
 
-Changes to safety invariants, target contracts, public APIs, execution semantics, or package boundaries must not leave the documentation outdated.
+Persistence implementations store and retrieve state.
 
-## 14. Standard development workflow
+They must not replace domain-level lifecycle or authorization rules.
 
-A typical development cycle is:
+### 7.6 Composition
 
-### Step 1 — Identify the component
+Application composition connects interfaces to concrete implementations.
 
-Determine which application or SDK package owns the functionality.
+Dependencies must flow toward platform-independent contracts and domain logic.
 
-Respect the established dependency direction.
+## 8. Testing Standards
 
-### Step 2 — Define the contract
+All meaningful behavior requires automated tests.
 
-Describe:
+### 8.1 Unit tests
 
-- Expected behavior.
-- Inputs and outputs.
-- Failure conditions.
-- Safety constraints.
-- Required capabilities.
+Unit tests should verify:
 
-### Step 3 — Implement a focused change
+- Normal behavior.
+- Invalid inputs.
+- Boundary values.
+- Error conditions.
+- Null and unknown states.
+- Domain invariants.
+- State transitions.
 
-Make the smallest coherent change that satisfies the requirement.
+### 8.2 Contract tests
 
-Do not introduce unrelated architectural changes during feature implementation.
+Contract tests must verify expected interface behavior independently of implementation details.
 
-### Step 4 — Write or update tests
+Examples include:
 
-Include successful cases, failures, edge cases, and relevant invariants.
+- Valid filesystem entry types.
+- Missing path errors.
+- Symbolic-link handling.
+- Directory enumeration.
+- Capabilities.
+- Identity semantics.
+- Stream failures.
 
-### Step 5 — Run scoped verification
+### 8.3 Adapter conformance tests
 
-For CLI work:
+Concrete adapters must satisfy shared conformance tests.
 
-```bash
-./rudra check --package rudra_cli
-```
+The existence of passing in-memory fixture tests is not sufficient to establish native adapter correctness.
 
-For target contract work:
+Native implementations require separate integration tests.
 
-```bash
-./rudra check --package rudra_target_contracts
-```
+### 8.4 Platform integration tests
 
-### Step 6 — Run the full quality gate
+Platform tests should cover:
 
-```bash
-./rudra check
-```
+- Real filesystem metadata.
+- Native error translation.
+- Permission failures.
+- Symbolic links.
+- Filesystem identities.
+- Directory enumeration.
+- Cancellation and resource cleanup.
+- Relevant race conditions.
 
-This is mandatory before considering a change complete.
+Tests must use controlled temporary fixtures.
 
-### Step 7 — Update documentation
+### 8.5 SDK tests
 
-Update DartDoc, development guidance, architecture documentation, and ADRs as applicable.
+SDK tests must cover inspection orchestration, aggregation, planning, session behavior, and safety policy independently of the UI.
 
-### Step 8 — Review and commit
+Prefer deterministic fake adapters for domain-state tests.
 
-Review changed files:
+## 9. Persistent Session Testing
 
-```bash
-git diff
-git status
-```
+The session lifecycle is a safety-sensitive part of Rudra.
 
-Commit only after the relevant checks pass.
+It requires explicit testing.
 
-## 15. Safety requirements
+### 9.1 Single-session enforcement
 
-Rudra's primary rule is:
+Verify that:
 
-**NO AUTOMATED DESTRUCTIVE ACTIONS.**
+- A user can create a session when none is unfinished.
+- An unfinished session prevents creation of another.
+- The original root remains immutable.
+- The user is offered continuation or cancellation.
+- Continuing restores the original root.
+- Cancellation does not modify inspected filesystem content.
+- A new session can be created after explicit cancellation.
 
-Scanning, selecting, reviewing, and deleting are distinct operations.
+### 9.2 Resume behavior
 
-The user explicitly controls the exploration and cleanup workflow.
+Verify that a session can restore:
 
-### User authorization
+- Its original root.
+- Wizard progress.
+- Current navigation position.
+- Marked candidates.
+- Plan revisions.
+- Relevant prior decisions.
 
-- No automatically selected cleanup targets.
-- No deletion as a side effect of scanning.
-- No implicit authorization from a target capability.
-- No silent resolution of conflicting directory selections.
-- No destructive actions during module registration.
-- No automatic resumption of interrupted cleanup jobs.
+Old inspection results must not automatically be treated as current.
 
-### Cleanup execution
+### 9.3 Concurrent invocations
 
-Destructive execution will use explicitly approved cleanup plans.
+Test attempts to open or mutate the same session from multiple processes or coordinators.
 
-The execution worker must revalidate target identity and relevant safety constraints before acting.
+Persistent constraints must prevent contradictory session states.
 
-The filesystem is not transactional; recording execution events does not make deletion atomic.
+Crash and stale-lock scenarios must be tested.
 
-### Recovery
+### 9.4 Terminal states
 
-Interrupted jobs must be detectable through persistent execution records.
+Completed and cancelled sessions must not silently return to an active state.
 
-On reopening a job, Rudra must present its recorded and reconciled state.
+An interrupted execution requires separate reconciliation.
 
-Resumption requires explicit user authorization.
+## 10. Dry-Run Wizard Testing
 
-The worker must not blindly repeat operations solely because their completion events are missing.
+The wizard must remain read-only throughout exploration and marking.
 
-These principles apply to every frontend and every target adapter.
+Tests must prove that:
 
-## 16. Future development
+- Directory navigation performs no cleanup.
+- Entry inspection performs no cleanup.
+- Marking a candidate performs no cleanup.
+- Unmarking a candidate performs no cleanup.
+- Saving a session performs no cleanup.
+- Resuming a session performs no cleanup.
+- Cancelling a session performs no cleanup.
+- Generating a cleanup preview performs no cleanup.
 
-The following capabilities are planned or under consideration but are not part of the current development infrastructure:
+These guarantees should be checked through explicit fake execution boundaries or other reliable instrumentation.
 
-- Stateful terminal UI using Nocterm, subject to compatibility testing.
-- Reusable target-adapter contract test suites.
-- Comprehensive permission and symbolic-link testing.
-- SQLite-backed session and execution persistence.
-- Audit/event inspection commands.
-- Failure-injection and recovery testing utilities.
-- Bounded parallel test execution.
-- Flutter desktop application.
-- Windows and Linux target adapters.
-- Remote target management.
-- Generated compile-time CLI module registration.
+A test that merely assumes no mutation occurred is insufficient.
 
-These capabilities should be implemented incrementally when justified by concrete requirements.
+### 10.1 Global cleanup list
 
-## 17. Definition of done
+Test:
 
-A feature is considered complete when:
+- Adding candidates.
+- Removing candidates.
+- Revisiting selections.
+- Overlapping directory and child selections.
+- Duplicate selection handling.
+- Plan revision changes.
+- Plan persistence.
+- Accurate representation of incomplete inspections.
 
-- [ ] Its behavior matches the documented requirements.
-- [ ] Architectural boundaries remain intact.
-- [ ] Public APIs are thoroughly documented.
-- [ ] Automated tests cover successful and failing cases.
-- [ ] Relevant safety invariants are verified.
-- [ ] Scoped checks pass.
-- [ ] The full `./rudra check` quality gate passes.
-- [ ] Relevant documentation is updated.
-- [ ] No unexpected production dependencies were introduced.
-- [ ] The implementation has been reviewed before committing.
+## 11. Cleanup Safety Testing
 
-**Rudra prioritizes correctness, user control, safety, maintainability, and recoverability over implementation speed.**
+Cleanup behavior is subject to stricter standards than ordinary filesystem inspection.
+
+### 11.1 No implicit authorization
+
+Tests must prove that no destructive operation can occur because a candidate was merely marked.
+
+Authorization requires a separately confirmed complete plan.
+
+### 11.2 Baseline observations
+
+Candidate state must be compared against appropriate saved observations.
+
+Tests must cover:
+
+- Unchanged entries.
+- Changed filesystem identities.
+- Replaced files at the same path.
+- Modified files.
+- Changed entry types.
+- Changed symbolic links.
+- Missing entries.
+- Inaccessible entries.
+- Added directory children.
+- Removed directory children.
+- Incomplete subtree observations.
+- Unavailable verification capabilities.
+
+### 11.3 Global preflight
+
+No cleanup operation may begin when any candidate has an unresolved validation failure.
+
+Tests must verify that failure of one candidate blocks execution of the entire plan before the first destructive operation.
+
+### 11.4 Reapproval
+
+When a candidate changes:
+
+1. Previous approval becomes invalid.
+2. The changed candidate requires renewed review.
+3. A revised plan is produced.
+4. The complete plan requires renewed confirmation.
+
+Tests must verify that approval of an older plan revision cannot authorize a newer revision.
+
+### 11.5 Runtime validation
+
+Successful preflight must not be treated as permanent authorization.
+
+Tests must simulate changes occurring after preflight but before a destructive operation.
+
+The executor must refuse operations that cannot be safely validated at the operation boundary.
+
+### 11.6 Partial execution
+
+Tests must account for cleanup processes that stop after some operations have succeeded.
+
+Execution records must distinguish:
+
+- Completed operations.
+- Failed operations.
+- Skipped operations.
+- Unattempted operations.
+- Interrupted operations.
+
+Partial execution must never be represented as complete success.
+
+### 11.7 Interrupted execution
+
+An interrupted execution must not resume automatically.
+
+Recovery requires reconciliation, fresh validation, and renewed user authorization before additional destructive work.
+
+## 12. Destructive Test Isolation
+
+Future tests involving filesystem mutation must run only against controlled disposable fixtures.
+
+Never run cleanup integration tests against:
+
+- A developer's home directory.
+- Real application support directories.
+- Actual user caches.
+- Production data.
+- Arbitrary paths supplied through the environment.
+- Unverified external volumes.
+
+Test fixtures must be created deliberately and must have clearly defined ownership.
+
+Cleanup tests must never infer that a directory is disposable merely because its path contains `tmp` or `cache`.
+
+### 12.1 Failure injection
+
+Use deterministic failure injection where possible.
+
+Relevant cases include:
+
+- Permission denial.
+- Object replacement.
+- Symbolic-link replacement.
+- Missing files.
+- Changed directory membership.
+- Persistence failure.
+- Interrupted execution.
+- Failed individual operations.
+- Unavailable platform safeguards.
+
+### 12.2 Destructive test authorization
+
+Tests must not accidentally invoke production cleanup against real user data.
+
+The test execution mechanism must enforce fixture boundaries independently of the data being tested.
+
+## 13. Persistence Development Standards
+
+SQLite persistence must remain an implementation of explicit domain persistence contracts.
+
+### 13.1 Transactions
+
+Use transactions for logically atomic state changes.
+
+Session transitions and their associated audit events must remain consistent.
+
+### 13.2 Migrations
+
+Schema changes must be versioned and documented.
+
+Migrations must not silently discard unfinished sessions, cleanup selections, or audit evidence.
+
+### 13.3 State integrity
+
+Persisted state must distinguish:
+
+- Session state.
+- Wizard navigation.
+- Selected candidates.
+- Inspection baselines.
+- Plan revisions.
+- Approval records.
+- Execution outcomes.
+
+A persisted selection must never be interpreted as an execution authorization.
+
+### 13.4 Recovery
+
+Crash recovery must not guess that cleanup succeeded.
+
+Unresolved operations require explicit reconciliation.
+
+Do not automatically continue destructive work from a saved checkpoint.
+
+### 13.5 Concurrency
+
+Persistence must enforce one unfinished session per Rudra user profile.
+
+Process-level coordination and durable session uniqueness must be tested independently.
+
+### 13.6 Audit records
+
+Audit events should capture relevant state transitions and outcomes.
+
+Recorded success must correspond to observed success.
+
+User intent, approval, attempts, and results must not overwrite one another semantically.
+
+## 14. Error Handling Standards
+
+### 14.1 Typed errors
+
+Use appropriate domain and inspection error types.
+
+For target inspection, use `TargetInspectionException` and the corresponding typed error codes.
+
+### 14.2 Preserve failures
+
+Do not turn an exception into an empty collection, null value, or successful result unless the contract explicitly defines that behavior.
+
+### 14.3 Partial results
+
+Partial observations must be distinguishable from complete observations.
+
+The SDK decides whether partial results may be retained for presentation.
+
+Partial scan results must never be used as proof that a cleanup target is unchanged.
+
+### 14.4 Diagnostic safety
+
+Do not expose sensitive native error details unnecessarily.
+
+Diagnostic output should contain enough information to identify the failure without leaking unrelated filesystem information.
+
+### 14.5 Failure ownership
+
+The target adapter reports native observation failures.
+
+The SDK determines domain consequences.
+
+The CLI presents the outcome and translates application results into exit codes.
+
+## 15. Performance Standards
+
+Performance improvements must not weaken safety guarantees.
+
+### 15.1 Lazy enumeration
+
+Prefer streaming directory enumeration over loading an entire directory into memory when practical.
+
+### 15.2 Controlled traversal
+
+The SDK should control traversal depth, concurrency, cancellation, and resource usage.
+
+Do not introduce unbounded filesystem traversal parallelism.
+
+### 15.3 Aggregation
+
+Storage aggregation must account for duplicate filesystem identities and incomplete observations where supported.
+
+Do not advertise inaccurate storage reclamation estimates.
+
+### 15.4 Caching
+
+Cached metadata is an observation, not a permanent fact.
+
+Cached observations must not bypass required cleanup revalidation.
+
+### 15.5 Cancellation
+
+Cancellation must release resources and leave persistent state consistent.
+
+Cancelling inspection must not trigger cleanup.
+
+Cancelling execution requires explicitly defined execution behavior.
+
+## 16. Security and Safety Review
+
+Any feature involving filesystem traversal, persistence, cleanup authorization, or execution requires a safety review.
+
+The review should consider:
+
+- Path traversal.
+- Relative and absolute paths.
+- Symbolic-link behavior.
+- Intermediate path components.
+- Mount boundaries.
+- Filesystem identity reuse.
+- Time-of-check/time-of-use races.
+- Permission failures.
+- Untrusted or malformed metadata.
+- Stale persisted state.
+- Concurrent processes.
+- Incomplete scans.
+- Partial execution.
+- User confirmation boundaries.
+
+The existence of a user confirmation prompt is not a substitute for technical safety enforcement.
+
+The implementation must validate that the approved object is the object being acted upon.
+
+## 17. Architectural Decision Records
+
+Significant design choices must be documented in:
+
+`docs/decisions/`
+
+Each ADR should contain:
+
+1. Title.
+2. Status.
+3. Context.
+4. Decision.
+5. Alternatives considered.
+6. Consequences.
+7. Relevant verification requirements.
+
+An accepted ADR must not be silently contradicted by implementation changes.
+
+Current architectural subjects requiring explicit decisions include:
+
+- Modular CLI composition.
+- Persistent single-session lifecycle.
+- Stateful dry-run cleanup planning.
+- Cleanup approval and revalidation.
+- Mount-boundary enforcement.
+- Safe platform-specific execution.
+- Interrupted-execution recovery.
+
+Existing ADRs must be preserved rather than replaced by unrelated new decisions.
+
+## 18. Development Workflow
+
+Each implementation block should follow this sequence.
+
+### Step 1 — Establish context
+
+Review the relevant architecture, existing code, contracts, and ADRs.
+
+Identify the exact change required.
+
+### Step 2 — Discuss design
+
+Explain:
+
+- The responsibility being introduced.
+- Which package owns it.
+- Which dependencies it requires.
+- The invariants it must enforce.
+- Alternatives where they materially affect correctness.
+
+Do not prematurely implement unrelated capabilities.
+
+### Step 3 — Implement incrementally
+
+Provide code file by file.
+
+Preserve existing working implementations.
+
+Use focused changes.
+
+### Step 4 — Document
+
+Add complete DartDoc for new public APIs.
+
+Update relevant documentation for behavior changes.
+
+Document error contracts and safety guarantees.
+
+### Step 5 — Test
+
+Add tests for new behavior, invalid inputs, and failure conditions.
+
+Safety-sensitive features require negative tests proving that prohibited actions do not occur.
+
+### Step 6 — Format
+
+Run:
+
+    ./rudra format
+
+### Step 7 — Verify
+
+Run:
+
+    ./rudra check
+
+All applicable checks must pass.
+
+### Step 8 — Review
+
+Confirm that:
+
+- The implementation matches the architectural design.
+- Tests validate meaningful behavior.
+- No unrelated implementation changed.
+- No platform dependency leaked into core packages.
+- Safety invariants remain intact.
+- Documentation matches the implementation.
+
+### Step 9 — Commit
+
+Commit only after successful verification and review.
+
+Use a meaningful commit message identifying the completed block or feature.
+
+Do not commit generated binaries, caches, or unrelated artifacts.
+
+## 19. Definition of Done
+
+An implementation block is complete only when:
+
+- The intended behavior is implemented.
+- Architectural boundaries are respected.
+- Existing working functionality is preserved.
+- Public APIs are documented.
+- Relevant automated tests exist.
+- Negative and failure cases are covered.
+- Code is formatted.
+- Static analysis passes.
+- `./rudra check` passes.
+- No unresolved safety regression remains.
+- Any necessary architectural documentation is updated.
+
+For safety-critical features, successful tests must demonstrate that prohibited operations cannot occur.
+
+If a known safety requirement is not yet enforceable, the feature must remain non-executable or explicitly deferred.
+
+## 20. Current Development Baseline
+
+As of 2026-11-03, Rudra has completed:
+
+- Modular CLI infrastructure.
+- Typed CLI exit codes.
+- Production/development entrypoint separation.
+- Root development commands.
+- Dart Pub Workspaces configuration.
+- Target path models.
+- Filesystem entry and metadata contracts.
+- Filesystem identity contracts.
+- Typed inspection errors.
+- Target capability models.
+- `TargetInspector` interface.
+- In-memory inspection fixtures.
+- Shared inspector conformance testing.
+
+The most recently reported full verification passed:
+
+- 21 CLI tests.
+- 82 target-contract tests.
+- 103 total tests.
+- Zero analyzer issues.
+
+The next implementation work must preserve this passing baseline.
+
+The session lifecycle, wizard, persistence implementation, cleanup planning, validation, and execution components remain future implementation work.
+
+Their architectural and testing requirements are established before their implementation begins.
+
+## 21. Non-Negotiable Development Rules
+
+The following rules apply to all future Rudra contributions:
+
+1. Never introduce autonomous destructive cleanup.
+2. Never make the inspection wizard destructive.
+3. Never interpret marking as execution approval.
+4. Never bypass the final cleanup-plan confirmation.
+5. Never execute a stale or unverifiable cleanup plan.
+6. Never silently accept replacement filesystem objects.
+7. Never allow new directory contents to inherit old approval.
+8. Never automatically restart interrupted destructive work.
+9. Never replace working code without a justified reason.
+10. Never omit required tests or public API documentation.
+11. Never allow platform-specific logic to leak into the core contracts.
+12. Never conceal incomplete inspection or partial execution.
+13. Never sacrifice filesystem safety for convenience or performance.
+
+These requirements take precedence over implementation shortcuts.

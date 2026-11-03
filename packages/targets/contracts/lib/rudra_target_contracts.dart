@@ -15,3 +15,4 @@ library;
 
 export 'src/target_capability.dart';
 export 'src/target_descriptor.dart';
+export 'src/target_path.dart';
