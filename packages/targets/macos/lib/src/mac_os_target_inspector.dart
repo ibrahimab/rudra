@@ -112,7 +112,18 @@ final class MacOsTargetInspector {
   /// POSIX permission bits are reported without inferring effective
   /// access. Effective access fields remain null.
   ///
-  /// Timestamps are not yet exposed by this adapter and remain null.
+  /// Modification and access timestamps are converted from native
+  /// Darwin timespec values into UTC DateTime observations.
+  ///
+  /// Native nanosecond precision is reduced to microseconds.
+  /// Invalid or unrepresentable timestamps remain null.
+  ///
+  /// Access timestamps may be stale when filesystem access-time
+  /// updates are disabled or deferred.
+  ///
+  /// Creation time remains null because native birthtime may
+  /// silently fall back to inode status-change time on filesystems
+  /// that do not support true creation timestamps.
   ///
   /// Completes with [TargetInspectionException] when inspection
   /// fails. The operation is always
@@ -197,6 +208,8 @@ final class MacOsTargetInspector {
         allocated_size_bytes: allocated_size_bytes,
         identity: identity,
         permissions: permissions,
+        modified_at: snapshot.modification_time.to_utc_datetime(),
+        accessed_at: snapshot.access_time.to_utc_datetime(),
       ),
     );
   }

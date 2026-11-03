@@ -404,6 +404,90 @@ void main() {
       expect(permissions.effective_writable, isNull);
       expect(permissions.effective_executable, isNull);
     });
+
+    test('reports UTC modification and access timestamps', () async {
+      final file = File('${fixture.path}/timestamps.txt');
+      await file.writeAsString('Timestamp inspection');
+
+      final entry = await inspector.inspect(
+        TargetPath(file.path),
+      );
+
+      final command = await Process.run(
+        '/usr/bin/stat',
+        ['-f', '%a:%m', file.path],
+      );
+
+      expect(command.exitCode, 0);
+
+      final seconds =
+          (command.stdout as String).trim().split(':').map(int.parse).toList();
+
+      expect(seconds, hasLength(2));
+
+      final accessed_at = entry.metadata.accessed_at;
+      final modified_at = entry.metadata.modified_at;
+
+      expect(accessed_at, isNotNull);
+      expect(modified_at, isNotNull);
+
+      expect(accessed_at!.isUtc, isTrue);
+      expect(modified_at!.isUtc, isTrue);
+
+      const microseconds_per_second = 1000000;
+
+      expect(
+        accessed_at.microsecondsSinceEpoch ~/ microseconds_per_second,
+        seconds[0],
+      );
+
+      expect(
+        modified_at.microsecondsSinceEpoch ~/ microseconds_per_second,
+        seconds[1],
+      );
+
+      // Birthtime support has not been established reliably.
+      expect(entry.metadata.created_at, isNull);
+    });
+
+    test('reports timestamps for a dangling link itself', () async {
+      final link = Link('${fixture.path}/dangling-timestamp');
+      await link.create('missing-destination');
+
+      final entry = await inspector.inspect(
+        TargetPath(link.path),
+      );
+
+      // macOS stat defaults to lstat without -L.
+      final command = await Process.run(
+        '/usr/bin/stat',
+        ['-f', '%a:%m', link.path],
+      );
+
+      expect(command.exitCode, 0);
+
+      final seconds =
+          (command.stdout as String).trim().split(':').map(int.parse).toList();
+
+      expect(seconds, hasLength(2));
+      expect(entry.kind, FilesystemEntryKind.symbolicLink);
+
+      const microseconds_per_second = 1000000;
+
+      expect(
+        entry.metadata.accessed_at!.microsecondsSinceEpoch ~/
+            microseconds_per_second,
+        seconds[0],
+      );
+
+      expect(
+        entry.metadata.modified_at!.microsecondsSinceEpoch ~/
+            microseconds_per_second,
+        seconds[1],
+      );
+
+      expect(entry.metadata.created_at, isNull);
+    });
   });
 }
 

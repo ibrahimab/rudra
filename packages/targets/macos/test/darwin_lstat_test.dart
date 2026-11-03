@@ -13,6 +13,69 @@ const int _symbolic_link_type = 0xA000;
 const int _no_such_file_errno = 2;
 
 void main() {
+  group('DarwinTimestamp', () {
+    test('converts the Unix epoch to UTC', () {
+      const timestamp = DarwinTimestamp(
+        seconds: 0,
+        nanoseconds: 0,
+      );
+
+      expect(
+        timestamp.to_utc_datetime(),
+        DateTime.utc(1970),
+      );
+    });
+
+    test('preserves microseconds before the epoch', () {
+      const timestamp = DarwinTimestamp(
+        seconds: -1,
+        nanoseconds: 123456789,
+      );
+
+      final converted = timestamp.to_utc_datetime();
+
+      expect(converted, isNotNull);
+      expect(converted!.isUtc, isTrue);
+
+      // -1 second + 123456789 nanoseconds.
+      // Remaining sub-microsecond precision is discarded.
+      expect(
+        converted.microsecondsSinceEpoch,
+        -876544,
+      );
+    });
+
+    test('rejects invalid nanosecond components', () {
+      const negative = DarwinTimestamp(
+        seconds: 0,
+        nanoseconds: -1,
+      );
+
+      const overflow = DarwinTimestamp(
+        seconds: 0,
+        nanoseconds: 1000000000,
+      );
+
+      expect(negative.to_utc_datetime(), isNull);
+      expect(overflow.to_utc_datetime(), isNull);
+    });
+
+    test('rejects out-of-range timestamps', () {
+      const future = DarwinTimestamp(
+        seconds: 8640000000001,
+        nanoseconds: 0,
+      );
+
+      const past = DarwinTimestamp(
+        seconds: -8640000000001,
+        nanoseconds: 0,
+      );
+
+      expect(future.to_utc_datetime(), isNull);
+      expect(past.to_utc_datetime(), isNull);
+    });
+  });
+
   group('DarwinLStat', () {
     late Directory fixture;
     late DarwinLStat native;
@@ -153,6 +216,42 @@ void main() {
       expect(observed.inode, fields[1]);
       expect(observed.logical_size_bytes, fields[2]);
       expect(observed.allocated_blocks, fields[3]);
+    });
+
+    test('reads native access and modification times', () async {
+      final file = File('${fixture.path}/timestamps.txt');
+      await file.writeAsString('Timestamp test');
+
+      final observed = native.inspect(file.path);
+
+      final command = await Process.run(
+        '/usr/bin/stat',
+        ['-f', '%a:%m', file.path],
+      );
+
+      expect(
+        command.exitCode,
+        0,
+        reason: '${command.stderr}',
+      );
+
+      final fields =
+          (command.stdout as String).trim().split(':').map(int.parse).toList();
+
+      expect(fields, hasLength(2));
+
+      expect(observed.access_time.seconds, fields[0]);
+      expect(observed.modification_time.seconds, fields[1]);
+
+      for (final timestamp in [
+        observed.access_time,
+        observed.modification_time,
+      ]) {
+        expect(
+          timestamp.nanoseconds,
+          inInclusiveRange(0, 999999999),
+        );
+      }
     });
   });
 }

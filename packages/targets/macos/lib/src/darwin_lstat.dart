@@ -3,6 +3,111 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+const int _nanoseconds_per_second = 1000000000;
+const int _nanoseconds_per_microsecond = 1000;
+const int _microseconds_per_second = 1000000;
+
+// Dart DateTime supports dates within 100 million days of
+// the Unix epoch, measured in microseconds.
+const int _maximum_date_microseconds = 8640000000000000000;
+
+const int _maximum_date_seconds =
+    _maximum_date_microseconds ~/ _microseconds_per_second;
+
+/// A native Darwin timestamp relative to the Unix epoch.
+///
+/// [seconds] is the whole-second component. [nanoseconds]
+/// represents the fractional second and is expected to be
+/// within the range 0 through 999999999.
+///
+/// The original native precision is preserved in this object.
+/// Converting to Dart DateTime loses sub-microsecond precision.
+///
+/// This is private adapter infrastructure, not a persistent
+/// cleanup validation token.
+///
+/// Example:
+/// ```dart
+/// final timestamp = DarwinTimestamp(
+///   seconds: 1700000000,
+///   nanoseconds: 123456789,
+/// );
+///
+/// final utc = timestamp.to_utc_datetime();
+/// print(utc?.isUtc);
+/// // true
+/// ```
+final class DarwinTimestamp {
+  /// Creates a timestamp from native timespec fields.
+  ///
+  /// Values are retained unchanged. Invalid or unrepresentable
+  /// values are handled by [to_utc_datetime].
+  const DarwinTimestamp({
+    required this.seconds,
+    required this.nanoseconds,
+  });
+
+  /// Whole seconds since the Unix epoch.
+  final int seconds;
+
+  /// Fractional nanoseconds within the native second.
+  final int nanoseconds;
+
+  /// Converts the native timestamp to a UTC Dart DateTime.
+  ///
+  /// Returns null for invalid nanoseconds or timestamps outside
+  /// Dart's representable DateTime range.
+  ///
+  /// Nanoseconds are truncated to microsecond precision.
+  /// A timestamp at the Unix epoch is valid and is not treated
+  /// as an unknown value.
+  ///
+  /// The conversion performs no filesystem operations.
+  ///
+  /// Example:
+  /// ```dart
+  /// final timestamp = DarwinTimestamp(
+  ///   seconds: 0,
+  ///   nanoseconds: 500000000,
+  /// );
+  ///
+  /// final utc = timestamp.to_utc_datetime();
+  /// print(utc?.microsecondsSinceEpoch);
+  /// // 500000
+  /// ```
+  DateTime? to_utc_datetime() {
+    if (nanoseconds < 0 ||
+        nanoseconds >= _nanoseconds_per_second) {
+      return null;
+    }
+
+    // Check before multiplication to prevent signed integer
+    // overflow when handling malformed native observations.
+    if (seconds < -_maximum_date_seconds ||
+        seconds > _maximum_date_seconds) {
+      return null;
+    }
+
+    final microseconds =
+        seconds * _microseconds_per_second +
+        nanoseconds ~/ _nanoseconds_per_microsecond;
+
+    if (microseconds < -_maximum_date_microseconds ||
+        microseconds > _maximum_date_microseconds) {
+      return null;
+    }
+
+    try {
+      return DateTime.fromMicrosecondsSinceEpoch(
+        microseconds,
+        isUtc: true,
+      );
+    } on ArgumentError {
+      return null;
+    }
+  }
+}
+
 /// An immutable observation obtained from Darwin's native `lstat`.
 ///
 /// The values describe the filesystem entry itself, without following
@@ -20,6 +125,8 @@ final class DarwinStatSnapshot {
     required this.inode,
     required this.logical_size_bytes,
     required this.allocated_blocks,
+    required this.access_time,
+    required this.modification_time,
   });
 
   /// Native POSIX mode including file type and permission bits.
@@ -39,6 +146,18 @@ final class DarwinStatSnapshot {
   /// This is not necessarily the number of blocks exclusively
   /// owned by the entry or recoverable through deletion.
   final int allocated_blocks;
+
+  /// Native time of last access to the entry.
+  ///
+  /// Some filesystems may suppress or defer access-time updates.
+  /// This observation does not prove when a file was last read.
+  final DarwinTimestamp access_time;
+
+  /// Native time of last content modification.
+  ///
+  /// For symbolic links, this describes the link itself.
+  /// It does not describe the destination.
+  final DarwinTimestamp modification_time;
 }
 
 /// The 64-bit Darwin representation of a POSIX timespec.
@@ -194,7 +313,17 @@ final class DarwinLStat {
   ///
   /// print(result.inode);
   /// ```
-  DarwinStatSnapshot inspect(String path) {
+  DarwinStatSnapshot inspect(
+    String path,
+    access_time: DarwinTimestamp(
+      seconds: stat.st_atimespec.tv_sec,
+      nanoseconds: stat.st_atimespec.tv_nsec,
+    ),
+    modification_time: DarwinTimestamp(
+      seconds: stat.st_mtimespec.tv_sec,
+      nanoseconds: stat.st_mtimespec.tv_nsec,
+    ),
+  ) {
     if (path.isEmpty ||
         !path.startsWith('/') ||
         path.contains('\u0000') ||
