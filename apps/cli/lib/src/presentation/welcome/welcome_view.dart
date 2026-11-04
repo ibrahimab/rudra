@@ -21,7 +21,7 @@ final class WelcomeView {
     StringSink? error_output,
   }) {
     output.writeln();
-    output.writeln('RUDRA  |  READ ONLY');
+    output.writeln('${model.product_name.toUpperCase()}  |  READ ONLY');
     output.writeln('Read-only filesystem exploration.');
     output.writeln();
 

@@ -106,7 +106,7 @@ void main() {
 
       final text = output.toString();
 
-      expect(text, contains('Rudra'));
+      expect(text, contains('RUDRA  |  READ ONLY'));
       expect(text, contains('Read-only filesystem exploration.'));
       expect(text, contains('Target: local-macos'));
       expect(
