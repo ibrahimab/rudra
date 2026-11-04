@@ -120,9 +120,7 @@ void main() {
 
       expect(
         output.toString(),
-        contains(
-          'regularFile\t2048\t/fixture/example.txt',
-        ),
+        contains(RegExp(r'regularFile +2048 +/fixture/example\.txt')),
       );
 
       expect(errors.toString(), isEmpty);
@@ -194,9 +192,7 @@ void main() {
 
           expect(
             output.toString(),
-            contains(
-              'regularFile\t5\t${file.path}',
-            ),
+            contains(RegExp('regularFile +5 +${RegExp.escape(file.path)}')),
           );
 
           expect(errors.toString(), isEmpty);

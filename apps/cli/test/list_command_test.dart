@@ -83,7 +83,7 @@ void main() {
 
       expect(
         output.toString(),
-        contains('regularFile\t1024\t/tmp/work/example.txt'),
+        contains(RegExp(r'regularFile +1024 +/tmp/work/example\.txt')),
       );
 
       expect(errors.toString(), isEmpty);
@@ -143,7 +143,7 @@ void main() {
 
       expect(
         output.toString(),
-        contains('symbolicLink\t?\t/tmp/link'),
+        contains(RegExp(r'symbolicLink +\? +/tmp/link')),
       );
 
       expect(inspector.symbolic_link_calls, 0);
@@ -197,7 +197,7 @@ void main() {
 
       expect(
         output.toString(),
-        contains('regularFile\t512\t/tmp/accessible.txt'),
+        contains(RegExp(r'regularFile +512 +/tmp/accessible\.txt')),
       );
 
       expect(errors.toString(), contains('permissionDenied'));

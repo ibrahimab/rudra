@@ -4,9 +4,13 @@ import 'package:args/command_runner.dart';
 
 import 'commands/about_cli_module.dart';
 import 'commands/filesystem_cli_module.dart';
+
 import 'composition/product_sdk_composition.dart';
+
 import 'rudra_cli_module.dart';
 import 'rudra_exit_code.dart';
+
+import 'presentation/welcome/welcome_controller.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///
@@ -26,65 +30,65 @@ import 'rudra_exit_code.dart';
 /// final status = await cli.run(['about']);
 /// ```
 final class RudraCli {
-  /// Creates an empty CLI framework.
+  /// Creates a CLI framework.
   ///
-  /// [error_output] receives usage errors and defaults to stderr.
+  /// [error_output] receives usage diagnostics.
   ///
-  /// No commands are registered automatically.
-  RudraCli({StringSink? error_output})
-      : _runner = CommandRunner<int>(
+  /// [welcome_controller] optionally handles an invocation
+  /// without command-line arguments.
+  ///
+  /// When no controller is supplied, the existing command
+  /// runner behavior remains unchanged.
+  ///
+  /// Construction registers no commands and performs no
+  /// filesystem operations.
+  RudraCli({
+    StringSink? error_output,
+    WelcomeController? welcome_controller,
+  })  : _runner = CommandRunner<int>(
           'rudra',
           'Rudra - Interactive filesystem exploration and cleanup.',
         ),
-        _error_output = error_output ?? stderr;
+        _error_output = error_output ?? stderr,
+        _welcome_controller = welcome_controller;
 
-  /// Creates a CLI configured with the production modules.
+  /// Creates a production CLI with supported application modules.
   ///
-  /// Registers the informational module on every platform.
+  /// The composition boundary supplies an SDK configured with
+  /// the available target adapter.
   ///
-  /// When a supported filesystem target is available, also
-  /// registers the SDK-backed filesystem command module.
+  /// A supplied [target_composition] overrides local target
+  /// discovery, allowing isolated application tests.
   ///
-  /// The default target composition currently supports macOS.
-  /// Unsupported platforms retain informational commands
-  /// without pretending that native inspection is available.
+  /// The welcome controller receives the same target composition
+  /// used by the filesystem commands.
   ///
-  /// [target_composition] optionally supplies an already
-  /// configured SDK and its target-native working directory.
-  /// This allows isolated tests and alternative compositions
-  /// without constructing native platform adapters.
-  ///
-  /// [output] receives filesystem command output.
-  ///
+  /// [output] receives filesystem and welcome-screen output.
   /// [error_output] receives usage and inspection diagnostics.
   ///
-  /// Development-only modules are deliberately excluded.
+  /// Development-only commands are never registered here.
   ///
-  /// Construction and registration perform no filesystem
-  /// inspection, session mutation, or cleanup operations.
-  ///
-  /// Example:
-  /// ```dart
-  /// final cli = RudraCli.product();
-  ///
-  /// final status = await cli.run(['ls']);
-  /// ```
+  /// No filesystem inspection or cleanup occurs during
+  /// application construction.
   factory RudraCli.product({
     StringSink? output,
     StringSink? error_output,
     ProductSdkComposition? target_composition,
   }) {
+    // Resolve the target once so that every CLI component
+    // observes the same SDK instance and starting directory.
+    final composition =
+        target_composition ?? ProductSdkComposition.for_current_host();
+
     final cli = RudraCli(
       error_output: error_output,
+      welcome_controller: WelcomeController(
+        composition: composition,
+        output: output ?? stdout,
+      ),
     );
 
     cli.register_module(AboutCliModule());
-
-    // Reuse an explicitly supplied composition when available.
-    //
-    // Otherwise, discover the supported local production adapter.
-    final composition =
-        target_composition ?? ProductSdkComposition.for_current_host();
 
     if (composition != null) {
       cli.register_module(
@@ -105,6 +109,12 @@ final class RudraCli {
 
   /// Output destination for usage errors.
   final StringSink _error_output;
+
+  /// Optional controller for the root welcome screen.
+  ///
+  /// Only application compositions explicitly supplying
+  /// a controller enable welcome-screen rendering.
+  final WelcomeController? _welcome_controller;
 
   /// Identifiers of registered modules.
   final Set<String> _module_ids = <String>{};
@@ -192,23 +202,38 @@ final class RudraCli {
     _module_ids.add(module_id);
   }
 
-  /// Executes the requested CLI command.
+  /// Executes a single CLI invocation.
   ///
-  /// Module registration becomes unavailable after this call.
+  /// When no arguments are supplied and a welcome controller
+  /// is configured, renders the welcome screen and returns
+  /// [RudraExitCode.success].
   ///
-  /// Returns the command's exit status or success for help output.
-  /// Usage errors are mapped to [RudraExitCode.invalid_usage].
+  /// Explicit commands continue through the existing
+  /// CommandRunner dispatch mechanism.
   ///
-  /// Unexpected exceptions are allowed to propagate so their
-  /// diagnostic information is not silently discarded.
+  /// Usage errors return [RudraExitCode.invalid_usage].
   ///
-  /// Throws [StateError] if called more than once.
+  /// Unexpected errors propagate to the caller.
+  ///
+  /// An instance cannot be executed more than once.
+  ///
+  /// Throws [StateError] for repeated invocation.
+  ///
+  /// No filesystem modifications are performed by dispatch.
   Future<int> run(List<String> arguments) async {
     if (_has_started) {
       throw StateError('CLI instance already executed.');
     }
 
     _has_started = true;
+
+    // The welcome screen is the application's root view,
+    // not another filesystem operation or SDK service.
+    if (arguments.isEmpty && _welcome_controller != null) {
+      _welcome_controller.show();
+
+      return RudraExitCode.success.value;
+    }
 
     try {
       final result = await _runner.run(arguments);
