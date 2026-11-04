@@ -180,8 +180,7 @@ final class ListCommand extends Command<int> {
 
     for (final entry in listing.entries) {
       final entry_type = entry.kind.name;
-      final logical_size =
-          entry.metadata.logical_size_bytes?.toString() ?? '?';
+      final logical_size = entry.metadata.logical_size_bytes?.toString() ?? '?';
 
       _output.writeln(
         '${entry_type.padRight(type_width)}$column_spacing'
