@@ -1,8 +1,7 @@
 import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/src/commands/filesystem_cli_module.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
-
-import '../lib/src/commands/filesystem_cli_module.dart';
 
 /// Verifies filesystem command integration with Rudra's CLI.
 ///
