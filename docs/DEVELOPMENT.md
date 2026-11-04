@@ -964,36 +964,38 @@ For safety-critical features, successful tests must demonstrate that prohibited 
 
 If a known safety requirement is not yet enforceable, the feature must remain non-executable or explicitly deferred.
 
+
 ## 20. Current Development Baseline
 
-As of 2026-11-03, Rudra has completed:
+As of Block 4B, Rudra has implemented:
 
-- Modular CLI infrastructure.
-- Typed CLI exit codes.
-- Production/development entrypoint separation.
-- Root development commands.
-- Dart Pub Workspaces configuration.
-- Target path models.
-- Filesystem entry and metadata contracts.
-- Filesystem identity contracts.
-- Typed inspection errors.
-- Target capability models.
-- `TargetInspector` interface.
-- In-memory inspection fixtures.
-- Shared inspector conformance testing.
+- Modular CLI infrastructure and typed exit codes.
+- Separate production and development entrypoints.
+- Dart Pub Workspaces.
+- Platform-independent filesystem contracts and metadata.
+- The macOS TargetInspector.
+- Pure-Dart SDK filesystem inspection services.
+- Production SDK composition.
+- SDK-backed directory listing commands.
+- CLI welcome MVC.
+- Shared CLI directory-listing presentation.
+- Read-only welcome-screen filesystem inspection.
+- Explicit reporting of incomplete observations.
 
-The most recently reported full verification passed:
+The SDK remains independent of CLI presentation and concrete
+platform adapters.
 
-- 21 CLI tests.
-- 82 target-contract tests.
-- 103 total tests.
-- Zero analyzer issues.
+The development launcher executes from the repository root.
 
-The next implementation work must preserve this passing baseline.
+Interactive navigation, persistent sessions, cleanup planning,
+validation, authorization, and execution remain future work.
 
-The session lifecycle, wizard, persistence implementation, cleanup planning, validation, and execution components remain future implementation work.
+The current verification status must be established by running
+the repository quality gate. Historical test totals must not
+be presented as current results.
 
-Their architectural and testing requirements are established before their implementation begins.
+The next milestone is interactive filesystem exploration using
+the existing SDK-first architecture and safety requirements.
 
 ## 21. Non-Negotiable Development Rules
 

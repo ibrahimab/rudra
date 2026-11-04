@@ -287,18 +287,35 @@ repository's verification workflow.
 - docs/decisions/0002-persistent-single-session.md
 - docs/decisions/0003-dry-run-cleanup-and-revalidation.md
 
+
 ## 9. Current Implementation Status
 
-The repository already contains:
+As of Block 4B, the repository contains:
 
 - The modular CLI command framework.
-- The pure-Dart SDK package.
+- The pure-Dart Rudra SDK.
 - Platform-independent target contracts.
 - The macOS TargetInspector implementation.
-- Shared contract and native adapter tests.
+- SDK-backed directory listing through `RudraSdk.filesystem.list()`.
+- Production SDK composition with the macOS target adapter.
+- The SDK-backed `ls` command.
+- A CLI-specific welcome MVC implementation.
+- A reusable CLI directory listing presentation component.
+- Read-only directory inspection on welcome startup.
+- Explicit handling of incomplete observations and typed errors.
 
-SDK application services, interactive CLI MVC, navigation,
-session persistence, and cleanup execution are not yet implemented.
+The initial welcome workflow uses the same SDK application service
+as the standalone filesystem command.
 
-This ADR establishes their architectural boundaries without
-claiming that those components already exist.
+Neither the welcome view nor the listing command directly invokes
+TargetInspector.
+
+The development launcher continues to execute from the repository
+root. This behavior is unchanged.
+
+Interactive navigation, persistent session management, cleanup
+planning, cleanup validation, and destructive execution remain
+unimplemented.
+
+The next development block should introduce interactive exploration
+incrementally, without expanding the SDK with speculative services.

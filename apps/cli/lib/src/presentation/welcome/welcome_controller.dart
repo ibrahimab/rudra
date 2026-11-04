@@ -1,112 +1,89 @@
+import 'dart:io';
+
 import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../../composition/product_sdk_composition.dart';
+import '../../rudra_exit_code.dart';
 import 'welcome_model.dart';
 import 'welcome_view.dart';
 
-/// Coordinates Rudra's CLI welcome screen.
+/// Coordinates the CLI's initial welcome workflow.
 ///
-/// WelcomeController connects application configuration to
-/// the welcome presentation model and view.
+/// Requests filesystem observations through the public Rudra SDK
+/// and delegates terminal presentation to [WelcomeView].
 ///
-/// The controller belongs exclusively to the CLI frontend.
-/// It does not implement domain behavior or filesystem inspection.
-///
-/// Responsibilities:
-/// - Read the configured target identity.
-/// - Build a WelcomeModel.
-/// - Delegate rendering to WelcomeView.
-///
-/// It does not:
-/// - Inspect filesystem entries.
-/// - Manage persistent sessions.
-/// - Modify filesystem contents.
-/// - Execute cleanup.
-/// - Implement navigation or terminal input.
-///
-/// Example:
-/// ```dart
-/// final output = StringBuffer();
-///
-/// final controller = WelcomeController(
-///   composition: composition,
-///   output: output,
-/// );
-///
-/// controller.show();
-/// ```
+/// The controller never accesses TargetInspector directly and
+/// never executes filesystem mutations or session operations.
 final class WelcomeController {
-  /// Creates a controller for the welcome screen.
+  /// Creates a controller using the configured SDK composition.
   ///
-  /// [composition] contains the configured SDK and initial
-  /// directory, or null when no supported target is available.
+  /// A null [composition] represents an unsupported target.
   ///
-  /// [output] receives the rendered welcome screen.
+  /// [output] receives presentation output.
+  /// [error_output] receives inspection diagnostics.
   ///
-  /// [view] allows the presentation implementation to be
-  /// supplied explicitly. It defaults to the standard
-  /// stateless terminal view.
-  ///
-  /// Construction performs no filesystem inspection, terminal
-  /// output, session changes, or cleanup operations.
+  /// Construction does not inspect the filesystem.
   WelcomeController({
     required ProductSdkComposition? composition,
     required StringSink output,
+    StringSink? error_output,
     WelcomeView view = const WelcomeView(),
   })  : _composition = composition,
         _output = output,
+        _error_output = error_output ?? stderr,
         _view = view;
 
-  /// Application composition used to construct welcome state.
-  ///
-  /// Null indicates that no supported filesystem inspection
-  /// target was configured.
+  /// SDK and target configuration supplied by the CLI.
   final ProductSdkComposition? _composition;
 
-  /// Destination for terminal presentation.
+  /// Terminal presentation destination.
   final StringSink _output;
 
-  /// Stateless presentation view.
+  /// Diagnostic destination.
+  final StringSink _error_output;
+
+  /// Stateless welcome presentation.
   final WelcomeView _view;
 
-  /// Builds and renders the current welcome screen.
+  /// Inspects the starting directory and displays the welcome view.
   ///
-  /// Uses the public SDK application name and the configured
-  /// target information.
+  /// Each supported invocation performs one SDK listing request
+  /// against the configured starting directory.
   ///
-  /// If no composition is available, the view describes the
-  /// lack of a supported inspection target.
+  /// Returns success for a complete listing or an unavailable
+  /// target, and inspection_incomplete for partial observations.
   ///
-  /// Returns after rendering the welcome information.
+  /// Unexpected SDK errors propagate without being disguised
+  /// as successful or empty results.
   ///
-  /// The controller performs no filesystem inspection and
-  /// does not invoke any SDK application service.
-  ///
-  /// Rendering does not start or resume an inspection session.
-  ///
-  /// Example:
-  /// ```dart
-  /// final controller = WelcomeController(
-  ///   composition: composition,
-  ///   output: stdout,
-  /// );
-  ///
-  /// controller.show();
-  /// ```
-  void show() {
+  /// This workflow is strictly read-only.
+  Future<int> show() async {
     final composition = _composition;
 
-    // Target availability comes from application composition.
-    // The view must not attempt to detect the operating system.
+    // Only the SDK performs filesystem observations.
+    final DirectoryListing? listing = composition == null
+        ? null
+        : await composition.sdk.filesystem.list(
+            directory: composition.working_directory,
+          );
+
     final model = WelcomeModel(
       product_name: application_name,
       target_id: composition?.sdk.target_id,
       starting_directory: composition?.working_directory,
+      listing: listing,
     );
 
     _view.render(
       model,
       output: _output,
+      error_output: _error_output,
     );
+
+    if (listing != null && !listing.is_complete) {
+      return RudraExitCode.inspection_incomplete.value;
+    }
+
+    return RudraExitCode.success.value;
   }
 }

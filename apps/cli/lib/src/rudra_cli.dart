@@ -85,6 +85,7 @@ final class RudraCli {
       welcome_controller: WelcomeController(
         composition: composition,
         output: output ?? stdout,
+        error_output: error_output ?? stderr,
       ),
     );
 
@@ -230,9 +231,7 @@ final class RudraCli {
     // The welcome screen is the application's root view,
     // not another filesystem operation or SDK service.
     if (arguments.isEmpty && _welcome_controller != null) {
-      _welcome_controller.show();
-
-      return RudraExitCode.success.value;
+      return await _welcome_controller.show();
     }
 
     try {

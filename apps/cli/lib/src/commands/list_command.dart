@@ -5,6 +5,8 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../rudra_exit_code.dart';
 
+import '../presentation/filesystem/directory_listing_view.dart';
+
 /// Lists the immediate children of a filesystem directory.
 ///
 /// ListCommand is a CLI presentation adapter for Rudra's
@@ -139,79 +141,26 @@ final class ListCommand extends Command<int> {
     final directory =
         arguments.isEmpty ? _working_directory : TargetPath(arguments.single);
 
+    // Shared SDK application behavior.
     final listing = await _sdk.filesystem.list(
       directory: directory,
     );
 
-    // Column layout is a CLI presentation concern.
-    //
-    // Calculate widths from the observed entries so that
-    // every column remains aligned regardless of entry type
-    // or the number of digits in a logical size.
-    const type_header = 'TYPE';
-    const size_header = 'LOGICAL_BYTES';
-    const path_header = 'PATH';
-    const column_spacing = '  ';
+    // Shared CLI presentation, preserving the existing ls format.
+    const listing_view = DirectoryListingView();
 
-    final type_width = listing.entries.fold<int>(
-      type_header.length,
-      (width, entry) {
-        final entry_width = entry.kind.name.length;
-        return entry_width > width ? entry_width : width;
-      },
+    listing_view.render_compact(
+      listing,
+      output: _output,
     );
 
-    final size_width = listing.entries.fold<int>(
-      size_header.length,
-      (width, entry) {
-        // Unknown sizes remain unknown, never zero.
-        final size = entry.metadata.logical_size_bytes?.toString() ?? '?';
-        return size.length > width ? size.length : width;
-      },
+    listing_view.render_issues(
+      listing,
+      output: _error_output,
     );
 
-    // Text columns are left-aligned.
-    // Numeric columns are right-aligned.
-    _output.writeln(
-      '${type_header.padRight(type_width)}$column_spacing'
-      '${size_header.padLeft(size_width)}$column_spacing'
-      '$path_header',
-    );
-
-    for (final entry in listing.entries) {
-      final entry_type = entry.kind.name;
-      final logical_size = entry.metadata.logical_size_bytes?.toString() ?? '?';
-
-      _output.writeln(
-        '${entry_type.padRight(type_width)}$column_spacing'
-        '${logical_size.padLeft(size_width)}$column_spacing'
-        '${entry.path.value}',
-      );
-    }
-
-    // Preserve successful observations while making every
-    // reported inspection failure visible to the user.
-    for (final issue in listing.issues) {
-      _error_output.writeln(
-        '${issue.operation.name}: '
-        '${issue.code.name}: '
-        '${issue.path.value}: '
-        '${issue.message}',
-      );
-    }
-
-    if (!listing.is_complete) {
-      // An incomplete result is possible without an issue when
-      // collection was intentionally stopped before completion.
-      if (listing.issues.isEmpty) {
-        _error_output.writeln(
-          'Filesystem inspection did not complete.',
-        );
-      }
-
-      return RudraExitCode.inspection_incomplete.value;
-    }
-
-    return RudraExitCode.success.value;
+    return listing.is_complete
+        ? RudraExitCode.success.value
+        : RudraExitCode.inspection_incomplete.value;
   }
 }

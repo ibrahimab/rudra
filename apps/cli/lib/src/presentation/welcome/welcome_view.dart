@@ -1,71 +1,27 @@
+import '../filesystem/directory_listing_view.dart';
 import 'welcome_model.dart';
 
-/// Renders Rudra's CLI welcome screen.
+/// Renders the CLI welcome screen.
 ///
-/// WelcomeView is responsible only for terminal presentation.
-///
-/// It does not:
-/// - Construct or invoke SDK services.
-/// - Inspect the filesystem.
-/// - Manage inspection sessions.
-/// - Read user input.
-/// - Navigate between screens.
-/// - Execute cleanup operations.
-///
-/// A controller will supply the [WelcomeModel] and determine
-/// when this view should be rendered.
-///
-/// Output is written to an explicitly supplied [StringSink],
-/// making the view independently testable.
-///
-/// Example:
-/// ```dart
-/// final view = WelcomeView();
-/// final output = StringBuffer();
-///
-/// view.render(
-///   WelcomeModel(product_name: 'Rudra'),
-///   output: output,
-/// );
-///
-/// print(output.toString());
-/// ```
+/// All information is supplied through [WelcomeModel].
+/// The view performs no filesystem inspection or mutation.
 final class WelcomeView {
   /// Creates a stateless terminal welcome view.
-  ///
-  /// Construction performs no input/output operations.
   const WelcomeView();
 
-  /// Renders the welcome screen using [model].
+  /// Renders the welcome screen and any available directory data.
   ///
-  /// [output] receives the complete textual presentation.
+  /// [output] receives the presentation.
+  /// [error_output] receives typed inspection diagnostics.
   ///
-  /// The view displays filesystem inspection commands only
-  /// when [WelcomeModel.can_inspect] is true.
-  ///
-  /// A configured target does not guarantee that inspection
-  /// will succeed; errors remain the SDK's responsibility.
-  ///
-  /// No filesystem access, terminal input, or cleanup occurs.
-  ///
-  /// Example:
-  /// ```dart
-  /// const view = WelcomeView();
-  ///
-  /// view.render(
-  ///   WelcomeModel(
-  ///     product_name: 'Rudra',
-  ///     target_id: 'local-macos',
-  ///     starting_directory: TargetPath('/Users/example'),
-  ///   ),
-  ///   output: stdout,
-  /// );
-  /// ```
+  /// No input handling, session operations, or cleanup occurs.
   void render(
     WelcomeModel model, {
     required StringSink output,
+    StringSink? error_output,
   }) {
-    output.writeln(model.product_name);
+    output.writeln();
+    output.writeln('RUDRA  |  READ ONLY');
     output.writeln('Read-only filesystem exploration.');
     output.writeln();
 
@@ -75,6 +31,26 @@ final class WelcomeView {
         'Starting directory: ${model.starting_directory!.value}',
       );
       output.writeln();
+
+      final listing = model.listing;
+
+      if (listing != null) {
+        const listing_view = DirectoryListingView();
+
+        listing_view.render_detailed(
+          listing,
+          output: output,
+        );
+
+        if (error_output != null) {
+          listing_view.render_issues(
+            listing,
+            output: error_output,
+          );
+        }
+
+        output.writeln();
+      }
     } else {
       output.writeln(
         'Filesystem inspection is not available '
@@ -101,6 +77,7 @@ final class WelcomeView {
       '  rudra --help              Show available commands',
     );
     output.writeln();
+
     output.writeln(
       'Inspection never authorizes file modification or deletion.',
     );
