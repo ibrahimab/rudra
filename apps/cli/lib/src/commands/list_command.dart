@@ -143,18 +143,50 @@ final class ListCommand extends Command<int> {
       directory: directory,
     );
 
-    // Presentation formatting belongs to the CLI.
-    // The SDK returns standardized, unformatted data.
-    _output.writeln('TYPE\tLOGICAL_BYTES\tPATH');
+    // Column layout is a CLI presentation concern.
+    //
+    // Calculate widths from the observed entries so that
+    // every column remains aligned regardless of entry type
+    // or the number of digits in a logical size.
+    const type_header = 'TYPE';
+    const size_header = 'LOGICAL_BYTES';
+    const path_header = 'PATH';
+    const column_spacing = '  ';
+
+    final type_width = listing.entries.fold<int>(
+      type_header.length,
+      (width, entry) {
+        final entry_width = entry.kind.name.length;
+        return entry_width > width ? entry_width : width;
+      },
+    );
+
+    final size_width = listing.entries.fold<int>(
+      size_header.length,
+      (width, entry) {
+        // Unknown sizes remain unknown, never zero.
+        final size = entry.metadata.logical_size_bytes?.toString() ?? '?';
+        return size.length > width ? size.length : width;
+      },
+    );
+
+    // Text columns are left-aligned.
+    // Numeric columns are right-aligned.
+    _output.writeln(
+      '${type_header.padRight(type_width)}$column_spacing'
+      '${size_header.padLeft(size_width)}$column_spacing'
+      '$path_header',
+    );
 
     for (final entry in listing.entries) {
       final entry_type = entry.kind.name;
-
-      // Unknown size must never be represented as zero.
-      final logical_size = entry.metadata.logical_size_bytes?.toString() ?? '?';
+      final logical_size =
+          entry.metadata.logical_size_bytes?.toString() ?? '?';
 
       _output.writeln(
-        '$entry_type\t$logical_size\t${entry.path.value}',
+        '${entry_type.padRight(type_width)}$column_spacing'
+        '${logical_size.padLeft(size_width)}$column_spacing'
+        '${entry.path.value}',
       );
     }
 
