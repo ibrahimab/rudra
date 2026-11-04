@@ -46,6 +46,9 @@ export 'package:rudra_target_contracts/rudra_target_contracts.dart';
 export 'src/filesystem/directory_listing.dart';
 export 'src/filesystem/inspection_issue.dart';
 
+export 'src/rudra_sdk.dart';
+export 'src/filesystem/filesystem_service.dart';
+
 /// Human-readable name of the Rudra application.
 ///
 /// This constant is independent of platform and presentation.
