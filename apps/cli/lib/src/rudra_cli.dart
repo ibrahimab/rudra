@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 
 import 'commands/about_cli_module.dart';
+import 'commands/filesystem_cli_module.dart';
+import 'composition/product_sdk_composition.dart';
 import 'rudra_cli_module.dart';
 import 'rudra_exit_code.dart';
 
@@ -38,11 +40,62 @@ final class RudraCli {
 
   /// Creates a CLI configured with the production modules.
   ///
+  /// Registers the informational module on every platform.
+  ///
+  /// When a supported filesystem target is available, also
+  /// registers the SDK-backed filesystem command module.
+  ///
+  /// The default target composition currently supports macOS.
+  /// Unsupported platforms retain informational commands
+  /// without pretending that native inspection is available.
+  ///
+  /// [target_composition] optionally supplies an already
+  /// configured SDK and its target-native working directory.
+  /// This allows isolated tests and alternative compositions
+  /// without constructing native platform adapters.
+  ///
+  /// [output] receives filesystem command output.
+  ///
+  /// [error_output] receives usage and inspection diagnostics.
+  ///
   /// Development-only modules are deliberately excluded.
-  factory RudraCli.product({StringSink? error_output}) {
-    final cli = RudraCli(error_output: error_output);
+  ///
+  /// Construction and registration perform no filesystem
+  /// inspection, session mutation, or cleanup operations.
+  ///
+  /// Example:
+  /// ```dart
+  /// final cli = RudraCli.product();
+  ///
+  /// final status = await cli.run(['ls']);
+  /// ```
+  factory RudraCli.product({
+    StringSink? output,
+    StringSink? error_output,
+    ProductSdkComposition? target_composition,
+  }) {
+    final cli = RudraCli(
+      error_output: error_output,
+    );
 
     cli.register_module(AboutCliModule());
+
+    // Reuse an explicitly supplied composition when available.
+    //
+    // Otherwise, discover the supported local production adapter.
+    final composition =
+        target_composition ?? ProductSdkComposition.for_current_host();
+
+    if (composition != null) {
+      cli.register_module(
+        FilesystemCliModule(
+          sdk: composition.sdk,
+          working_directory: composition.working_directory,
+          output: output,
+          error_output: error_output,
+        ),
+      );
+    }
 
     return cli;
   }
