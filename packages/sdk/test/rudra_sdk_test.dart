@@ -1,5 +1,4 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_sdk/src/rudra_sdk.dart';
 import 'package:test/test.dart';
 
 /// Verifies RudraSdk application composition.

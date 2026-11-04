@@ -1,5 +1,4 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_sdk/src/filesystem/filesystem_service.dart';
 import 'package:test/test.dart';
 
 /// Verifies the platform-independent filesystem listing service.
