@@ -148,7 +148,8 @@ final class DirectoryListingPresenter {
 
   /// Derives the display name relative to the observed parent.
   ///
-  /// This preserves the existing DirectoryListingView behavior.
+  /// Preserves the established directory-relative naming behavior
+  /// of the detailed filesystem listing.
   ///
   /// Unexpected paths remain unchanged instead of being
   /// normalized or interpreted using host filesystem rules.

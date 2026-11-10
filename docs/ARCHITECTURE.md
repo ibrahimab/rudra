@@ -1,8 +1,8 @@
 
 # Rudra — Software Architecture
 
-**Version:** 1.1  
-**Last updated:** 2026-11-03  
+Version: 1.2
+Last updated: 2026-11-10
 **Status:** Architectural baseline
 
 ## 1. Purpose
@@ -347,6 +347,207 @@ The root `./rudra` development launcher supports:
 `./rudra check` is the full repository verification command.
 
 `./rudra build` builds and verifies the production executable.
+
+### 5.5 CLI Presentation and Rendering Architecture
+
+The CLI uses a lightweight, SDK-first presentation architecture.
+
+Application behavior, presentation data preparation, and rendering
+are separate responsibilities.
+
+The established presentation flow is:
+
+    CLI composition
+         |
+         v
+    Controller / Command
+         |
+         v
+    Public Rudra SDK
+         |
+         v
+    Feature Presenter
+         |
+         v
+    Immutable ViewModel
+         |
+         v
+    Renderer<TViewModel>
+
+Controllers and commands consume public SDK application services.
+
+Presenters convert SDK observations and application state into
+presentation-ready models.
+
+ViewModels contain no filesystem services, native adapters,
+terminal input, or renderer-specific escape sequences.
+
+Renderers consume ViewModels and produce backend-specific output.
+
+### 5.5.1 Rendering contract
+
+The shared rendering contract is:
+
+    Renderer<TViewModel>
+
+It defines the operation:
+
+    void render(TViewModel view_model);
+
+Concrete implementations receive their dependencies through
+application composition.
+
+Controllers and commands must not instantiate concrete rendering
+backends.
+
+The initial backend is a bare terminal renderer.
+
+Future backends may use Nocterm or another terminal UI framework.
+
+Rendering backend selection is a CLI composition responsibility,
+not an SDK responsibility.
+
+### 5.5.2 Feature-specific presentation
+
+Each feature may define its own presenter and immutable ViewModel.
+
+Established implementations include:
+
+    presentation/
+      filesystem/
+        directory_listing_presenter.dart
+        directory_listing_view_model.dart
+
+      welcome/
+        welcome_controller.dart
+        welcome_model.dart
+        welcome_presenter.dart
+        welcome_view_model.dart
+
+A universal ViewModel inheritance hierarchy is not required.
+
+WelcomeModel represents validated application state.
+WelcomeViewModel represents rendering-ready welcome information.
+
+These responsibilities must not be conflated.
+
+### 5.5.3 Shared rendering infrastructure
+
+Reusable CLI rendering components reside outside feature-specific
+presentation directories.
+
+    rendering/
+      renderer.dart
+      theme.dart
+      terminal_text.dart
+
+      bare/
+        ansi_text.dart
+        bare_filesystem_renderer.dart
+        bare_welcome_renderer.dart
+
+The shared infrastructure provides:
+
+- A backend-independent rendering interface.
+- Semantic terminal presentation roles.
+- Immutable theme definitions.
+- Sanitization of untrusted terminal text.
+- Approximate Unicode column measurement.
+- Backend-specific terminal styling.
+- Reusable filesystem presentation.
+
+The bare rendering backend does not belong to the SDK.
+
+The shared terminal text utility provides an approximate display
+width calculation. It does not guarantee complete Unicode
+grapheme-cluster or terminal-specific layout correctness.
+
+### 5.5.4 Renderer composition
+
+RudraCli.product() is responsible for selecting and constructing
+the concrete rendering backend for production workflows.
+
+WelcomeController receives an injected Renderer<WelcomeViewModel>.
+
+ListCommand receives an injected
+Renderer<DirectoryListingViewModel>.
+
+FilesystemCliModule passes its injected renderer to commands.
+
+The welcome renderer composes the shared filesystem renderer for
+nested directory listings.
+
+Feature controllers must not construct ANSI encoders, terminal
+templates, or concrete rendering implementations.
+
+### 5.5.5 Filesystem presentation guarantees
+
+Filesystem presentation is derived from SDK observations.
+
+The CLI must not independently inspect the filesystem to prepare
+display data.
+
+The compact `rudra ls` layout preserves:
+
+- The TYPE, LOGICAL_BYTES, PATH column order.
+- SDK observation ordering.
+- Explicit unknown metadata.
+- Target-native path spelling.
+
+The detailed layout preserves:
+
+- Directory-first presentation ordering.
+- Human-readable entry kinds and logical sizes.
+- Observed permissions and modification timestamps.
+- Explicit incomplete-inspection warnings.
+
+Typed inspection issues remain visible through diagnostic output.
+
+No renderer may interpret an incomplete observation as complete.
+
+No displayed filesystem metadata constitutes cleanup authorization.
+
+### 5.5.6 Terminal safety
+
+Untrusted filesystem names, paths, and inspection diagnostics must
+be sanitized before terminal styling is introduced.
+
+Rendering infrastructure must prevent untrusted control sequences
+from becoming executable terminal instructions.
+
+ANSI styling is disabled by default.
+
+Terminal capability detection belongs to the terminal host or
+application composition boundary.
+
+Terminal input, raw-mode management, cursor control, and restoration
+must remain separate from filesystem inspection and domain logic.
+
+Interactive terminal hosting and navigation integration remain
+under development.
+
+### 5.5.7 Testing boundaries
+
+Tests must independently verify:
+
+- Presenter transformations.
+- ViewModel invariants and immutable collections.
+- Exact established output formats.
+- Theme and ANSI encoding behavior.
+- Sanitization of untrusted terminal text.
+- Typed incomplete-inspection diagnostics.
+- Renderer dependency injection.
+- SDK request counts and read-only behavior.
+
+Integration tests must verify that application controllers and
+commands consume SDK services without duplicating filesystem
+inspection logic.
+
+Obsolete compatibility rendering adapters must not be retained
+after callers have migrated.
+
+This architecture implements the frontend separation established
+by ADR 0004 without changing SDK domain responsibilities.
 
 ## 6. TargetInspector Architecture
 

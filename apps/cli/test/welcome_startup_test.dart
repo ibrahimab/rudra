@@ -1,6 +1,7 @@
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
 import 'package:rudra_cli/src/presentation/welcome/welcome_controller.dart';
+import 'package:rudra_cli/src/rendering/bare/bare_welcome_renderer.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -39,7 +40,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final controller = WelcomeController(
+      final controller = _create_welcome_controller(
         composition: composition,
         output: output,
         error_output: errors,
@@ -73,7 +74,7 @@ void main() {
       final inspector = _StartupInspector();
       final output = StringBuffer();
 
-      final controller = WelcomeController(
+      final controller = _create_welcome_controller(
         composition: _composition(inspector),
         output: output,
         error_output: StringBuffer(),
@@ -114,7 +115,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final controller = WelcomeController(
+      final controller = _create_welcome_controller(
         composition: _composition(inspector),
         output: output,
         error_output: errors,
@@ -148,7 +149,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final status = await WelcomeController(
+      final status = await _create_welcome_controller(
         composition: _composition(inspector),
         output: output,
         error_output: errors,
@@ -167,7 +168,7 @@ void main() {
     test('preserves unsupported-target presentation', () async {
       final output = StringBuffer();
 
-      final controller = WelcomeController(
+      final controller = _create_welcome_controller(
         composition: null,
         output: output,
         error_output: StringBuffer(),
@@ -189,7 +190,7 @@ void main() {
         unexpected_failure: StateError('Unexpected failure'),
       );
 
-      final controller = WelcomeController(
+      final controller = _create_welcome_controller(
         composition: _composition(inspector),
         output: StringBuffer(),
         error_output: StringBuffer(),
@@ -198,6 +199,33 @@ void main() {
       await expectLater(
         controller.show(),
         throwsA(isA<StateError>()),
+      );
+    });
+
+    test('accepts an explicitly injected rendering backend', () async {
+      final output = StringBuffer();
+
+      final renderer = BareWelcomeRenderer(
+        output: output,
+      );
+
+      final controller = WelcomeController(
+        composition: null,
+        renderer: renderer,
+      );
+
+      final status = await controller.show();
+
+      expect(status, RudraExitCode.success.value);
+
+      expect(
+        output.toString(),
+        contains('RUDRA  |  READ ONLY'),
+      );
+
+      expect(
+        output.toString(),
+        contains('Filesystem inspection is not available'),
       );
     });
   });
@@ -280,6 +308,31 @@ void main() {
       expect(inspector.enumeration_count, 1);
     });
   });
+}
+
+/// Creates a welcome controller with explicitly composed rendering.
+///
+/// This test helper preserves readable SDK integration fixtures
+/// while exercising the production dependency-injection contract.
+///
+/// Unlike the previous controller constructor, output sinks
+/// are now owned by the concrete rendering backend.
+///
+/// The helper performs no filesystem inspection or terminal I/O.
+WelcomeController _create_welcome_controller({
+  required ProductSdkComposition? composition,
+  required StringSink output,
+  StringSink? error_output,
+}) {
+  final renderer = BareWelcomeRenderer(
+    output: output,
+    error_output: error_output,
+  );
+
+  return WelcomeController(
+    composition: composition,
+    renderer: renderer,
+  );
 }
 
 /// Creates an isolated SDK composition for welcome tests.

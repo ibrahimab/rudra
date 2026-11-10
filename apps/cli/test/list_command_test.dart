@@ -1,5 +1,9 @@
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/commands/filesystem_cli_module.dart';
+import 'package:rudra_cli/src/presentation/filesystem/directory_listing_view_model.dart';
+import 'package:rudra_cli/src/rendering/bare/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/rendering/renderer.dart';
+
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -25,6 +29,10 @@ void main() {
         FilesystemCliModule(
           sdk: sdk,
           working_directory: TargetPath('/tmp'),
+          renderer: BareFilesystemRenderer(
+            output: StringBuffer(),
+            error_output: StringBuffer(),
+          ),
         ),
       );
 
@@ -259,8 +267,10 @@ void main() {
         FilesystemCliModule(
           sdk: sdk,
           working_directory: TargetPath('/tmp'),
-          output: StringBuffer(),
-          error_output: StringBuffer(),
+          renderer: BareFilesystemRenderer(
+            output: StringBuffer(),
+            error_output: StringBuffer(),
+          ),
         ),
       );
 
@@ -339,25 +349,109 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
+
+    test('renders through an injected renderer contract', () async {
+      final directory = TargetPath('/fixture');
+
+      final entry = _create_entry(
+        '/fixture/example.txt',
+        FilesystemEntryKind.regularFile,
+        logical_size_bytes: 2048,
+      );
+
+      final inspector = _FakeTargetInspector(
+        children: [entry.path],
+        entries: {
+          entry.path.value: entry,
+        },
+      );
+
+      final renderer = _RecordingFilesystemRenderer();
+
+      final output = StringBuffer();
+      final errors = StringBuffer();
+
+      final cli = _create_cli(
+        inspector: inspector,
+        working_directory: directory,
+        output: output,
+        error_output: errors,
+        renderer: renderer,
+      );
+
+      final status = await cli.run(['ls']);
+
+      expect(status, RudraExitCode.success.value);
+
+      // Exactly one SDK listing is requested.
+      expect(
+        inspector.listed_directories,
+        [same(directory)],
+      );
+
+      expect(
+        inspector.inspected_paths,
+        [same(entry.path)],
+      );
+
+      // The controller uses the injected renderer rather
+      // than constructing a concrete terminal backend.
+      expect(renderer.models, hasLength(1));
+
+      final view_model = renderer.models.single;
+
+      expect(
+        view_model.layout,
+        DirectoryListingLayout.compact,
+      );
+
+      expect(view_model.directory_path, '/fixture');
+      expect(view_model.target_id, 'local-macos');
+      expect(view_model.is_complete, isTrue);
+      expect(view_model.rows, hasLength(1));
+
+      final row = view_model.rows.single;
+
+      expect(row.path, '/fixture/example.txt');
+      expect(row.logical_bytes, '2048');
+      expect(row.compact_type, 'regularFile');
+
+      // A recording renderer performs no terminal output.
+      expect(output.toString(), isEmpty);
+      expect(errors.toString(), isEmpty);
+    });
   });
 }
 
 /// Creates an isolated CLI with an injected filesystem module.
 ///
-/// This helper avoids platform-specific application composition.
+/// The SDK uses a deterministic TargetInspector test double.
 ///
-/// The resulting CLI uses the same command registry as production.
+/// The renderer may be supplied explicitly to verify dependency
+/// injection independently of the bare rendering backend.
+///
+/// When no renderer is supplied, a bare renderer writes to
+/// the provided in-memory output destinations.
+///
+/// This helper performs no filesystem inspection or cleanup.
 RudraCli _create_cli({
   required TargetInspector inspector,
   required TargetPath working_directory,
   required StringBuffer output,
   required StringBuffer error_output,
   String target_id = 'local-macos',
+  Renderer<DirectoryListingViewModel>? renderer,
 }) {
   final sdk = RudraSdk(
     target_id: target_id,
     inspector: inspector,
   );
+
+  final filesystem_renderer = renderer ??
+      BareFilesystemRenderer(
+        output: output,
+        error_output: error_output,
+      );
 
   final cli = RudraCli();
 
@@ -365,8 +459,7 @@ RudraCli _create_cli({
     FilesystemCliModule(
       sdk: sdk,
       working_directory: working_directory,
-      output: output,
-      error_output: error_output,
+      renderer: filesystem_renderer,
     ),
   );
 
@@ -388,6 +481,27 @@ FilesystemEntry _create_entry(
       logical_size_bytes: logical_size_bytes,
     ),
   );
+}
+
+/// Records filesystem ViewModels received through Renderer.
+///
+/// This test double proves that the filesystem command
+/// does not depend on ANSI encoding, terminal layout,
+/// or the concrete bare rendering backend.
+///
+/// The received models are retained for assertions.
+///
+/// Rendering performs no I/O and does not modify the models.
+final class _RecordingFilesystemRenderer
+    implements Renderer<DirectoryListingViewModel> {
+  /// ViewModels supplied during command execution.
+  final List<DirectoryListingViewModel> models = [];
+
+  /// Records one presentation request without producing output.
+  @override
+  void render(DirectoryListingViewModel view_model) {
+    models.add(view_model);
+  }
 }
 
 /// Provides deterministic filesystem observations for CLI tests.

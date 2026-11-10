@@ -1,125 +1,128 @@
-import 'dart:io';
-
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
+import '../presentation/filesystem/directory_listing_presenter.dart';
+import '../presentation/filesystem/directory_listing_view_model.dart';
+import '../rendering/renderer.dart';
 import '../rudra_exit_code.dart';
-
-import '../presentation/filesystem/directory_listing_view.dart';
 
 /// Lists the immediate children of a filesystem directory.
 ///
-/// ListCommand is a CLI presentation adapter for Rudra's
-/// platform-independent filesystem service.
+/// ListCommand coordinates one read-only filesystem listing.
 ///
-/// It parses command arguments, invokes the SDK, renders
-/// standardized results, and maps the outcome to a CLI exit code.
+/// Responsibilities:
+/// - Validate command arguments.
+/// - Select the requested target-native directory.
+/// - Request observations through RudraSdk.filesystem.
+/// - Prepare presentation data through DirectoryListingPresenter.
+/// - Delegate display to an injected Renderer.
+/// - Return a typed CLI exit code.
 ///
-/// It does not enumerate directories or inspect files directly.
+/// The command does not know which rendering backend is used.
 ///
-/// All filesystem observations are performed through
-/// [RudraSdk.filesystem].
-///
-/// The command is read-only and does not create sessions,
-/// mark cleanup candidates, or authorize filesystem mutations.
+/// It never:
+/// - Inspects native filesystem entries directly.
+/// - Follows symbolic links.
+/// - Generates terminal escape sequences.
+/// - Writes directly to stdout or stderr.
+/// - Creates or executes cleanup sessions.
+/// - Modifies filesystem content.
 ///
 /// Example:
 /// ```dart
 /// final command = ListCommand(
 ///   sdk: sdk,
-///   working_directory: TargetPath('/Users/example'),
+///   working_directory: TargetPath('/workspace'),
+///   renderer: renderer,
 /// );
 /// ```
 ///
 /// CLI usage:
 /// ```text
 /// rudra ls
-/// rudra ls /Users/example/Downloads
+/// rudra ls /absolute/directory
 /// ```
 final class ListCommand extends Command<int> {
-  /// Creates a filesystem listing command.
+  /// Creates a read-only filesystem listing command.
   ///
   /// [sdk] provides the configured filesystem service.
   ///
   /// [working_directory] is the default target-native directory
-  /// used when no explicit path is provided.
+  /// when no explicit directory argument is supplied.
   ///
-  /// The application composition boundary must supply a working
-  /// directory that belongs to the SDK's configured target.
+  /// [renderer] displays the resulting directory ViewModel.
+  /// The renderer also owns the destination for diagnostics.
   ///
-  /// [output] receives successful filesystem observations.
-  /// It defaults to stdout.
+  /// [presenter] prepares SDK observations for the compact
+  /// directory listing layout.
   ///
-  /// [error_output] receives inspection issues.
-  /// It defaults to stderr.
+  /// The SDK and working directory must describe the same
+  /// configured filesystem target.
   ///
-  /// Construction does not inspect or modify filesystem content.
+  /// Construction performs no filesystem inspection or
+  /// terminal I/O.
   ListCommand({
     required RudraSdk sdk,
     required TargetPath working_directory,
-    StringSink? output,
-    StringSink? error_output,
+    required Renderer<DirectoryListingViewModel> renderer,
+    DirectoryListingPresenter presenter = const DirectoryListingPresenter(),
   })  : _sdk = sdk,
         _working_directory = working_directory,
-        _output = output ?? stdout,
-        _error_output = error_output ?? stderr;
+        _renderer = renderer,
+        _presenter = presenter;
 
-  /// Command identifier used by Rudra's argument parser.
+  /// Command identifier used by the CLI argument parser.
   @override
   String get name => 'ls';
 
-  /// Description displayed in CLI help.
+  /// Description displayed by CLI help.
   @override
   String get description =>
       'List the immediate children of a filesystem directory.';
 
-  /// Command invocation displayed in CLI help.
-  ///
-  /// The directory argument is optional and must currently
-  /// be an absolute path in the target's native syntax.
+  /// Command invocation displayed by CLI help.
   @override
   String get invocation => 'rudra ls [absolute-directory]';
 
   /// SDK providing platform-independent filesystem operations.
   final RudraSdk _sdk;
 
-  /// Default directory supplied by application composition.
+  /// Default target-native directory for the command.
   final TargetPath _working_directory;
 
-  /// Destination for successfully inspected filesystem entries.
-  final StringSink _output;
+  /// Injected presentation backend.
+  final Renderer<DirectoryListingViewModel> _renderer;
 
-  /// Destination for inspection issues and incomplete results.
-  final StringSink _error_output;
+  /// Converts SDK observations into presentation-ready data.
+  final DirectoryListingPresenter _presenter;
 
-  /// Executes the filesystem listing command.
+  /// Lists and renders the requested directory.
   ///
   /// Accepts zero or one positional directory argument.
   ///
-  /// When the argument is omitted, the injected working directory
-  /// is used without attempting host-specific path resolution.
+  /// With no argument, the injected working directory is used.
   ///
-  /// Explicit relative paths are not resolved by this command.
-  /// They are passed to the SDK, whose target inspector requires
-  /// an absolute target-native path.
+  /// Explicit paths retain their original target-native
+  /// spelling and are passed to the SDK for validation.
   ///
-  /// Directory entries are rendered using their observed type,
-  /// logical size in bytes, and original target-native path.
+  /// The presenter uses DirectoryListingLayout.compact,
+  /// preserving SDK observation ordering and the established
+  /// TYPE, LOGICAL_BYTES, PATH output contract.
   ///
-  /// Unknown logical sizes are displayed as '?' rather than zero.
-  ///
-  /// Inspection issues are written to [stderr] through the
-  /// configured error output sink.
+  /// Incomplete observations retain successfully inspected
+  /// entries and their typed inspection issues.
   ///
   /// Returns:
-  /// - [RudraExitCode.success] for a complete listing.
-  /// - [RudraExitCode.inspection_incomplete] for partial results.
+  /// - RudraExitCode.success for complete observations.
+  /// - RudraExitCode.inspection_incomplete for partial results.
   ///
-  /// Invalid argument counts produce a [UsageException].
+  /// Invalid argument counts and empty explicit arguments
+  /// produce a UsageException.
   ///
-  /// Unexpected SDK failures are allowed to propagate.
+  /// Unexpected SDK, presenter, and renderer exceptions
+  /// propagate to the caller.
   ///
-  /// No filesystem mutation is performed.
+  /// No filesystem modification is performed.
   @override
   Future<int> run() async {
     final arguments = argResults?.rest ?? const <String>[];
@@ -141,23 +144,20 @@ final class ListCommand extends Command<int> {
     final directory =
         arguments.isEmpty ? _working_directory : TargetPath(arguments.single);
 
-    // Shared SDK application behavior.
+    // Only the SDK performs filesystem inspection.
     final listing = await _sdk.filesystem.list(
       directory: directory,
     );
 
-    // Shared CLI presentation, preserving the existing ls format.
-    const listing_view = DirectoryListingView();
-
-    listing_view.render_compact(
+    // Preserve the established compact listing format.
+    final view_model = _presenter.present(
       listing,
-      output: _output,
+      layout: DirectoryListingLayout.compact,
     );
 
-    listing_view.render_issues(
-      listing,
-      output: _error_output,
-    );
+    // Rendering and diagnostic output belong to the
+    // injected backend, not the command.
+    _renderer.render(view_model);
 
     return listing.is_complete
         ? RudraExitCode.success.value

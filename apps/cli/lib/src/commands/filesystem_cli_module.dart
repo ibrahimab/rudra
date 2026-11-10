@@ -1,92 +1,101 @@
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
+import '../presentation/filesystem/directory_listing_view_model.dart';
+import '../rendering/renderer.dart';
 import '../rudra_cli_module.dart';
 import 'list_command.dart';
 
-/// Registers filesystem commands for Rudra's CLI frontend.
+/// Registers SDK-backed filesystem commands for Rudra.
 ///
-/// FilesystemCliModule adapts the public Rudra SDK to the
-/// modular CLI framework.
+/// FilesystemCliModule is a CLI application-composition component.
 ///
-/// The module owns command construction and dependency injection.
+/// It receives a configured SDK, a target-native working directory,
+/// and a renderer selected by the application composition boundary.
 ///
-/// It does not implement filesystem inspection algorithms,
-/// session lifecycle rules, or cleanup authorization.
+/// Its responsibility is to construct and register filesystem
+/// commands using those dependencies.
 ///
-/// All filesystem behavior is delegated to SDK services.
+/// The module does not select concrete rendering backends.
+/// That responsibility belongs to RudraCli.product() or
+/// another application composition entry point.
 ///
-/// Additional filesystem commands may be registered here
-/// as their corresponding SDK capabilities are implemented.
+/// Invariants:
+/// - All commands share the configured SDK.
+/// - The working directory belongs to the SDK's target.
+/// - The renderer is supplied explicitly.
+/// - Registration performs no filesystem inspection.
+/// - Commands never authorize destructive operations.
 ///
-/// Module construction and command registration perform
-/// no filesystem operations.
+/// The module does not:
+/// - Access native filesystem adapters directly.
+/// - Implement filesystem inspection algorithms.
+/// - Format filesystem metadata.
+/// - Write directly to terminal output.
+/// - Manage persistent cleanup sessions.
+/// - Modify filesystem content.
 ///
 /// Example:
 /// ```dart
 /// final module = FilesystemCliModule(
 ///   sdk: sdk,
-///   working_directory: TargetPath('/Users/example'),
+///   working_directory: TargetPath('/workspace'),
+///   renderer: renderer,
 /// );
 ///
 /// cli.register_module(module);
 /// ```
 final class FilesystemCliModule implements RudraCliModule {
-  /// Creates a CLI module backed by a configured SDK.
+  /// Creates a filesystem module with explicit dependencies.
   ///
-  /// [sdk] contains the filesystem service to be consumed.
+  /// [sdk] provides platform-independent filesystem services.
   ///
-  /// [working_directory] is the default target-native path for
-  /// filesystem commands when no explicit path is supplied.
+  /// [working_directory] supplies the default target-native
+  /// directory for filesystem commands.
   ///
-  /// The caller must ensure the directory belongs to the
-  /// SDK's configured target.
+  /// [renderer] receives prepared directory listing ViewModels.
+  /// Its concrete implementation is selected by the caller.
   ///
-  /// [output] and [error_output] allow terminal output to be
-  /// redirected or captured during tests.
+  /// The caller must ensure that [working_directory] belongs
+  /// to the filesystem target configured in [sdk].
   ///
-  /// Creating this module performs no filesystem inspection.
+  /// Construction performs no filesystem or terminal I/O.
   FilesystemCliModule({
     required RudraSdk sdk,
     required TargetPath working_directory,
-    StringSink? output,
-    StringSink? error_output,
+    required Renderer<DirectoryListingViewModel> renderer,
   })  : _sdk = sdk,
         _working_directory = working_directory,
-        _output = output,
-        _error_output = error_output;
+        _renderer = renderer;
 
-  /// SDK instance shared by commands in this module.
+  /// SDK shared by commands registered through this module.
   final RudraSdk _sdk;
 
-  /// Default directory for CLI filesystem operations.
+  /// Default target-native directory for filesystem commands.
   final TargetPath _working_directory;
 
-  /// Optional output destination for command results.
-  final StringSink? _output;
+  /// Injected backend-independent filesystem renderer.
+  final Renderer<DirectoryListingViewModel> _renderer;
 
-  /// Optional destination for inspection diagnostics.
-  final StringSink? _error_output;
-
-  /// Unique identifier of this CLI module.
+  /// Stable identifier of Rudra's filesystem command module.
   @override
   String get module_id => 'rudra.product.filesystem';
 
-  /// Creates the filesystem commands contributed by this module.
+  /// Creates commands contributed by the filesystem module.
   ///
-  /// Commands receive the SDK and working directory explicitly.
+  /// Command instances receive the SDK and renderer through
+  /// explicit constructor injection.
   ///
-  /// No filesystem operations are performed during registration.
+  /// No filesystem inspection or mutation occurs here.
   ///
-  /// The returned commands are owned by the CLI framework.
+  /// The commands are owned by the registering CLI instance.
   @override
   Iterable<Command<int>> create_commands() {
     return [
       ListCommand(
         sdk: _sdk,
         working_directory: _working_directory,
-        output: _output,
-        error_output: _error_output,
+        renderer: _renderer,
       ),
     ];
   }

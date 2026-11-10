@@ -1,66 +1,102 @@
-import 'dart:io';
-
 import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../../composition/product_sdk_composition.dart';
+import '../../rendering/renderer.dart';
 import '../../rudra_exit_code.dart';
 import 'welcome_model.dart';
-import 'welcome_view.dart';
+import 'welcome_presenter.dart';
+import 'welcome_view_model.dart';
 
-/// Coordinates the CLI's initial welcome workflow.
+/// Coordinates Rudra's read-only welcome workflow.
 ///
-/// Requests filesystem observations through the public Rudra SDK
-/// and delegates terminal presentation to [WelcomeView].
+/// The controller obtains filesystem observations exclusively
+/// through the public Rudra SDK and prepares them for rendering.
 ///
-/// The controller never accesses TargetInspector directly and
-/// never executes filesystem mutations or session operations.
+/// Presentation responsibilities are separated:
+/// - [WelcomeModel] represents validated application state.
+/// - [WelcomePresenter] creates a rendering-ready view model.
+/// - [Renderer] displays that view model.
+///
+/// The controller does not know which rendering backend is used.
+///
+/// In particular, it does not construct terminal templates,
+/// encode ANSI text, or write directly to an output sink.
+///
+/// A null SDK composition represents an unsupported target.
+///
+/// The controller never:
+/// - Calls a platform-specific TargetInspector directly.
+/// - Modifies filesystem content.
+/// - Creates or executes cleanup sessions.
+/// - Authorizes deletion or other destructive operations.
+///
+/// Example:
+/// ```dart
+/// final controller = WelcomeController(
+///   composition: composition,
+///   renderer: renderer,
+/// );
+///
+/// final exit_code = await controller.show();
+/// ```
 final class WelcomeController {
-  /// Creates a controller using the configured SDK composition.
+  /// Creates a welcome controller with explicit dependencies.
   ///
-  /// A null [composition] represents an unsupported target.
+  /// [composition] contains the configured SDK and starting
+  /// directory, or null when inspection is unsupported.
   ///
-  /// [output] receives presentation output.
-  /// [error_output] receives inspection diagnostics.
+  /// [renderer] receives the prepared welcome ViewModel.
+  /// Its concrete implementation is selected by application
+  /// composition rather than by this controller.
   ///
-  /// Construction does not inspect the filesystem.
+  /// [presenter] performs the application-to-ViewModel
+  /// transformation. The stateless default can be replaced
+  /// when constructing the application or testing.
+  ///
+  /// No filesystem inspection or terminal I/O occurs
+  /// during construction.
   WelcomeController({
     required ProductSdkComposition? composition,
-    required StringSink output,
-    StringSink? error_output,
-    WelcomeView view = const WelcomeView(),
+    required Renderer<WelcomeViewModel> renderer,
+    WelcomePresenter presenter = const WelcomePresenter(),
   })  : _composition = composition,
-        _output = output,
-        _error_output = error_output ?? stderr,
-        _view = view;
+        _renderer = renderer,
+        _presenter = presenter;
 
-  /// SDK and target configuration supplied by the CLI.
+  /// Configured SDK and starting directory, if available.
   final ProductSdkComposition? _composition;
 
-  /// Terminal presentation destination.
-  final StringSink _output;
+  /// Backend-independent welcome rendering contract.
+  final Renderer<WelcomeViewModel> _renderer;
 
-  /// Diagnostic destination.
-  final StringSink _error_output;
+  /// Converts application state into presentation-ready data.
+  final WelcomePresenter _presenter;
 
-  /// Stateless welcome presentation.
-  final WelcomeView _view;
-
-  /// Inspects the starting directory and displays the welcome view.
+  /// Inspects the starting directory and renders the result.
   ///
-  /// Each supported invocation performs one SDK listing request
-  /// against the configured starting directory.
+  /// When a target is configured, exactly one SDK directory
+  /// listing operation is requested.
   ///
-  /// Returns success for a complete listing or an unavailable
-  /// target, and inspection_incomplete for partial observations.
+  /// When no target is available, the welcome screen is
+  /// rendered without attempting filesystem inspection.
   ///
-  /// Unexpected SDK errors propagate without being disguised
-  /// as successful or empty results.
+  /// Incomplete observations retain their successfully
+  /// inspected entries and typed diagnostic information.
   ///
-  /// This workflow is strictly read-only.
+  /// Returns:
+  /// - [RudraExitCode.success] when inspection completes.
+  /// - [RudraExitCode.success] for an unsupported target.
+  /// - [RudraExitCode.inspection_incomplete] when the SDK
+  ///   reports an incomplete directory listing.
+  ///
+  /// Unexpected SDK and renderer exceptions propagate
+  /// without being converted into successful results.
+  ///
+  /// This operation is strictly read-only.
   Future<int> show() async {
     final composition = _composition;
 
-    // Only the SDK performs filesystem observations.
+    // Only the public SDK may obtain filesystem observations.
     final DirectoryListing? listing = composition == null
         ? null
         : await composition.sdk.filesystem.list(
@@ -74,16 +110,15 @@ final class WelcomeController {
       listing: listing,
     );
 
-    _view.render(
-      model,
-      output: _output,
-      error_output: _error_output,
-    );
+    // The presenter owns the application-to-presentation
+    // transformation. The controller does not format output.
+    final view_model = _presenter.present(model);
 
-    if (listing != null && !listing.is_complete) {
-      return RudraExitCode.inspection_incomplete.value;
-    }
+    // Rendering is backend-independent and injected.
+    _renderer.render(view_model);
 
-    return RudraExitCode.success.value;
+    return listing != null && !listing.is_complete
+        ? RudraExitCode.inspection_incomplete.value
+        : RudraExitCode.success.value;
   }
 }

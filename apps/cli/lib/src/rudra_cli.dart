@@ -12,6 +12,9 @@ import 'rudra_exit_code.dart';
 
 import 'presentation/welcome/welcome_controller.dart';
 
+import 'rendering/bare/bare_welcome_renderer.dart';
+import 'rendering/bare/bare_filesystem_renderer.dart';
+
 /// Coordinates command registration and execution for Rudra.
 ///
 /// The CLI framework owns a single command runner and manages the
@@ -54,50 +57,76 @@ final class RudraCli {
 
   /// Creates a production CLI with supported application modules.
   ///
-  /// The composition boundary supplies an SDK configured with
-  /// the available target adapter.
+  /// The application composition boundary owns:
+  /// - SDK and target-adapter selection.
+  /// - Starting-directory configuration.
+  /// - Concrete renderer construction.
+  /// - Controller and command-module assembly.
   ///
   /// A supplied [target_composition] overrides local target
-  /// discovery, allowing isolated application tests.
+  /// discovery, supporting isolated application tests.
   ///
-  /// The welcome controller receives the same target composition
-  /// used by the filesystem commands.
+  /// [output] receives application and filesystem presentation.
+  /// [error_output] receives inspection and usage diagnostics.
   ///
-  /// [output] receives filesystem and welcome-screen output.
-  /// [error_output] receives usage and inspection diagnostics.
+  /// The default rendering backend is bare terminal output
+  /// without ANSI styling.
   ///
-  /// Development-only commands are never registered here.
+  /// Development-only commands are not registered.
   ///
-  /// No filesystem inspection or cleanup occurs during
-  /// application construction.
+  /// Construction does not inspect or modify the filesystem.
   factory RudraCli.product({
     StringSink? output,
     StringSink? error_output,
     ProductSdkComposition? target_composition,
   }) {
-    // Resolve the target once so that every CLI component
-    // observes the same SDK instance and starting directory.
+    // Resolve the target once so that all application
+    // components share the same SDK and starting directory.
     final composition =
         target_composition ?? ProductSdkComposition.for_current_host();
 
+    // Resolve output destinations once at the application
+    // boundary rather than inside individual controllers.
+    final presentation_output = output ?? stdout;
+    final diagnostic_output = error_output ?? stderr;
+
+    // Select the concrete welcome rendering backend here.
+    // Feature controllers depend only on Renderer<TViewModel>.
+    final welcome_renderer = BareWelcomeRenderer(
+      output: presentation_output,
+      error_output: diagnostic_output,
+    );
+
+    final welcome_controller = WelcomeController(
+      composition: composition,
+      renderer: welcome_renderer,
+    );
+
     final cli = RudraCli(
-      error_output: error_output,
-      welcome_controller: WelcomeController(
-        composition: composition,
-        output: output ?? stdout,
-        error_output: error_output ?? stderr,
-      ),
+      error_output: diagnostic_output,
+      welcome_controller: welcome_controller,
     );
 
     cli.register_module(AboutCliModule());
 
     if (composition != null) {
+      // The application composition boundary selects the
+      // concrete filesystem rendering implementation.
+      //
+      // Controllers and commands depend only on the
+      // Renderer<DirectoryListingViewModel> contract.
+      //
+      // Compact output intentionally remains plain text.
+      final filesystem_renderer = BareFilesystemRenderer(
+        output: presentation_output,
+        error_output: diagnostic_output,
+      );
+
       cli.register_module(
         FilesystemCliModule(
           sdk: composition.sdk,
           working_directory: composition.working_directory,
-          output: output,
-          error_output: error_output,
+          renderer: filesystem_renderer,
         ),
       );
     }
