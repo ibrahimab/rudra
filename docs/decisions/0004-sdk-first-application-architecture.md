@@ -313,9 +313,36 @@ TargetInspector.
 The development launcher continues to execute from the repository
 root. This behavior is unchanged.
 
-Interactive navigation, persistent session management, cleanup
-planning, cleanup validation, and destructive execution remain
-unimplemented.
 
-The next development block should introduce interactive exploration
-incrementally, without expanding the SDK with speculative services.
+### Block 4C.1 — CLI Navigation State
+
+The CLI now contains an in-memory explorer model and controller.
+
+The explorer controller:
+
+- Requests directory listings through the public Rudra SDK.
+- Tracks selected entries and navigation history.
+- Allows read-only navigation into observed directories.
+- Does not follow entries classified as symbolic links.
+- Re-inspects previously visited directories when navigating back.
+- Preserves incomplete SDK observations and their typed issues.
+- Does not commit navigation state when an SDK request fails.
+- Rejects concurrent inspection requests.
+- Supports ending the in-memory explorer interaction.
+
+The explorer model owns presentation state only.
+
+The SDK continues to own filesystem inspection behavior.
+The CLI does not implement native filesystem access or cleanup
+authorization policy.
+
+This increment is not yet connected to terminal keyboard input.
+The production welcome screen continues to work as implemented
+in Block 4B.
+
+Interactive rendering, terminal input handling, persistent session
+management, cleanup planning, validation, and execution remain
+future work.
+
+Block 4C.2 will introduce the interactive terminal view and input
+handling needed to consume this controller.
