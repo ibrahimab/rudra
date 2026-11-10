@@ -1,85 +1,86 @@
-import '../filesystem/directory_listing_view.dart';
+import '../../rendering/bare/bare_welcome_renderer.dart';
 import 'welcome_model.dart';
+import 'welcome_presenter.dart';
 
-/// Renders the CLI welcome screen.
+/// Compatibility adapter for Rudra's welcome presentation.
 ///
-/// All information is supplied through [WelcomeModel].
-/// The view performs no filesystem inspection or mutation.
+/// This class preserves the existing interface used by
+/// [WelcomeController] while delegating presentation work
+/// to the shared rendering architecture.
+///
+/// The rendering pipeline is:
+///
+/// 1. The controller supplies an existing [WelcomeModel].
+/// 2. [WelcomePresenter] creates a presentation-ready model.
+/// 3. [BareWelcomeRenderer] renders the resulting view model.
+///
+/// The bare renderer also delegates nested filesystem tables
+/// to the shared filesystem rendering implementation.
+///
+/// This class contains no:
+/// - Filesystem inspection or SDK calls.
+/// - Terminal layout or metadata formatting.
+/// - ANSI escape-sequence generation.
+/// - Terminal input or navigation logic.
+/// - Persistent session or cleanup functionality.
+///
+/// The adapter is intentionally lightweight and can be
+/// removed when application composition directly injects
+/// presenters and rendering backends.
+///
+/// Example:
+/// ```dart
+/// const view = WelcomeView();
+///
+/// view.render(
+///   model,
+///   output: stdout,
+///   error_output: stderr,
+/// );
+/// ```
 final class WelcomeView {
-  /// Creates a stateless terminal welcome view.
+  /// Creates a stateless welcome presentation adapter.
+  ///
+  /// Construction performs no filesystem or terminal I/O.
+  ///
+  /// The existing const constructor is preserved for
+  /// compatibility with WelcomeController.
   const WelcomeView();
 
-  /// Renders the welcome screen and any available directory data.
+  /// Renders the welcome screen using the shared bare backend.
   ///
-  /// [output] receives the presentation.
-  /// [error_output] receives typed inspection diagnostics.
+  /// [model] contains application identity and any SDK
+  /// directory observation already obtained by the caller.
   ///
-  /// No input handling, session operations, or cleanup occurs.
+  /// [output] receives the welcome presentation.
+  ///
+  /// [error_output], when provided, receives typed filesystem
+  /// inspection diagnostics.
+  ///
+  /// The presenter performs no additional SDK operations.
+  /// The renderer receives presentation-ready data only.
+  ///
+  /// Plain, unstyled output is the default, preserving the
+  /// existing welcome-screen behavior.
+  ///
+  /// Rendering errors propagate to the caller.
+  /// Terminal lifecycle cleanup is not owned by this adapter.
+  ///
+  /// No filesystem modifications or session operations occur.
   void render(
     WelcomeModel model, {
     required StringSink output,
     StringSink? error_output,
   }) {
-    output.writeln();
-    output.writeln('${model.product_name.toUpperCase()}  |  READ ONLY');
-    output.writeln('Read-only filesystem exploration.');
-    output.writeln();
+    const presenter = WelcomePresenter();
 
-    if (model.can_inspect) {
-      output.writeln('Target: ${model.target_id}');
-      output.writeln(
-        'Starting directory: ${model.starting_directory!.value}',
-      );
-      output.writeln();
+    final view_model = presenter.present(model);
 
-      final listing = model.listing;
-
-      if (listing != null) {
-        const listing_view = DirectoryListingView();
-
-        listing_view.render_detailed(
-          listing,
-          output: output,
-        );
-
-        if (error_output != null) {
-          listing_view.render_issues(
-            listing,
-            output: error_output,
-          );
-        }
-
-        output.writeln();
-      }
-    } else {
-      output.writeln(
-        'Filesystem inspection is not available '
-        'for the current target.',
-      );
-      output.writeln();
-    }
-
-    output.writeln('Available commands:');
-
-    if (model.can_inspect) {
-      output.writeln(
-        '  rudra ls                  Inspect the starting directory',
-      );
-      output.writeln(
-        '  rudra ls /absolute/path   Inspect another directory',
-      );
-    }
-
-    output.writeln(
-      '  rudra about               Show application information',
+    final renderer = BareWelcomeRenderer(
+      output: output,
+      error_output: error_output,
     );
-    output.writeln(
-      '  rudra --help              Show available commands',
-    );
-    output.writeln();
 
-    output.writeln(
-      'Inspection never authorizes file modification or deletion.',
-    );
+    renderer.render(view_model);
   }
 }
