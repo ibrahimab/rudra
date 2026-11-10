@@ -207,6 +207,62 @@ The CLI must not contain filesystem inspection algorithms, persistence rules, or
 
 The CLI is a consumer of the SDK.
 
+The CLI uses a feature-first organization, governed by ADR 0005.
+
+The production source structure is:
+
+    apps/cli/lib/
+      rudra_cli.dart
+      src/
+        rudra_cli.dart
+        composition/
+          product_sdk_composition.dart
+        core/
+          cli/
+            rudra_cli_module.dart
+            rudra_exit_code.dart
+          rendering/
+            renderer.dart
+            theme.dart
+            terminal_text.dart
+            bare/
+              ansi_text.dart
+        features/
+          about/
+            about_cli_module.dart
+            about_command.dart
+          filesystem/
+            filesystem_cli_module.dart
+            list_command.dart
+            directory_listing_presenter.dart
+            directory_listing_view_model.dart
+            bare_filesystem_renderer.dart
+          welcome/
+            welcome_controller.dart
+            welcome_model.dart
+            welcome_presenter.dart
+            welcome_view_model.dart
+            bare_welcome_renderer.dart
+          explorer/
+            explorer_controller.dart
+            explorer_model.dart
+            terminal_input.dart
+
+Feature directories own their presentation and command implementations.
+
+Core contains only reusable CLI infrastructure.
+
+Application composition creates concrete dependencies and supplies
+them to features.
+
+The test directory mirrors feature ownership where useful.
+Integration and development tooling tests remain separately organized.
+
+The production entry point and public CLI API remain unchanged.
+
+Development-only implementation files remain under `apps/cli/tool/`
+and are excluded from the production entry point's dependency graph.
+
 ### 4.2 rudra_sdk
 
 Responsible for:
@@ -409,76 +465,117 @@ not an SDK responsibility.
 
 ### 5.5.2 Feature-specific presentation
 
-Each feature may define its own presenter and immutable ViewModel.
+CLI features own their presentation implementations.
 
-Established implementations include:
+A feature may contain commands, controllers, models, presenters,
+view models, input handlers, and renderers depending on its needs.
 
-    presentation/
-      filesystem/
-        directory_listing_presenter.dart
-        directory_listing_view_model.dart
+A universal MVC hierarchy is not required.
 
-      welcome/
-        welcome_controller.dart
-        welcome_model.dart
-        welcome_presenter.dart
-        welcome_view_model.dart
+The existing welcome workflow uses:
 
-A universal ViewModel inheritance hierarchy is not required.
+- `WelcomeController` to coordinate the SDK-backed workflow.
+- `WelcomeModel` to represent validated presentation state.
+- `WelcomePresenter` to prepare rendering data.
+- `WelcomeViewModel` to hold immutable display-ready information.
+- `BareWelcomeRenderer` to render the welcome screen.
 
-WelcomeModel represents validated application state.
-WelcomeViewModel represents rendering-ready welcome information.
+These components reside together under `features/welcome/`.
 
-These responsibilities must not be conflated.
+The filesystem feature owns the reusable directory-listing presenter,
+view model, and concrete renderer under `features/filesystem/`.
 
-### 5.5.3 Shared rendering infrastructure
+Welcome consumes filesystem listing presentation without duplicating
+its formatting or inspection behavior.
 
-Reusable CLI rendering components reside outside feature-specific
-presentation directories.
+The dependency is one-way: welcome may import filesystem presentation,
+but filesystem must not import welcome.
 
-    rendering/
+Explorer owns transient navigation state and input decoding under
+`features/explorer/`.
+
+Explorer uses the public SDK for filesystem observations.
+
+Explorer input decoding is not yet a general-purpose CLI terminal
+input abstraction.
+
+The CLI does not implement native filesystem inspection or shared
+cleanup authorization rules.
+
+### 5.5.3 Shared CLI infrastructure
+
+Reusable CLI infrastructure resides under `core/`.
+
+The CLI framework contracts and exit statuses reside in:
+
+    core/cli/
+      rudra_cli_module.dart
+      rudra_exit_code.dart
+
+Shared rendering infrastructure resides in:
+
+    core/rendering/
       renderer.dart
       theme.dart
       terminal_text.dart
-
       bare/
         ansi_text.dart
-        bare_filesystem_renderer.dart
-        bare_welcome_renderer.dart
 
-The shared infrastructure provides:
+The rendering infrastructure provides:
 
-- A backend-independent rendering interface.
-- Semantic terminal presentation roles.
-- Immutable theme definitions.
+- A backend-independent `Renderer<TViewModel>` contract.
+- Semantic styling roles and immutable theme definitions.
 - Sanitization of untrusted terminal text.
 - Approximate Unicode column measurement.
-- Backend-specific terminal styling.
-- Reusable filesystem presentation.
+- Low-level ANSI encoding for the bare backend.
 
-The bare rendering backend does not belong to the SDK.
+Concrete feature renderers do not belong in core.
 
-The shared terminal text utility provides an approximate display
-width calculation. It does not guarantee complete Unicode
-grapheme-cluster or terminal-specific layout correctness.
+Core must not import feature implementations, application
+composition, or concrete filesystem target adapters.
 
-### 5.5.4 Renderer composition
+The shared terminal text utility approximates display widths.
+It does not guarantee complete Unicode grapheme-cluster or
+terminal-specific layout correctness.
 
-RudraCli.product() is responsible for selecting and constructing
-the concrete rendering backend for production workflows.
+### 5.5.4 Renderer and SDK composition
 
-WelcomeController receives an injected Renderer<WelcomeViewModel>.
+`RudraCli.product()` selects the supported SDK composition,
+constructs concrete renderers, and assembles production features.
 
-ListCommand receives an injected
-Renderer<DirectoryListingViewModel>.
+Feature controllers and commands receive their dependencies
+through explicit constructor injection.
 
-FilesystemCliModule passes its injected renderer to commands.
+`WelcomeController` receives a nullable SDK and starting directory,
+plus an injected `Renderer<WelcomeViewModel>`.
 
-The welcome renderer composes the shared filesystem renderer for
-nested directory listings.
+The SDK and starting directory must either both be present
+or both be absent.
 
-Feature controllers must not construct ANSI encoders, terminal
-templates, or concrete rendering implementations.
+Their absence represents an unsupported inspection target.
+
+`ListCommand` receives the configured SDK, starting directory,
+and `Renderer<DirectoryListingViewModel>`.
+
+`FilesystemCliModule` supplies its injected dependencies to
+its registered commands.
+
+`BareWelcomeRenderer` reuses `BareFilesystemRenderer` when displaying
+an embedded directory listing.
+
+This is a feature-to-feature presentation dependency, not SDK
+composition or domain behavior.
+
+Controllers and commands must not construct concrete rendering
+backends or terminal styling encoders.
+
+Features must not import `ProductSdkComposition`.
+
+Application composition owns concrete adapter selection and
+injection. Features use the public SDK and CLI rendering contracts.
+
+No CLI presentation component may bypass SDK safety policy or
+independently authorize destructive filesystem operations.
 
 ### 5.5.5 Filesystem presentation guarantees
 
@@ -520,11 +617,16 @@ ANSI styling is disabled by default.
 Terminal capability detection belongs to the terminal host or
 application composition boundary.
 
-Terminal input, raw-mode management, cursor control, and restoration
-must remain separate from filesystem inspection and domain logic.
+The Explorer feature currently includes a tested decoder that maps
+supported terminal key sequences to navigation actions.
 
-Interactive terminal hosting and navigation integration remain
-under development.
+The decoder does not read directly from stdin or manage terminal modes.
+
+Interactive terminal hosting, lifecycle restoration, and integration
+of keyboard input with Explorer navigation remain unfinished.
+
+Block 4C.2 Explorer integration is paused during the feature-first
+restructuring.
 
 ### 5.5.7 Testing boundaries
 
@@ -1195,51 +1297,86 @@ An architectural rule must not be silently changed through a local implementatio
 
 ## 16. Current Implementation Status
 
-As of 2026-11-03:
+**Status date:** 2026-11-11
 
-### Completed
+### 16.1 Implemented foundations
+
+The repository contains:
 
 - Dart Pub Workspaces monorepo.
-- Modular `RudraCli` framework.
-- `RudraCliModule` registration.
-- Production and development CLI separation.
-- Typed `RudraExitCode`.
-- Repository formatting and analysis commands.
-- Selective workspace testing.
-- Full `./rudra check` verification.
-- Production build workflow.
-- Platform-independent filesystem value models.
-- `TargetInspector` interface.
-- Typed target inspection errors.
-- Target capability contracts.
-- In-memory inspector fixtures.
-- Shared conformance tests.
+- Modular CLI framework and explicit module registration.
+- Separate production and development CLI entry points.
+- Typed application exit codes.
+- Workspace formatting, analysis, testing, and build commands.
+- Platform-independent target contracts.
+- macOS native target inspection adapter.
+- Pure-Dart Rudra SDK.
+- SDK-backed directory listing.
+- Production SDK and target-adapter composition.
+- Read-only `rudra ls` command.
+- SDK-backed welcome workflow.
+- Feature-specific presenters and immutable view models.
+- Generic CLI rendering contract.
+- Bare terminal renderers.
+- Terminal text sanitization and semantic styling.
+- In-memory Explorer navigation controller and model.
+- Explorer keyboard-input decoder.
 
-### Verified baseline
+### 16.2 CLI architecture
 
-The most recent reported verification included:
+ADR 0004 establishes the SDK-first application architecture.
 
-- 43 Dart files formatted with zero changes.
-- Zero static analysis issues.
-- 21 CLI tests passed.
-- 82 target-contract tests passed.
-- 103 tests passed in total.
-- Four packages skipped because no tests were present.
+ADR 0005 establishes the feature-first CLI organization.
 
-### Not yet implemented
+CLI features reside under `apps/cli/lib/src/features/`.
 
-- Production macOS filesystem inspection adapter.
-- SDK directory traversal and aggregation.
-- Persistent inspection session domain model.
-- SQLite session and audit repositories.
-- Interactive terminal wizard.
+Reusable CLI infrastructure resides under `apps/cli/lib/src/core/`.
+
+Production SDK and target-adapter assembly remains in the
+application composition layer.
+
+The welcome, filesystem, and Explorer implementations consume
+public SDK services rather than accessing concrete target adapters
+directly.
+
+Explorer navigation is transient and read-only. It does not create
+or modify a persistent Rudra session.
+
+### 16.3 Verification
+
+The feature-first restructuring requires verification against
+the full repository test and analysis workflow.
+
+The final migration baseline is established only after:
+
+    ./rudra format
+    ./rudra check --package rudra_cli
+    ./rudra check
+    git diff --check
+
+Previous test results do not establish that the restructuring
+passes verification.
+
+### 16.4 Not yet implemented
+
+The following remain future development work:
+
+- Complete interactive Explorer terminal hosting.
+- Integration of keyboard input with Explorer navigation.
+- Persistent inspection session lifecycle implementation.
+- SQLite-backed session and audit repositories.
+- Persistent dry-run cleanup candidate selection.
 - Cleanup-plan orchestration.
-- Cleanup validation and execution safeguards.
+- Pre-execution revalidation and authorization.
 - Destructive cleanup execution.
-- Windows and Linux adapters.
-- Flutter graphical applications.
+- Windows and Linux target adapters.
+- Flutter desktop and mobile frontends.
 
-The architectural requirements in this document are not claims that these features already exist.
+The current read-only inspection implementation does not provide
+cleanup execution capabilities.
+
+The safety requirements in this document remain binding on all
+future implementations.
 
 ## 17. Deferred Decisions
 

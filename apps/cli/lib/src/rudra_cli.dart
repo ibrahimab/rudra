@@ -2,18 +2,18 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 
-import 'commands/about_cli_module.dart';
-import 'commands/filesystem_cli_module.dart';
-
 import 'composition/product_sdk_composition.dart';
 
-import 'rudra_cli_module.dart';
-import 'rudra_exit_code.dart';
+import 'core/cli/rudra_cli_module.dart';
+import 'core/cli/rudra_exit_code.dart';
 
-import 'presentation/welcome/welcome_controller.dart';
+import 'features/about/about_cli_module.dart';
 
-import 'rendering/bare/bare_welcome_renderer.dart';
-import 'rendering/bare/bare_filesystem_renderer.dart';
+import 'features/filesystem/bare_filesystem_renderer.dart';
+import 'features/filesystem/filesystem_cli_module.dart';
+
+import 'features/welcome/bare_welcome_renderer.dart';
+import 'features/welcome/welcome_controller.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///
@@ -98,7 +98,8 @@ final class RudraCli {
     );
 
     final welcome_controller = WelcomeController(
-      composition: composition,
+      sdk: composition?.sdk,
+      starting_directory: composition?.working_directory,
       renderer: welcome_renderer,
     );
 

@@ -313,7 +313,6 @@ TargetInspector.
 The development launcher continues to execute from the repository
 root. This behavior is unchanged.
 
-
 ### Block 4C.1 — CLI Navigation State
 
 The CLI now contains an in-memory explorer model and controller.
@@ -336,13 +335,32 @@ The SDK continues to own filesystem inspection behavior.
 The CLI does not implement native filesystem access or cleanup
 authorization policy.
 
-This increment is not yet connected to terminal keyboard input.
-The production welcome screen continues to work as implemented
-in Block 4B.
 
-Interactive rendering, terminal input handling, persistent session
-management, cleanup planning, validation, and execution remain
-future work.
+This navigation increment is not yet connected to a complete
+interactive terminal host.
 
-Block 4C.2 will introduce the interactive terminal view and input
-handling needed to consume this controller.
+The production welcome screen continues to work through the
+SDK-backed workflow established in Block 4B.
+
+### Block 4C.2 — Paused Interactive Explorer Integration
+
+The CLI contains a tested terminal input decoder supporting
+Explorer navigation actions.
+
+The decoder transforms input byte streams into feature-specific
+navigation intentions.
+
+It does not own stdin, terminal modes, filesystem operations,
+or cleanup authorization.
+
+The interactive terminal host and integration with Explorer
+navigation remain unfinished.
+
+Block 4C.2 is paused while the CLI adopts the feature-first
+organization established by ADR 0005.
+
+The restructuring does not change the SDK-first architecture,
+Explorer safety guarantees, or persistent session requirements.
+
+Persistent session management, cleanup planning, validation,
+and execution remain future work.

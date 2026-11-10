@@ -13,5 +13,5 @@
 library;
 
 export 'src/rudra_cli.dart' show RudraCli;
-export 'src/rudra_cli_module.dart' show RudraCliModule;
-export 'src/rudra_exit_code.dart' show RudraExitCode;
+export 'src/core/cli/rudra_cli_module.dart' show RudraCliModule;
+export 'src/core/cli/rudra_exit_code.dart' show RudraExitCode;
