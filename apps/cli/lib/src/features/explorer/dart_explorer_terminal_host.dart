@@ -22,6 +22,34 @@ final class ExplorerTerminalInterrupted implements Exception {
   String toString() => 'Explorer terminal interrupted: ${signal.name}';
 }
 
+/// Identifies one failed terminal restoration operation.
+///
+/// The original error and stack trace are retained so
+/// diagnostics do not hide the operating-system failure.
+///
+/// This type reports a failure; it does not suppress it.
+final class ExplorerTerminalRestorationFailure implements Exception {
+  /// Creates a failure associated with a restoration operation.
+  const ExplorerTerminalRestorationFailure({
+    required this.operation,
+    required this.cause,
+    required this.stack_trace,
+  });
+
+  /// Name of the restoration operation that failed.
+  final String operation;
+
+  /// Original exception or error from the terminal device.
+  final Object cause;
+
+  /// Original stack trace of the failure.
+  final StackTrace stack_trace;
+
+  /// Produces an actionable restoration diagnostic.
+  @override
+  String toString() => '$operation: $cause';
+}
+
 /// Reports one or more failures during terminal restoration.
 ///
 /// [interaction_error] retains the original interaction or
@@ -60,12 +88,19 @@ final class ExplorerTerminalLifecycleException implements Exception {
   /// Errors encountered while restoring terminal state.
   final List<Object> restoration_errors;
 
-  /// Produces a lifecycle failure summary.
+  /// Produces a complete lifecycle failure diagnostic.
+  ///
+  /// Each restoration failure includes the operation name
+  /// and its original error message.
   @override
   String toString() {
+    final details =
+        restoration_errors.map((error) => error.toString()).join('; ');
+
     return 'Explorer terminal lifecycle failure: '
         '${restoration_errors.length} restoration error(s); '
-        'interaction error: $interaction_error';
+        'interaction error: $interaction_error; '
+        'restoration details: $details';
   }
 }
 
@@ -334,24 +369,98 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
       interaction_stack = stack;
     }
 
-    // Cancel subscriptions before restoring terminal modes.
-    // Each operation is isolated so one cleanup failure cannot
-    // prevent the remaining restoration steps.
+    // Stop forwarding process signals before restoration.
+    //
+    // The interaction has finished, so new interruptions
+    // should not be delivered into its closing input stream.
     await _attempt_restoration(
+      'cancel signal subscription',
       () async {
         await signal_subscription?.cancel();
       },
       restoration_errors,
     );
 
+    // Stop delivering further keyboard events while restoring
+    // terminal state, but keep the underlying stdin subscription
+    // alive until the original terminal modes are restored.
+    //
+    // Canceling a native stdin subscription too early may make
+    // its terminal descriptor unavailable to the mode setters.
     await _attempt_restoration(
+      'pause terminal input',
+      () {
+        input_subscription?.pause();
+      },
+      restoration_errors,
+    );
+
+    // Restore visual terminal state independently.
+    //
+    // An output failure must not prevent input-mode restoration.
+    if (cursor_hide_attempted) {
+      await _attempt_restoration(
+        'reset terminal text attributes',
+        () => _device.output.write(_reset_attributes),
+        restoration_errors,
+      );
+
+      await _attempt_restoration(
+        'restore cursor visibility',
+        () => _device.output.write(_show_cursor),
+        restoration_errors,
+      );
+    }
+
+    if (alternate_screen_attempted) {
+      await _attempt_restoration(
+        'leave alternate screen',
+        () => _device.output.write(_leave_alternate_screen),
+        restoration_errors,
+      );
+    }
+
+    // Restore terminal modes BEFORE canceling the native
+    // stdin subscription.
+    //
+    // Both setters retain their original configured values.
+    // Each is attempted even if the other fails.
+    //
+    // Restore line mode before echo mode to respect terminal
+    // implementations where echo depends on canonical input.
+    if (line_change_attempted) {
+      await _attempt_restoration(
+        'restore terminal line mode',
+        () => _device.line_mode = original_line_mode!,
+        restoration_errors,
+      );
+    }
+
+    if (echo_change_attempted) {
+      await _attempt_restoration(
+        'restore terminal echo mode',
+        () => _device.echo_mode = original_echo_mode!,
+        restoration_errors,
+      );
+    }
+
+    // Native input can now be released without risking the
+    // availability of the terminal-mode restoration operations.
+    await _attempt_restoration(
+      'cancel terminal input subscription',
       () async {
         await input_subscription?.cancel();
       },
       restoration_errors,
     );
 
+    // Close the forwarded input stream after native input
+    // has been released.
+    //
+    // Do not await StreamController.close() here: a setup
+    // failure may occur before any consumer subscribes.
     await _attempt_restoration(
+      'close forwarded input stream',
       () {
         final controller = input_controller;
 
@@ -363,39 +472,6 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
     );
 
     _active_input = null;
-
-    if (cursor_hide_attempted) {
-      await _attempt_restoration(
-        () => _device.output.write(_reset_attributes),
-        restoration_errors,
-      );
-
-      await _attempt_restoration(
-        () => _device.output.write(_show_cursor),
-        restoration_errors,
-      );
-    }
-
-    if (alternate_screen_attempted) {
-      await _attempt_restoration(
-        () => _device.output.write(_leave_alternate_screen),
-        restoration_errors,
-      );
-    }
-
-    if (line_change_attempted) {
-      await _attempt_restoration(
-        () => _device.line_mode = original_line_mode!,
-        restoration_errors,
-      );
-    }
-
-    if (echo_change_attempted) {
-      await _attempt_restoration(
-        () => _device.echo_mode = original_echo_mode!,
-        restoration_errors,
-      );
-    }
 
     // Release ownership only after all cleanup attempts.
     _is_active = false;
@@ -417,20 +493,30 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
     return result;
   }
 
-  /// Attempts one restoration operation without hiding failures.
+  /// Attempts one named restoration operation.
   ///
-  /// The operation may be synchronous or asynchronous.
+  /// All failures are captured with their original causes
+  /// and stack traces.
   ///
-  /// Every caught error is retained so the caller can finish
-  /// all remaining restoration attempts before reporting them.
+  /// Recording a failure does not stop subsequent restoration
+  /// operations from being attempted.
+  ///
+  /// The caller reports all collected errors after cleanup.
   static Future<void> _attempt_restoration(
+    String operation_name,
     FutureOr<void> Function() operation,
     List<Object> errors,
   ) async {
     try {
       await operation();
-    } catch (error) {
-      errors.add(error);
+    } catch (error, stack) {
+      errors.add(
+        ExplorerTerminalRestorationFailure(
+          operation: operation_name,
+          cause: error,
+          stack_trace: stack,
+        ),
+      );
     }
   }
 }

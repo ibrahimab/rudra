@@ -330,6 +330,85 @@ void main() {
 
       expect(() => host.input_bytes, throwsStateError);
     });
+
+    test('restores terminal modes before canceling stdin', () async {
+      final device = _FakeTerminalDevice();
+
+      // This simulation reproduces the descriptor-lifetime
+      // condition suspected in the real macOS failure.
+      device.require_active_input_for_mode_restore = true;
+
+      final host = DartExplorerTerminalHost(device: device);
+
+      final result = await host.run_interactive(() async {
+        expect(device.echo_mode, isFalse);
+        expect(device.line_mode, isFalse);
+        expect(device.input_canceled, isFalse);
+
+        return 0;
+      });
+
+      expect(result, 0);
+
+      expect(device.line_mode, isTrue);
+      expect(device.echo_mode, isTrue);
+
+      expect(device.input_canceled, isTrue);
+      expect(device.signals_canceled, isTrue);
+
+      expect(device.written, contains('\x1B[?25h'));
+      expect(device.written, contains('\x1B[?1049l'));
+    });
+
+    test('reports the exact failed restoration operation', () async {
+      final device = _FakeTerminalDevice();
+      device.fail_echo_restore = true;
+
+      final host = DartExplorerTerminalHost(device: device);
+
+      try {
+        await host.run_interactive(() async => 0);
+
+        fail('Expected terminal restoration to fail.');
+      } on ExplorerTerminalLifecycleException catch (error) {
+        expect(error.interaction_error, isNull);
+        expect(error.restoration_errors, hasLength(1));
+
+        final failure = error.restoration_errors.single;
+
+        expect(
+          failure,
+          isA<ExplorerTerminalRestorationFailure>(),
+        );
+
+        final restoration_failure =
+            failure as ExplorerTerminalRestorationFailure;
+
+        expect(
+          restoration_failure.operation,
+          'restore terminal echo mode',
+        );
+
+        expect(restoration_failure.cause, isA<StateError>());
+
+        expect(
+          error.toString(),
+          contains('restore terminal echo mode'),
+        );
+
+        expect(
+          error.toString(),
+          contains('Injected echo restoration failure.'),
+        );
+      }
+
+      // A failed echo restoration must not prevent other
+      // terminal cleanup operations.
+      expect(device.line_mode, isTrue);
+      expect(device.input_canceled, isTrue);
+      expect(device.signals_canceled, isTrue);
+      expect(device.written, contains('\x1B[?1049l'));
+    });
   });
 }
 
@@ -372,6 +451,10 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
   bool _echo_mode;
   bool _line_mode;
 
+  /// Simulates a device that rejects mode changes after
+  /// its native input subscription has been canceled.
+  bool require_active_input_for_mode_restore = false;
+
   bool fail_line_disable = false;
   bool fail_echo_restore = false;
   bool fail_cursor_hide = false;
@@ -392,9 +475,20 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
   @override
   bool get echo_mode => _echo_mode;
 
+  /// Changes simulated echo mode.
+  ///
+  /// Can reproduce a native terminal descriptor that becomes
+  /// unavailable after its input subscription is canceled.
   @override
   set echo_mode(bool value) {
     mode_changes.add('echo:$value');
+
+    if (require_active_input_for_mode_restore && input_canceled) {
+      throw StateError(
+        'Cannot restore echo mode after stdin cancellation.',
+      );
+    }
+
     _echo_mode = value;
 
     if (value && fail_echo_restore) {
@@ -405,9 +499,20 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
   @override
   bool get line_mode => _line_mode;
 
+  /// Changes simulated canonical input mode.
+  ///
+  /// Rejects changes after input cancellation when the
+  /// descriptor-lifetime failure simulation is enabled.
   @override
   set line_mode(bool value) {
     mode_changes.add('line:$value');
+
+    if (require_active_input_for_mode_restore && input_canceled) {
+      throw StateError(
+        'Cannot restore line mode after stdin cancellation.',
+      );
+    }
+
     _line_mode = value;
 
     if (!value && fail_line_disable) {
