@@ -148,6 +148,17 @@ void main() {
         emitsError(isA<StateError>()),
       );
     });
+
+    test('treats raw Ctrl+C as a controlled quit request', () async {
+      final keys = await _decode([
+        <int>[0x03],
+      ]);
+
+      expect(
+        keys,
+        orderedEquals([ExplorerKey.quit]),
+      );
+    });
   });
 }
 

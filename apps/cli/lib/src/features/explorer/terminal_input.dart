@@ -35,6 +35,8 @@ enum ExplorerKey {
 /// - Enter (CR or LF).
 /// - Backspace (BS or DEL).
 /// - Lowercase and uppercase Q.
+/// - Lowercase and uppercase Q.
+/// - Ctrl+C (ETX, 0x03), treated as a quit request.
 ///
 /// Unsupported keys and escape sequences produce no event.
 ///
@@ -193,12 +195,18 @@ final class TerminalInput {
   /// Both common Backspace encodings are supported because
   /// terminal configurations vary.
   ///
+  /// Ctrl+C received as a raw ETX byte is treated as a
+  /// controlled quit request.
+  ///
+  /// OS-generated SIGINT is handled separately by the
+  /// terminal host and forwarded as a typed input error.
+  ///
   /// Unrecognized bytes are ignored.
   static ExplorerKey? _ordinary_key(int byte) {
     return switch (byte) {
       0x0A || 0x0D => ExplorerKey.open,
       0x08 || 0x7F => ExplorerKey.back,
-      0x71 || 0x51 => ExplorerKey.quit,
+      0x03 || 0x71 || 0x51 => ExplorerKey.quit,
       _ => null,
     };
   }
