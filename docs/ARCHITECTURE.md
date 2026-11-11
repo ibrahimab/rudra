@@ -1,8 +1,8 @@
 
 # Rudra — Software Architecture
 
-Version: 1.2
-Last updated: 2026-11-10
+Version: 1.3
+Last updated: 2026-11-11
 **Status:** Architectural baseline
 
 ## 1. Purpose
@@ -244,8 +244,17 @@ The production source structure is:
             welcome_view_model.dart
             bare_welcome_renderer.dart
           explorer/
+            bare_explorer_renderer.dart
+            dart_explorer_terminal_host.dart
+            explore_command.dart
+            explorer_cli_module.dart
             explorer_controller.dart
             explorer_model.dart
+            explorer_presenter.dart
+            explorer_runner.dart
+            explorer_terminal_device.dart
+            explorer_terminal_host.dart
+            explorer_view_model.dart
             terminal_input.dart
 
 Feature directories own their presentation and command implementations.
@@ -560,6 +569,38 @@ and `Renderer<DirectoryListingViewModel>`.
 `FilesystemCliModule` supplies its injected dependencies to
 its registered commands.
 
+The Explorer feature is registered through `ExplorerCliModule`.
+
+`ExploreCommand` accepts an optional target-native directory and
+delegates execution to an injected `ExplorerRunner` factory.
+
+`RudraCli.product()` constructs Explorer dependencies lazily,
+only when the explore command executes.
+
+The Explorer composition contains:
+
+- `ExplorerController` configured with the public Rudra SDK.
+- `ExplorerRunner` coordinating read-only navigation.
+- `ExplorerPresenter` preparing immutable view models.
+- `BareExplorerRenderer` using the ANSI terminal backend.
+- `DartExplorerTerminalHost` managing terminal lifecycle.
+
+The terminal host supplies the interactive output destination.
+The renderer uses that same destination for screen updates.
+
+Explorer-specific terminal infrastructure remains inside
+features/explorer/ under ADR 0005.
+
+The production command is:
+
+    `rudra explore [absolute-directory]`
+
+The existing no-argument welcome workflow and rudra ls output
+contracts remain unchanged.
+
+The development launcher continues to use the repository root
+as its working directory.
+
 `BareWelcomeRenderer` reuses `BareFilesystemRenderer` when displaying
 an embedded directory listing.
 
@@ -617,16 +658,60 @@ ANSI styling is disabled by default.
 Terminal capability detection belongs to the terminal host or
 application composition boundary.
 
-The Explorer feature currently includes a tested decoder that maps
-supported terminal key sequences to navigation actions.
+The initial interactive Explorer is implemented using the
+bare terminal rendering backend.
 
-The decoder does not read directly from stdin or manage terminal modes.
+TerminalInput converts raw input bytes into navigation actions.
 
-Interactive terminal hosting, lifecycle restoration, and integration
-of keyboard input with Explorer navigation remain unfinished.
+ExplorerRunner coordinates keyboard events, SDK-backed navigation,
+presentation updates, viewport scrolling, and interaction exit
+status.
 
-Block 4C.2 Explorer integration is paused during the feature-first
-restructuring.
+DartExplorerTerminalHost manages terminal input modes, alternate
+screen activation, cursor visibility, input subscriptions, signal
+forwarding, and terminal restoration.
+
+The host uses an injectable ExplorerTerminalDevice contract,
+allowing lifecycle and failure behavior to be tested without
+modifying the actual terminal.
+
+Interactive Explorer requires compatible terminal input and output.
+Unsupported or initially undersized terminals are rejected before
+filesystem inspection begins.
+
+The initial directory is inspected before interactive terminal
+modes are enabled.
+
+Later navigation inspections are executed sequentially within
+the guarded terminal lifecycle.
+
+All filesystem observations pass through RudraSdk.filesystem.
+
+The initial Explorer supports:
+
+- Up and down navigation.
+- Opening observed directories.
+- Returning through navigation history.
+- Read-only inspection of immediate directory children.
+- Selection and viewport scrolling.
+- Incomplete-inspection warnings.
+- Controlled quitting and input EOF.
+- Restoration after catchable interaction failures.
+
+Symbolic links and regular files are not opened by Explorer.
+
+Filesystem observations are not atomic snapshots. The interactive
+Explorer does not establish cleanup authorization or secure
+session-root containment.
+
+The SDK does not yet support cancellation of an in-progress
+directory listing.
+
+Persistent inspection sessions, cleanup planning, final review,
+revalidation, and execution remain future implementation work.
+
+This completes the first interactive Explorer integration for
+Block 4C.2 without changing the SDK-first architecture.
 
 ### 5.5.7 Testing boundaries
 

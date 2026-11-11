@@ -7,6 +7,9 @@ import 'composition/product_sdk_composition.dart';
 import 'core/cli/rudra_cli_module.dart';
 import 'core/cli/rudra_exit_code.dart';
 
+import 'core/rendering/bare/ansi_text.dart';
+import 'core/rendering/theme.dart';
+
 import 'features/about/about_cli_module.dart';
 
 import 'features/filesystem/bare_filesystem_renderer.dart';
@@ -14,6 +17,13 @@ import 'features/filesystem/filesystem_cli_module.dart';
 
 import 'features/welcome/bare_welcome_renderer.dart';
 import 'features/welcome/welcome_controller.dart';
+
+import 'features/explorer/bare_explorer_renderer.dart';
+import 'features/explorer/dart_explorer_terminal_host.dart';
+import 'features/explorer/explorer_cli_module.dart';
+import 'features/explorer/explorer_controller.dart';
+import 'features/explorer/explorer_runner.dart';
+import 'features/explorer/explorer_terminal_host.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///
@@ -61,24 +71,40 @@ final class RudraCli {
   /// - SDK and target-adapter selection.
   /// - Starting-directory configuration.
   /// - Concrete renderer construction.
-  /// - Controller and command-module assembly.
+  /// - Terminal host construction.
+  /// - Controller, runner, and command-module assembly.
   ///
   /// A supplied [target_composition] overrides local target
-  /// discovery, supporting isolated application tests.
+  /// discovery for isolated application testing.
   ///
-  /// [output] receives application and filesystem presentation.
-  /// [error_output] receives inspection and usage diagnostics.
+  /// [output] receives existing welcome and filesystem command
+  /// presentation. Their established output formats are unchanged.
   ///
-  /// The default rendering backend is bare terminal output
-  /// without ANSI styling.
+  /// Interactive Explorer presentation uses the output destination
+  /// supplied by its terminal host. This avoids writing terminal
+  /// control sequences into an unrelated output sink.
+  ///
+  /// [error_output] receives CLI usage and inspection diagnostics.
+  ///
+  /// [explorer_terminal_host_factory] optionally overrides the
+  /// production terminal host constructor.
+  ///
+  /// The factory is invoked only when the Explorer command runs.
+  /// This supports deterministic interaction tests without
+  /// modifying real terminal modes.
+  ///
+  /// Existing non-interactive output remains unstyled.
+  /// Interactive Explorer uses the ANSI theme and bare renderer.
   ///
   /// Development-only commands are not registered.
   ///
-  /// Construction does not inspect or modify the filesystem.
+  /// Construction does not inspect or modify filesystem content
+  /// or change terminal settings.
   factory RudraCli.product({
     StringSink? output,
     StringSink? error_output,
     ProductSdkComposition? target_composition,
+    ExplorerTerminalHost Function()? explorer_terminal_host_factory,
   }) {
     // Resolve the target once so that all application
     // components share the same SDK and starting directory.
@@ -128,6 +154,48 @@ final class RudraCli {
           sdk: composition.sdk,
           working_directory: composition.working_directory,
           renderer: filesystem_renderer,
+        ),
+      );
+
+      // Construct terminal hosts lazily so ordinary commands
+      // never probe or modify interactive terminal state.
+      final create_terminal_host =
+          explorer_terminal_host_factory ?? () => DartExplorerTerminalHost();
+
+      cli.register_module(
+        ExplorerCliModule(
+          working_directory: composition.working_directory,
+          create_runner: (directory) {
+            final terminal = create_terminal_host();
+
+            // All filesystem observations pass through the
+            // configured public Rudra SDK.
+            //
+            // The original requested directory is preserved.
+            final controller = ExplorerController(
+              sdk: composition.sdk,
+              starting_directory: directory,
+            );
+
+            // Interactive presentation uses the same output
+            // destination owned by the terminal host.
+            //
+            // The renderer never changes terminal modes.
+            final renderer = BareExplorerRenderer(
+              output: terminal.output,
+              terminal_columns: () => terminal.terminal_columns,
+              theme: TerminalTheme.ansi,
+              ansi_text: const AnsiText(enabled: true),
+              redraw_screen: true,
+            );
+
+            return ExplorerRunner(
+              controller: controller,
+              terminal: terminal,
+              renderer: renderer,
+              error_output: diagnostic_output,
+            );
+          },
         ),
       );
     }
