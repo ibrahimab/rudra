@@ -1,38 +1,37 @@
-import 'workflow_event.dart';
-import 'workflow_state.dart';
+import 'events/workflow_event.dart';
+import 'states/workflow_initial_state.dart';
+import 'states/workflow_state.dart';
+import 'workflow_flow.dart';
 import 'workflow_transition_exception.dart';
 
-/// Deterministic state machine for Rudra workflow lifecycles.
+/// Deterministic, registry-driven workflow state machine.
 ///
-/// The machine applies committed workflow events to immutable
-/// states according to explicit transition rules.
+/// The machine applies events using the immutable transition
+/// definitions provided by [flow].
 ///
-/// Supported transitions:
+/// No concrete workflow event, state, or transition implementation
+/// is hardcoded into this engine.
 ///
-/// - Initial + WorkflowStartEvent = StartRequested.
-/// - StartRequested + WorkflowStartedEvent = Active.
-/// - Active + WorkflowEndedEvent = Ended.
+/// For every transition, the engine:
+/// - Verifies that the event type is registered.
+/// - Rejects transitions from terminal states.
+/// - Finds the exact state/event transition.
+/// - Executes its domain guard and state factory.
+/// - Verifies the declared resulting state type.
+/// - Verifies that the state version advanced exactly once.
 ///
-/// Every other transition is rejected.
+/// Every successful transition produces a new immutable state.
 ///
-/// Successful transitions produce new immutable state objects.
-/// Previous states and events are never modified.
+/// A rejected transition preserves the original state.
 ///
-/// The original filesystem target and inspection root must match
-/// between the start request and successful start outcome.
+/// Replay applies the same transition rules in event order.
 ///
-/// An ended workflow cannot transition further.
-///
-/// The machine does not:
-/// - Persist or publish events.
-/// - Invoke event handlers.
-/// - Inspect or modify filesystem content.
-/// - Authenticate operating-system users.
-/// - Enforce global workflow uniqueness.
-/// - Authorize cleanup or execution.
-///
-/// Those responsibilities belong to separate SDK components
-/// and trusted infrastructure.
+/// The engine does not:
+/// - Persist, publish, or submit events.
+/// - Invoke asynchronous event handlers.
+/// - Perform filesystem operations.
+/// - Authenticate users or authorize cleanup.
+/// - Enforce cross-process concurrency or uniqueness.
 ///
 /// Example:
 /// ```dart
@@ -51,154 +50,165 @@ import 'workflow_transition_exception.dart';
 ///       root: TargetPath('/tmp'),
 ///     ),
 ///   ),
-///   WorkflowEndedEvent(workflow_id: 'workflow-1'),
 /// ]);
 ///
-/// print(state is WorkflowEndedState);
+/// print(state is WorkflowActiveState);
 /// // true
-///
-/// print(state.version);
-/// // 3
 /// ```
 final class WorkflowStateMachine {
-  /// Creates a stateless workflow state machine.
+  /// Creates a state machine with an immutable transition graph.
   ///
-  /// Construction performs no I/O and creates no workflow.
-  const WorkflowStateMachine();
+  /// If [flow] is omitted, the standard Rudra lifecycle is used.
+  ///
+  /// Construction performs no I/O or workflow processing.
+  WorkflowStateMachine({
+    WorkflowFlow? flow,
+  }) : flow = flow ?? WorkflowFlow.standard();
 
-  /// Applies a single event to the supplied workflow state.
+  /// Transition graph used by this state-machine instance.
   ///
-  /// The transition must be permitted for the current state.
+  /// The flow cannot be modified after construction.
+  final WorkflowFlow flow;
+
+  /// Applies one event according to the registered transition.
   ///
-  /// On success, returns a new immutable [WorkflowState] with
-  /// its version increased by exactly one.
+  /// Matching uses exact Dart state and event types.
   ///
-  /// On failure, throws [WorkflowTransitionException] and leaves
-  /// the supplied state unchanged.
+  /// A valid transition produces a result with version equal
+  /// to [state.version] plus one.
   ///
-  /// A start request creates a pending request state only.
-  /// A workflow becomes active exclusively when a matching
-  /// [WorkflowStartedEvent] is applied.
+  /// Unknown event implementations are rejected with
+  /// [WorkflowTransitionErrorCode.unsupported_event].
   ///
-  /// Original path bindings are compared using their exact
-  /// target-native string values. This verifies preservation
-  /// of the requested binding; it does not establish that two
-  /// paths identify the same filesystem object.
+  /// Registered events without a valid transition from the
+  /// current state are rejected with
+  /// [WorkflowTransitionErrorCode.invalid_transition].
   ///
-  /// Unknown event implementations are rejected explicitly.
+  /// Terminal states reject all transitions.
   ///
-  /// This method assumes the caller is applying an appropriate
-  /// committed event. It does not authenticate the event source,
-  /// verify persistence, or enforce concurrency constraints.
+  /// The declared destination type and result version are
+  /// checked independently of the transition factory.
+  ///
+  /// Throws [WorkflowTransitionException] for domain rejections
+  /// and malformed transition results.
+  ///
+  /// The supplied state and event are never modified.
   ///
   /// Example:
   /// ```dart
-  /// final requested = machine.transition(
+  /// final next_state = machine.transition(
   ///   state: const WorkflowInitialState(),
   ///   event: WorkflowStartEvent(
   ///     target_id: 'local-macos',
   ///     root: TargetPath('/tmp'),
   ///   ),
   /// );
-  ///
-  /// print(requested is WorkflowStartRequestedState);
-  /// // true
   /// ```
   WorkflowState transition({
     required WorkflowState state,
     required WorkflowEvent event,
   }) {
-    // Only explicitly implemented event types can modify state.
-    //
-    // The semantic event type string is not used for dispatch:
-    // an unrelated event implementation must never gain domain
-    // authority merely by supplying a recognized string.
-    if (event is! WorkflowStartEvent &&
-        event is! WorkflowStartedEvent &&
-        event is! WorkflowEndedEvent) {
+    final event_type = event.runtimeType;
+
+    // Unknown event implementations cannot authorize transitions
+    // by supplying a recognized string identifier.
+    if (!flow.supports_event_type(event_type)) {
       throw WorkflowTransitionException(
         code: WorkflowTransitionErrorCode.unsupported_event,
         state: state,
         event: event,
-        message: 'The workflow event type is not supported.',
+        message: 'The workflow event type is not registered.',
       );
     }
 
-    return switch ((state, event)) {
-      // Recording a request does not establish an active workflow.
-      (
-        WorkflowInitialState(),
-        WorkflowStartEvent requested,
-      ) =>
-        WorkflowStartRequestedState(
-          target_id: requested.target_id,
-          root: requested.root,
-          version: state.version + 1,
-        ),
+    // Terminality is an invariant of the state itself.
+    // A malformed custom flow cannot reopen a terminal state.
+    if (state.is_terminal) {
+      throw WorkflowTransitionException(
+        code: WorkflowTransitionErrorCode.invalid_transition,
+        state: state,
+        event: event,
+        message: 'A terminal workflow cannot transition.',
+      );
+    }
 
-      // A successful start must preserve the original request.
-      (
-        WorkflowStartRequestedState requested,
-        WorkflowStartedEvent started,
-      ) =>
-        _apply_started(
-          requested,
-          started,
-        ),
+    final rule = flow.transition_for(
+      state_type: state.runtimeType,
+      event_type: event_type,
+    );
 
-      // Only an established active workflow may end.
-      (
-        WorkflowActiveState active,
-        WorkflowEndedEvent ended,
-      ) =>
-        _apply_ended(
-          active,
-          ended,
-        ),
+    if (rule == null) {
+      throw WorkflowTransitionException(
+        code: WorkflowTransitionErrorCode.invalid_transition,
+        state: state,
+        event: event,
+        message: 'No transition is registered for this '
+            'state and event combination.',
+      );
+    }
 
-      // All unspecified transitions fail closed.
-      _ => throw WorkflowTransitionException(
-          code: WorkflowTransitionErrorCode.invalid_transition,
-          state: state,
-          event: event,
-          message: 'The event is not valid in the current state.',
-        ),
-    };
+    final next_version = state.version + 1;
+
+    // The rule performs domain validation and constructs the
+    // proposed immutable next state.
+    final next_state = rule.execute(
+      state,
+      event,
+      next_version,
+    );
+
+    // Even a incorrectly implemented rule must not produce a
+    // different lifecycle state than its registration declares.
+    if (next_state.runtimeType != rule.destination_state_type) {
+      throw WorkflowTransitionException(
+        code: WorkflowTransitionErrorCode.result_state_mismatch,
+        state: state,
+        event: event,
+        message: 'The transition produced a state type '
+            'different from its declared destination.',
+      );
+    }
+
+    // Reject malformed projections rather than allowing state
+    // versions to skip or repeat committed event positions.
+    if (next_state.version != next_version) {
+      throw WorkflowTransitionException(
+        code: WorkflowTransitionErrorCode.result_version_mismatch,
+        state: state,
+        event: event,
+        message: 'The transition did not advance the '
+            'workflow version by exactly one.',
+      );
+    }
+
+    return next_state;
   }
 
-  /// Reconstructs workflow state from ordered committed events.
+  /// Reconstructs state from ordered committed workflow events.
   ///
-  /// Replay always begins from [WorkflowInitialState].
+  /// Replay begins at [WorkflowInitialState] with version zero.
   ///
-  /// Events are consumed in the supplied iteration order.
-  /// A valid empty history produces the initial state.
+  /// Each event is passed to [transition], so reconstruction
+  /// and individual event application share identical rules.
   ///
-  /// Each event is passed through [transition], guaranteeing
-  /// that live transitions and replay use identical domain rules.
+  /// Empty history produces the initial state.
   ///
-  /// No snapshots or projections are trusted or required.
+  /// If any transition fails, replay throws
+  /// [WorkflowReplayException] with the zero-based event index
+  /// and the underlying typed transition error.
   ///
-  /// If any event is invalid, throws [WorkflowReplayException]
-  /// containing the zero-based failing event index and the
-  /// underlying typed transition failure.
+  /// A contradictory history must not be silently repaired or
+  /// returned as partially reconstructed authoritative state.
   ///
-  /// Replay never skips invalid events or returns partially
-  /// reconstructed authoritative state.
+  /// Replay performs no filesystem or persistence operations.
   ///
-  /// Replay performs no filesystem operations, persistence
-  /// writes, notifications, or event dispatch.
-  ///
-  /// The supplied history must already be in authoritative
-  /// committed order. Verifying durable event identities,
-  /// sequence numbers, and expected versions belongs to the
-  /// future event-store implementation.
+  /// Event-store sequence validation, idempotency, snapshots,
+  /// and guarded durable appends are implemented separately.
   ///
   /// Example:
   /// ```dart
   /// final state = machine.replay(events);
-  ///
   /// print(state.version);
-  /// // Number of successfully replayed committed events.
   /// ```
   WorkflowState replay(Iterable<WorkflowEvent> events) {
     WorkflowState state = const WorkflowInitialState();
@@ -212,8 +222,6 @@ final class WorkflowStateMachine {
           event: event,
         );
       } on WorkflowTransitionException catch (error) {
-        // A contradictory committed history is an integrity
-        // failure, not a normal workflow transition rejection.
         throw WorkflowReplayException(
           event_index: event_index,
           cause: error,
@@ -224,76 +232,5 @@ final class WorkflowStateMachine {
     }
 
     return state;
-  }
-
-  /// Applies an established workflow-start outcome.
-  ///
-  /// The successful outcome must preserve the originally
-  /// requested target identifier and exact root path.
-  ///
-  /// The workflow identifier and trusted owner are introduced
-  /// by the successful outcome's established identity.
-  ///
-  /// An incompatible outcome is rejected without modifying
-  /// the pending request.
-  WorkflowState _apply_started(
-    WorkflowStartRequestedState requested,
-    WorkflowStartedEvent started,
-  ) {
-    final identity = started.identity;
-
-    if (identity.target_id != requested.target_id) {
-      throw WorkflowTransitionException(
-        code: WorkflowTransitionErrorCode.target_mismatch,
-        state: requested,
-        event: started,
-        message: 'The workflow target differs from the '
-            'original start request.',
-      );
-    }
-
-    if (identity.root.value != requested.root.value) {
-      throw WorkflowTransitionException(
-        code: WorkflowTransitionErrorCode.root_mismatch,
-        state: requested,
-        event: started,
-        message: 'The workflow root differs from the '
-            'original start request.',
-      );
-    }
-
-    return WorkflowActiveState(
-      identity: identity,
-      version: requested.version + 1,
-    );
-  }
-
-  /// Applies a confirmed workflow-ended outcome.
-  ///
-  /// The event must identify the currently active workflow.
-  ///
-  /// A successful result retains the exact established
-  /// [WorkflowIdentity] instance through the terminal state.
-  ///
-  /// This operation validates lifecycle consistency only.
-  /// Whether ending is safe must have been established before
-  /// the corresponding outcome event was committed.
-  WorkflowState _apply_ended(
-    WorkflowActiveState active,
-    WorkflowEndedEvent ended,
-  ) {
-    if (ended.workflow_id != active.identity.workflow_id) {
-      throw WorkflowTransitionException(
-        code: WorkflowTransitionErrorCode.workflow_id_mismatch,
-        state: active,
-        event: ended,
-        message: 'The end event refers to a different workflow.',
-      );
-    }
-
-    return WorkflowEndedState(
-      identity: active.identity,
-      version: active.version + 1,
-    );
   }
 }

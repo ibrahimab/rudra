@@ -1,5 +1,5 @@
-import 'workflow_event.dart';
-import 'workflow_state.dart';
+import 'events/workflow_event.dart';
+import 'states/workflow_state.dart';
 
 /// Identifies why a workflow transition was rejected.
 ///
@@ -23,6 +23,12 @@ enum WorkflowTransitionErrorCode {
 
   /// An event refers to a different established workflow.
   workflow_id_mismatch,
+
+  /// A transition constructed a different state type than declared.
+  result_state_mismatch,
+
+  /// A transition produced an incorrect next state version.
+  result_version_mismatch,
 }
 
 /// Indicates that a workflow event cannot produce a valid transition.

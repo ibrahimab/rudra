@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 /// No filesystem adapter, event store, database, or application
 /// frontend is constructed.
 void main() {
-  const machine = WorkflowStateMachine();
+  final machine = WorkflowStateMachine();
 
   group('WorkflowStateMachine.transition', () {
     test('transitions from initial to start requested', () {

@@ -46,15 +46,29 @@ export 'package:rudra_target_contracts/rudra_target_contracts.dart';
 export 'src/filesystem/directory_listing.dart';
 export 'src/filesystem/inspection_issue.dart';
 
-/// Workflow domain events, identity, and immutable lifecycle states.
+/// Immutable workflow identity and original bindings.
 export 'src/workflow/workflow_identity.dart';
-export 'src/workflow/workflow_event.dart';
-export 'src/workflow/workflow_state.dart';
 
-/// Deterministic workflow transitions and event-history replay.
+/// Typed workflow domain events.
+export 'src/workflow/events/workflow_event.dart';
+export 'src/workflow/events/workflow_start_event.dart';
+export 'src/workflow/events/workflow_started_event.dart';
+export 'src/workflow/events/workflow_ended_event.dart';
+
+/// Immutable workflow lifecycle states.
+export 'src/workflow/states/workflow_state.dart';
+export 'src/workflow/states/workflow_initial_state.dart';
+export 'src/workflow/states/workflow_start_requested_state.dart';
+export 'src/workflow/states/workflow_active_state.dart';
+export 'src/workflow/states/workflow_ended_state.dart';
+
+/// Typed transition definitions and immutable workflow graph.
+export 'src/workflow/transitions/workflow_transition.dart';
+export 'src/workflow/workflow_flow.dart';
+export 'src/workflow/workflow_flow_exception.dart';
+
+/// Deterministic execution and typed transition failures.
 export 'src/workflow/workflow_state_machine.dart';
-
-/// Typed workflow transition and replay failures.
 export 'src/workflow/workflow_transition_exception.dart';
 
 export 'src/rudra_sdk.dart';
