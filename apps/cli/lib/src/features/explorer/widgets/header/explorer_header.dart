@@ -1,7 +1,7 @@
-import '../../../core/rendering/theme.dart';
-import '../../../core/rendering/widgets/terminal_widget.dart';
+import '../../../../core/rendering/theme.dart';
+import '../../../../core/rendering/widgets/terminal_widget.dart';
 
-import '../explorer_view_model.dart';
+import 'explorer_header_view_model.dart';
 
 /// Displays the Explorer screen title and current directory.
 ///
@@ -20,11 +20,11 @@ import '../explorer_view_model.dart';
 /// // 2
 /// ```
 final class ExplorerHeader implements TerminalWidget {
-  /// Creates a header from an immutable Explorer presentation.
+  /// Creates a header from its dedicated presentation model.
   const ExplorerHeader(this.view_model);
 
-  /// Current Explorer presentation snapshot.
-  final ExplorerViewModel view_model;
+  /// Header-specific presentation data.
+  final ExplorerHeaderViewModel view_model;
 
   /// Number of rows occupied by the header.
   static const int fixed_rows = 2;

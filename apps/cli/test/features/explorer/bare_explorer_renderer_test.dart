@@ -104,7 +104,7 @@ void main() {
         visible_row_limit: 2,
       );
 
-      expect(view_model.first_visible_index, 3);
+      expect(view_model.directory.first_visible_index, 3);
 
       final output = _render(
         view_model,

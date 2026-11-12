@@ -5,9 +5,9 @@ import 'package:rudra_cli/src/features/explorer/explorer_model.dart';
 import 'package:rudra_cli/src/features/explorer/explorer_presenter.dart';
 import 'package:rudra_cli/src/features/explorer/explorer_view_model.dart';
 
-import 'package:rudra_cli/src/features/explorer/widgets/explorer_directory.dart';
-import 'package:rudra_cli/src/features/explorer/widgets/explorer_footer.dart';
-import 'package:rudra_cli/src/features/explorer/widgets/explorer_header.dart';
+import 'package:rudra_cli/src/features/explorer/widgets/directory/explorer_directory.dart';
+import 'package:rudra_cli/src/features/explorer/widgets/footer/explorer_footer.dart';
+import 'package:rudra_cli/src/features/explorer/widgets/header/explorer_header.dart';
 import 'package:rudra_cli/src/features/explorer/widgets/explorer_screen.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -24,9 +24,9 @@ void main() {
         visible_row_limit: 2,
       );
 
-      final header = ExplorerHeader(view_model);
-      final directory = ExplorerDirectory(view_model);
-      final footer = ExplorerFooter(view_model);
+      final header = ExplorerHeader(view_model.header);
+      final directory = ExplorerDirectory(view_model.directory);
+      final footer = ExplorerFooter(view_model.footer);
       final screen = ExplorerScreen(view_model);
 
       expect(
@@ -41,7 +41,7 @@ void main() {
 
       expect(
         screen.height,
-        ExplorerScreen.fixed_rows + view_model.visible_row_limit,
+        ExplorerScreen.fixed_rows + view_model.directory.visible_row_limit,
       );
     });
 
@@ -75,7 +75,7 @@ void main() {
         visible_row_limit: 0,
       );
 
-      final directory = ExplorerDirectory(view_model);
+      final directory = ExplorerDirectory(view_model.directory);
       final screen = ExplorerScreen(view_model);
 
       expect(directory.height, ExplorerDirectory.heading_rows);

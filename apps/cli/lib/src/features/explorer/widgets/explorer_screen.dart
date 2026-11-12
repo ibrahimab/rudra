@@ -3,9 +3,9 @@ import '../../../core/rendering/widgets/terminal_widget.dart';
 
 import '../explorer_view_model.dart';
 
-import 'explorer_directory.dart';
-import 'explorer_footer.dart';
-import 'explorer_header.dart';
+import 'directory/explorer_directory.dart';
+import 'footer/explorer_footer.dart';
+import 'header/explorer_header.dart';
 
 /// Composes the complete Explorer terminal screen.
 ///
@@ -39,13 +39,13 @@ import 'explorer_header.dart';
 /// final total_rows = screen.height;
 /// ```
 final class ExplorerScreen implements TerminalWidget {
-  /// Creates a screen from an immutable Explorer presentation.
+  /// Composes the independently prepared component view models.
   ExplorerScreen(ExplorerViewModel view_model)
       : _layout = TerminalColumn(
           children: [
-            ExplorerHeader(view_model),
-            ExplorerDirectory(view_model),
-            ExplorerFooter(view_model),
+            ExplorerHeader(view_model.header),
+            ExplorerDirectory(view_model.directory),
+            ExplorerFooter(view_model.footer),
           ],
         );
 

@@ -40,7 +40,7 @@ void main() {
       );
 
       expect(
-        view_model.visible_rows.map((row) => row.name),
+        view_model.directory.visible_rows.map((row) => row.name),
         orderedEquals([
           'apps/',
           'alpha.txt',
@@ -49,16 +49,16 @@ void main() {
         ]),
       );
 
-      expect(view_model.selected_index, 0);
-      expect(view_model.selected_visible_index, 0);
-      expect(view_model.visible_rows.first.type_label, 'Directory');
+      expect(view_model.directory.selected_index, 0);
+      expect(view_model.directory.selected_visible_index, 0);
+      expect(view_model.directory.visible_rows.first.type_label, 'Directory');
 
-      expect(view_model.visible_rows.last.size_label, '2.0 KiB');
+      expect(view_model.directory.visible_rows.last.size_label, '2.0 KiB');
 
-      expect(view_model.total_entries, 4);
-      expect(view_model.has_hidden_above, isFalse);
-      expect(view_model.has_hidden_below, isFalse);
-      expect(view_model.is_complete, isTrue);
+      expect(view_model.directory.total_entries, 4);
+      expect(view_model.directory.has_hidden_above, isFalse);
+      expect(view_model.directory.has_hidden_below, isFalse);
+      expect(view_model.directory.is_complete, isTrue);
     });
 
     test('scrolls forward to retain the selected row', () {
@@ -69,17 +69,17 @@ void main() {
         visible_row_limit: 2,
       );
 
-      expect(view_model.first_visible_index, 4);
-      expect(view_model.selected_index, 5);
-      expect(view_model.selected_visible_index, 1);
+      expect(view_model.directory.first_visible_index, 4);
+      expect(view_model.directory.selected_index, 5);
+      expect(view_model.directory.selected_visible_index, 1);
 
       expect(
-        view_model.visible_rows.map((row) => row.name),
+        view_model.directory.visible_rows.map((row) => row.name),
         orderedEquals(['e.txt', 'f.txt']),
       );
 
-      expect(view_model.has_hidden_above, isTrue);
-      expect(view_model.has_hidden_below, isFalse);
+      expect(view_model.directory.has_hidden_above, isTrue);
+      expect(view_model.directory.has_hidden_below, isFalse);
     });
 
     test('retains the viewport when selection remains visible', () {
@@ -91,11 +91,11 @@ void main() {
         first_visible_index: 4,
       );
 
-      expect(view_model.first_visible_index, 4);
-      expect(view_model.selected_visible_index, 0);
+      expect(view_model.directory.first_visible_index, 4);
+      expect(view_model.directory.selected_visible_index, 0);
 
       expect(
-        view_model.visible_rows.map((row) => row.name),
+        view_model.directory.visible_rows.map((row) => row.name),
         orderedEquals(['e.txt', 'f.txt']),
       );
     });
@@ -109,16 +109,16 @@ void main() {
         first_visible_index: 4,
       );
 
-      expect(view_model.first_visible_index, 1);
-      expect(view_model.selected_visible_index, 0);
+      expect(view_model.directory.first_visible_index, 1);
+      expect(view_model.directory.selected_visible_index, 0);
 
       expect(
-        view_model.visible_rows.map((row) => row.name),
+        view_model.directory.visible_rows.map((row) => row.name),
         orderedEquals(['b.txt', 'c.txt']),
       );
 
-      expect(view_model.has_hidden_above, isTrue);
-      expect(view_model.has_hidden_below, isTrue);
+      expect(view_model.directory.has_hidden_above, isTrue);
+      expect(view_model.directory.has_hidden_below, isTrue);
     });
 
     test('clamps an out-of-range viewport start', () {
@@ -130,8 +130,8 @@ void main() {
         first_visible_index: 1000,
       );
 
-      expect(view_model.first_visible_index, 4);
-      expect(view_model.selected_visible_index, 1);
+      expect(view_model.directory.first_visible_index, 4);
+      expect(view_model.directory.selected_visible_index, 1);
     });
 
     test('supports a zero-height entry viewport', () {
@@ -142,11 +142,11 @@ void main() {
         visible_row_limit: 0,
       );
 
-      expect(view_model.visible_rows, isEmpty);
-      expect(view_model.selected_index, 0);
-      expect(view_model.selected_visible_index, isNull);
-      expect(view_model.observed_count, 6);
-      expect(view_model.has_hidden_below, isTrue);
+      expect(view_model.directory.visible_rows, isEmpty);
+      expect(view_model.directory.selected_index, 0);
+      expect(view_model.directory.selected_visible_index, isNull);
+      expect(view_model.directory.observed_count, 6);
+      expect(view_model.directory.has_hidden_below, isTrue);
     });
 
     test('rejects a negative viewport height', () {
@@ -167,9 +167,9 @@ void main() {
         visible_row_limit: 10,
       );
 
-      expect(empty.is_empty, isTrue);
-      expect(empty.selected_index, isNull);
-      expect(empty.visible_rows, isEmpty);
+      expect(empty.directory.is_empty, isTrue);
+      expect(empty.directory.selected_index, isNull);
+      expect(empty.directory.visible_rows, isEmpty);
 
       final issue = InspectionIssue(
         code: TargetInspectionErrorCode.permissionDenied,
@@ -187,19 +187,22 @@ void main() {
         visible_row_limit: 10,
       );
 
-      expect(incomplete.is_empty, isFalse);
-      expect(incomplete.is_incomplete, isTrue);
-      expect(incomplete.observed_count, 0);
-      expect(incomplete.issues, hasLength(1));
+      expect(incomplete.directory.is_empty, isFalse);
+      expect(incomplete.directory.is_incomplete, isTrue);
+      expect(incomplete.directory.observed_count, 0);
 
+      expect(incomplete.footer.is_warning, isTrue);
       expect(
-        incomplete.issues.single.code,
-        'permissionDenied',
+        incomplete.footer.inspection_status,
+        contains('1 inspection issue(s)'),
       );
-
       expect(
-        incomplete.issues.single.operation,
-        'listDirectory',
+        incomplete.footer.inspection_status,
+        contains('permissionDenied'),
+      );
+      expect(
+        incomplete.footer.inspection_status,
+        contains('listDirectory'),
       );
     });
 
@@ -227,10 +230,17 @@ void main() {
         visible_row_limit: 5,
       );
 
-      expect(view_model.visible_rows.single.name, 'visible.txt');
-      expect(view_model.is_complete, isFalse);
-      expect(view_model.issues, hasLength(1));
-      expect(view_model.issues.single.path, '/fixture/private');
+      expect(view_model.directory.visible_rows.single.name, 'visible.txt');
+      expect(view_model.directory.is_complete, isFalse);
+
+      expect(
+        view_model.footer.inspection_status,
+        contains('1 inspection issue(s)'),
+      );
+      expect(
+        view_model.footer.inspection_status,
+        contains('/fixture/private'),
+      );
     });
 
     test('preserves target-native paths without interpretation', () {
@@ -252,10 +262,10 @@ void main() {
         visible_row_limit: 5,
       );
 
-      expect(view_model.root_directory, root);
-      expect(view_model.current_directory, root);
-      expect(view_model.visible_rows.single.path, child_path);
-      expect(view_model.visible_rows.single.name, 'src/');
+      expect(model.root_directory.value, root);
+      expect(view_model.header.current_directory, root);
+      expect(view_model.directory.visible_rows.single.path, child_path);
+      expect(view_model.directory.visible_rows.single.name, 'src/');
     });
 
     test('retains row identity when entry paths are duplicated', () {
@@ -276,12 +286,12 @@ void main() {
       );
 
       expect(
-        view_model.visible_rows.map((row) => row.type_label),
+        view_model.directory.visible_rows.map((row) => row.type_label),
         orderedEquals(['Directory', 'File']),
       );
 
-      expect(view_model.selected_index, 1);
-      expect(view_model.selected_visible_index, 1);
+      expect(view_model.directory.selected_index, 1);
+      expect(view_model.directory.selected_visible_index, 1);
     });
 
     test('does not sanitize display text prematurely', () {
@@ -301,8 +311,8 @@ void main() {
 
       // Renderer sanitization occurs before ANSI encoding.
       // Presentation does not change the observed path.
-      expect(view_model.visible_rows.single.path, unsafe_path);
-      expect(view_model.visible_rows.single.name, 'unsafe\x1B[31m');
+      expect(view_model.directory.visible_rows.single.path, unsafe_path);
+      expect(view_model.directory.visible_rows.single.name, 'unsafe\x1B[31m');
     });
 
     test('produces immutable presentation collections', () {
@@ -312,12 +322,7 @@ void main() {
       );
 
       expect(
-        () => view_model.visible_rows.clear(),
-        throwsUnsupportedError,
-      );
-
-      expect(
-        () => view_model.issues.clear(),
+        () => view_model.directory.visible_rows.clear(),
         throwsUnsupportedError,
       );
     });
@@ -330,8 +335,11 @@ void main() {
         visible_row_limit: 5,
       );
 
-      expect(view_model.is_closed, isTrue);
-      expect(view_model.can_go_back, isFalse);
+      expect(
+        view_model.footer.navigation_hints,
+        'Explorer closed.',
+      );
+      expect(model.can_go_back, isFalse);
     });
   });
 }

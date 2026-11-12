@@ -1,10 +1,10 @@
-import '../../../core/rendering/terminal_text.dart';
-import '../../../core/rendering/theme.dart';
-import '../../../core/rendering/widgets/terminal_widget.dart';
+import '../../../../core/rendering/terminal_text.dart';
+import '../../../../core/rendering/theme.dart';
+import '../../../../core/rendering/widgets/terminal_widget.dart';
 
-import '../../filesystem/directory_listing_view_model.dart';
+import '../../../filesystem/directory_listing_view_model.dart';
 
-import '../explorer_view_model.dart';
+import 'explorer_directory_view_model.dart';
 
 /// Renders the Explorer's scrollable directory entry viewport.
 ///
@@ -35,11 +35,11 @@ import '../explorer_view_model.dart';
 /// // 1 + view_model.visible_row_limit
 /// ```
 final class ExplorerDirectory implements TerminalWidget {
-  /// Creates a directory widget from an immutable presentation.
+  /// Creates a directory widget from its dedicated viewport model.
   const ExplorerDirectory(this.view_model);
 
-  /// Prepared directory viewport and metadata.
-  final ExplorerViewModel view_model;
+  /// Directory-specific presentation data.
+  final ExplorerDirectoryViewModel view_model;
 
   /// Fixed heading rows preceding the scrollable entries.
   static const int heading_rows = 1;

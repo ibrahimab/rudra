@@ -222,7 +222,7 @@ final class ExplorerRunner {
           // Commit the viewport position only after rendering
           // succeeds. Navigation state itself remains owned
           // by ExplorerController.
-          first_visible_index = view_model.first_visible_index;
+          first_visible_index = view_model.directory.first_visible_index;
         }
 
         render_current();

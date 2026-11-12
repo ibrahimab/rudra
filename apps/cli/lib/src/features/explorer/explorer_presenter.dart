@@ -6,82 +6,64 @@ import '../filesystem/directory_listing_view_model.dart';
 import 'explorer_model.dart';
 import 'explorer_view_model.dart';
 
-/// Converts Explorer navigation state into presentation data.
+import 'widgets/directory/explorer_directory_view_model.dart';
+import 'widgets/footer/explorer_footer_view_model.dart';
+import 'widgets/header/explorer_header_view_model.dart';
+
+/// Builds a composable Explorer presentation from navigation state.
 ///
-/// The presenter owns viewport calculations and translates
-/// existing navigation state into immutable display data.
+/// ExplorerModel remains the authoritative in-memory navigation
+/// model for the CLI. Filesystem observations originate in the SDK.
 ///
-/// Filesystem metadata formatting is delegated to the
-/// established [DirectoryListingPresenter].
+/// This presenter:
+/// - Prepares a header model from the current directory.
+/// - Calculates the directory viewport and selection.
+/// - Reuses the established filesystem metadata presenter.
+/// - Prepares footer summaries and inspection diagnostics.
+/// - Composes the three results into ExplorerViewModel.
 ///
-/// The ordering established by [ExplorerModel] is preserved.
-/// Consequently, navigation indices correspond exactly to
-/// the rows prepared for rendering.
+/// Widgets do not receive ExplorerModel or the SDK services.
 ///
-/// The presenter does not:
-/// - Request new filesystem observations.
-/// - Resolve or construct filesystem paths.
-/// - Modify Explorer navigation state.
-/// - Decode keyboard input.
-/// - Write to terminal output.
-/// - Manage persistent sessions or cleanup plans.
+/// The presenter performs no filesystem I/O, terminal I/O,
+/// navigation changes, or workflow operations.
 ///
 /// Example:
 /// ```dart
-/// const presenter = ExplorerPresenter();
-///
-/// final view_model = presenter.present(
-///   model,
-///   visible_row_limit: 15,
+/// final presentation = const ExplorerPresenter().present(
+///   explorer_model,
+///   visible_row_limit: 10,
 /// );
 ///
-/// print(view_model.selected_visible_index);
+/// print(presentation.header.current_directory);
+/// print(presentation.directory.visible_row_limit);
 /// ```
 final class ExplorerPresenter {
   /// Creates a stateless Explorer presenter.
   ///
-  /// [directory_listing_presenter] supplies the existing
-  /// filesystem metadata presentation implementation.
-  ///
-  /// The default presenter can be replaced for composition
-  /// without changing Explorer navigation behavior.
-  ///
-  /// Construction performs no filesystem or terminal I/O.
+  /// The filesystem presenter is injected to reuse the
+  /// existing entry metadata formatting implementation.
   const ExplorerPresenter({
     DirectoryListingPresenter directory_listing_presenter =
         const DirectoryListingPresenter(),
   }) : _directory_listing_presenter = directory_listing_presenter;
 
-  /// Shared filesystem metadata presentation dependency.
+  /// Shared filesystem entry metadata presenter.
   final DirectoryListingPresenter _directory_listing_presenter;
 
-  /// Prepares an Explorer screen for the requested viewport.
+  /// Creates a complete immutable Explorer screen presentation.
   ///
-  /// [model] contains an existing SDK directory observation,
-  /// navigation history, and selection position.
+  /// [visible_row_limit] specifies the number of available
+  /// directory-entry rows, excluding fixed screen components.
   ///
-  /// [visible_row_limit] is the number of terminal rows
-  /// available for filesystem entries, excluding headers,
-  /// diagnostics, and navigation instructions.
-  ///
-  /// Zero is permitted for terminals too small to display
-  /// any entry rows.
-  ///
-  /// [first_visible_index] is the preferred viewport offset.
+  /// [first_visible_index] is the preferred viewport position.
   /// It is clamped to the available entry range.
   ///
-  /// The viewport is adjusted when necessary to keep the
-  /// selected entry visible, provided at least one row fits.
+  /// The selected row remains visible when at least one entry
+  /// row is available.
   ///
-  /// The returned view model retains:
-  /// - The original target and directory.
-  /// - Explorer ordering and selection.
-  /// - Successfully inspected entry metadata.
-  /// - Inspection completeness and typed issues.
+  /// Throws [RangeError] for a negative viewport height.
   ///
-  /// Throws [RangeError] for a negative [visible_row_limit].
-  ///
-  /// Does not mutate [model] or perform filesystem I/O.
+  /// The source navigation model is never modified.
   ExplorerViewModel present(
     ExplorerModel model, {
     required int visible_row_limit,
@@ -95,12 +77,8 @@ final class ExplorerPresenter {
       );
     }
 
-    // ExplorerModel already owns the navigation ordering.
-    //
-    // Build an in-memory presentation projection using that
-    // ordering rather than changing the original SDK listing.
-    //
-    // This is not a new filesystem observation.
+    // Preserve the navigation ordering already established
+    // by ExplorerModel. This is not a new filesystem inspection.
     final ordered_listing = DirectoryListing(
       target_id: model.listing.target_id,
       directory: model.current_directory,
@@ -109,11 +87,6 @@ final class ExplorerPresenter {
       issues: model.listing.issues,
     );
 
-    // The compact presentation mode preserves supplied order.
-    //
-    // It still prepares all entry metadata fields, allowing
-    // Explorer to reuse the established filesystem formatting
-    // without implementing another metadata formatter.
     final listing_view_model = _directory_listing_presenter.present(
       ordered_listing,
       layout: DirectoryListingLayout.compact,
@@ -123,8 +96,6 @@ final class ExplorerPresenter {
     final total_entries = rows.length;
     final selected_index = model.selected_index;
 
-    // The last possible viewport start must leave as many
-    // visible rows as the available entry count permits.
     final max_first_visible_index = total_entries > visible_row_limit
         ? total_entries - visible_row_limit
         : 0;
@@ -143,31 +114,82 @@ final class ExplorerPresenter {
     final visible_end =
         (visible_start + visible_row_limit).clamp(0, total_entries).toInt();
 
-    final visible_rows = rows.sublist(
-      visible_start,
-      visible_end,
-    );
-
     final int? selected_visible_index = selected_index != null &&
             selected_index >= visible_start &&
             selected_index < visible_end
         ? selected_index - visible_start
         : null;
 
-    return ExplorerViewModel(
-      target_id: listing_view_model.target_id,
-      root_directory: model.root_directory.value,
-      current_directory: model.current_directory.value,
-      can_go_back: model.can_go_back,
-      is_closed: model.is_closed,
-      is_complete: listing_view_model.is_complete,
+    final directory = ExplorerDirectoryViewModel(
       total_entries: total_entries,
       visible_row_limit: visible_row_limit,
       first_visible_index: visible_start,
       selected_index: selected_index,
       selected_visible_index: selected_visible_index,
-      visible_rows: visible_rows,
-      issues: listing_view_model.issues,
+      visible_rows: rows.sublist(visible_start, visible_end),
+      is_complete: listing_view_model.is_complete,
     );
+
+    final header = ExplorerHeaderViewModel(
+      current_directory: model.current_directory.value,
+    );
+
+    final selected_label = directory.selected_index == null
+        ? 'none'
+        : '${directory.selected_index! + 1}/${directory.total_entries}';
+
+    final scroll_label =
+        switch ((directory.has_hidden_above, directory.has_hidden_below)) {
+      (true, true) => 'more above and below',
+      (true, false) => 'more above',
+      (false, true) => 'more below',
+      (false, false) => 'all observed entries visible',
+    };
+
+    final footer = ExplorerFooterViewModel(
+      summary: '${directory.observed_count} observed entries'
+          '  |  Selected: $selected_label'
+          '  |  $scroll_label',
+      inspection_status: _inspection_status(
+        is_complete: directory.is_complete,
+        issues: listing_view_model.issues,
+      ),
+      is_warning: directory.is_incomplete,
+      navigation_hints: model.is_closed
+          ? 'Explorer closed.'
+          : 'Up/Down Select  Enter Open  Left/Backspace Back  Q Quit',
+    );
+
+    return ExplorerViewModel(
+      header: header,
+      directory: directory,
+      footer: footer,
+    );
+  }
+
+  /// Formats the status of an existing SDK directory observation.
+  ///
+  /// An incomplete observation is never described as complete.
+  /// The first typed issue supplies context when available.
+  ///
+  /// This method does not sanitize terminal text. The shared
+  /// rendering backend retains that responsibility.
+  static String _inspection_status({
+    required bool is_complete,
+    required List<DirectoryInspectionIssueViewModel> issues,
+  }) {
+    if (is_complete) {
+      return 'Read-only exploration. No filesystem changes.';
+    }
+
+    if (issues.isEmpty) {
+      return 'WARNING: Directory inspection incomplete.';
+    }
+
+    final issue = issues.first;
+
+    return 'WARNING: ${issues.length} inspection issue(s)'
+        '  |  ${issue.operation}: ${issue.code}:'
+        ' ${issue.path}: ${issue.message}';
   }
 }

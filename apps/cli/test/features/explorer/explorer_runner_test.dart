@@ -41,12 +41,12 @@ void main() {
       expect(scenario.renderer.frames, hasLength(1));
 
       expect(
-        scenario.renderer.frames.single.current_directory,
+        scenario.renderer.frames.single.header.current_directory,
         '/root',
       );
 
       expect(
-        scenario.renderer.frames.single.visible_rows.single.name,
+        scenario.renderer.frames.single.directory.visible_rows.single.name,
         'docs/',
       );
 
@@ -73,7 +73,7 @@ void main() {
 
       expect(
         scenario.renderer.frames.map(
-          (frame) => frame.selected_index,
+          (frame) => frame.directory.selected_index,
         ),
         orderedEquals([0, 1, 0]),
       );
@@ -115,7 +115,7 @@ void main() {
 
       expect(
         scenario.renderer.frames.map(
-          (frame) => frame.current_directory,
+          (frame) => frame.header.current_directory,
         ),
         orderedEquals([
           '/root',
@@ -124,12 +124,7 @@ void main() {
         ]),
       );
 
-      expect(
-        scenario.renderer.frames.map(
-          (frame) => frame.can_go_back,
-        ),
-        orderedEquals([false, true, false]),
-      );
+      expect(scenario.controller.model?.can_go_back, isFalse);
     });
 
     test('does not navigate into files or symbolic links', () async {
@@ -153,7 +148,7 @@ void main() {
 
       expect(
         scenario.renderer.frames.map(
-          (frame) => frame.current_directory,
+          (frame) => frame.header.current_directory,
         ),
         everyElement('/root'),
       );
@@ -191,12 +186,16 @@ void main() {
         RudraExitCode.inspection_incomplete.value,
       );
 
-      expect(scenario.renderer.frames.first.is_incomplete, isTrue);
-      expect(scenario.renderer.frames.first.issues, hasLength(1));
+      expect(scenario.renderer.frames.first.directory.is_incomplete, isTrue);
+
+      expect(
+        scenario.renderer.frames.first.footer.inspection_status,
+        contains('1 inspection issue(s)'),
+      );
 
       // The child inspection succeeds, but the earlier
       // incomplete observation remains relevant to the exit.
-      expect(scenario.renderer.frames.last.is_complete, isTrue);
+      expect(scenario.renderer.frames.last.directory.is_complete, isTrue);
       expect(scenario.inspector.listed, ['/root', '/root/docs']);
     });
 
@@ -228,7 +227,7 @@ void main() {
 
       expect(
         scenario.renderer.frames.map(
-          (frame) => frame.is_incomplete,
+          (frame) => frame.directory.is_incomplete,
         ),
         orderedEquals([false, true, false]),
       );
@@ -244,9 +243,9 @@ void main() {
       final status = await scenario.runner.run();
 
       expect(status, RudraExitCode.success.value);
-      expect(scenario.renderer.frames.single.is_empty, isTrue);
+      expect(scenario.renderer.frames.single.directory.is_empty, isTrue);
       expect(
-        scenario.renderer.frames.single.selected_index,
+        scenario.renderer.frames.single.directory.selected_index,
         isNull,
       );
 
@@ -274,21 +273,21 @@ void main() {
       final first = scenario.renderer.frames.first;
       final last = scenario.renderer.frames.last;
 
-      expect(first.visible_row_limit, 2);
-      expect(first.first_visible_index, 0);
-      expect(first.selected_visible_index, 0);
+      expect(first.directory.visible_row_limit, 2);
+      expect(first.directory.first_visible_index, 0);
+      expect(first.directory.selected_visible_index, 0);
 
-      expect(last.selected_index, 3);
-      expect(last.first_visible_index, 2);
-      expect(last.selected_visible_index, 1);
+      expect(last.directory.selected_index, 3);
+      expect(last.directory.first_visible_index, 2);
+      expect(last.directory.selected_visible_index, 1);
 
       expect(
-        last.visible_rows.map((row) => row.name),
+        last.directory.visible_rows.map((row) => row.name),
         orderedEquals(['c.txt', 'd.txt']),
       );
 
-      expect(last.has_hidden_above, isTrue);
-      expect(last.has_hidden_below, isTrue);
+      expect(last.directory.has_hidden_above, isTrue);
+      expect(last.directory.has_hidden_below, isTrue);
     });
 
     test('adapts viewport dimensions on the next render', () async {
@@ -314,7 +313,7 @@ void main() {
 
       expect(
         scenario.renderer.frames.map(
-          (frame) => frame.visible_row_limit,
+          (frame) => frame.directory.visible_row_limit,
         ),
         orderedEquals([2, 4]),
       );
@@ -339,9 +338,9 @@ void main() {
 
       final frame = scenario.renderer.frames.single;
 
-      expect(frame.visible_row_limit, 0);
-      expect(frame.visible_rows, isEmpty);
-      expect(frame.observed_count, 1);
+      expect(frame.directory.visible_row_limit, 0);
+      expect(frame.directory.visible_rows, isEmpty);
+      expect(frame.directory.observed_count, 1);
     });
 
     test('rejects unsupported terminals without inspection', () async {
@@ -544,9 +543,9 @@ void main() {
       final frame = scenario.renderer.frames.single;
 
       // 10 terminal rows - 8 fixed rows - 1 safety row.
-      expect(frame.visible_row_limit, 1);
-      expect(frame.visible_rows, hasLength(1));
-      expect(frame.observed_count, 3);
+      expect(frame.directory.visible_row_limit, 1);
+      expect(frame.directory.visible_rows, hasLength(1));
+      expect(frame.directory.observed_count, 3);
       expect(scenario.terminal.restored, isTrue);
     });
 
