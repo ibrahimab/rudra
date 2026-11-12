@@ -51,6 +51,12 @@ export 'src/workflow/workflow_identity.dart';
 export 'src/workflow/workflow_event.dart';
 export 'src/workflow/workflow_state.dart';
 
+/// Deterministic workflow transitions and event-history replay.
+export 'src/workflow/workflow_state_machine.dart';
+
+/// Typed workflow transition and replay failures.
+export 'src/workflow/workflow_transition_exception.dart';
+
 export 'src/rudra_sdk.dart';
 export 'src/filesystem/filesystem_service.dart';
 
