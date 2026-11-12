@@ -61,7 +61,7 @@ final class ExplorerRunner {
   ExplorerRunner({
     required ExplorerController controller,
     required ExplorerTerminalHost terminal,
-    required Renderer<ExplorerViewModel> renderer,
+    required ViewportRenderer<ExplorerViewModel> renderer,
     required StringSink error_output,
     ExplorerPresenter presenter = const ExplorerPresenter(),
   })  : _controller = controller,
@@ -76,8 +76,8 @@ final class ExplorerRunner {
   /// Terminal lifecycle and input boundary.
   final ExplorerTerminalHost _terminal;
 
-  /// Backend-independent presentation renderer.
-  final Renderer<ExplorerViewModel> _renderer;
+  /// Backend-independent renderer with an explicit viewport contract.
+  final ViewportRenderer<ExplorerViewModel> _renderer;
 
   /// Destination for configuration diagnostics.
   final StringSink _error_output;
@@ -88,16 +88,34 @@ final class ExplorerRunner {
   /// Whether this runner has already been invoked.
   bool _has_started = false;
 
-  /// Number of fixed lines rendered by BareExplorerRenderer.
-  static const int _fixed_frame_rows = 6;
-
   /// Spare row preventing the final newline from scrolling
-  /// the alternate screen.
+  /// the terminal's alternate screen.
   static const int _terminal_safety_rows = 1;
 
-  /// Minimum height required by the existing bare renderer.
-  static const int _reserved_terminal_rows =
-      _fixed_frame_rows + _terminal_safety_rows;
+  /// Terminal rows reserved outside the scrollable viewport.
+  ///
+  /// Fixed presentation height comes from the injected renderer,
+  /// which owns its layout implementation.
+  ///
+  /// The terminal safety row is separate from the widget tree
+  /// because it protects terminal lifecycle behavior.
+  ///
+  /// The value is evaluated when required, allowing a renderer
+  /// to adjust its layout contract between frames.
+  ///
+  /// Throws [StateError] if the renderer reports an invalid
+  /// negative fixed height.
+  int get _reserved_terminal_rows {
+    final fixed_rows = _renderer.fixed_rows;
+
+    if (fixed_rows < 0) {
+      throw StateError(
+        'Explorer renderer reported a negative fixed height.',
+      );
+    }
+
+    return fixed_rows + _terminal_safety_rows;
+  }
 
   /// Runs one interactive Explorer navigation session.
   ///
@@ -153,11 +171,12 @@ final class ExplorerRunner {
 
     _has_started = true;
 
-    if (!_terminal.is_interactive ||
-        _terminal.terminal_rows < _reserved_terminal_rows) {
+    final required_rows = _reserved_terminal_rows;
+
+    if (!_terminal.is_interactive || _terminal.terminal_rows < required_rows) {
       _error_output.writeln(
         'Interactive Explorer requires a supported terminal '
-        'with at least $_reserved_terminal_rows rows.',
+        'with at least $required_rows rows.',
       );
 
       return RudraExitCode.configuration_error.value;
@@ -182,13 +201,15 @@ final class ExplorerRunner {
         void render_current() {
           final rows = _terminal.terminal_rows;
 
-          if (rows < _reserved_terminal_rows) {
+          final reserved_rows = _reserved_terminal_rows;
+
+          if (rows < reserved_rows) {
             throw StateError(
               'Terminal became too small for Explorer rendering.',
             );
           }
 
-          final visible_row_limit = rows - _reserved_terminal_rows;
+          final visible_row_limit = rows - reserved_rows;
 
           final view_model = _presenter.present(
             current_model,

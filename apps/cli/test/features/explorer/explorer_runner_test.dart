@@ -513,6 +513,59 @@ void main() {
       expect(scenario.inspector.listed, ['/root']);
       expect(scenario.terminal.invocations, 1);
     });
+
+    test('allocates viewport rows using renderer layout height', () async {
+      final scenario = _Scenario(
+        children: {
+          '/root': [
+            '/root/a.txt',
+            '/root/b.txt',
+            '/root/c.txt',
+          ],
+        },
+        entries: [
+          _entry('/root/a.txt', FilesystemEntryKind.regularFile),
+          _entry('/root/b.txt', FilesystemEntryKind.regularFile),
+          _entry('/root/c.txt', FilesystemEntryKind.regularFile),
+        ],
+        keys: 'q',
+        rows: 10,
+      );
+
+      // The fake renderer declares a larger fixed layout.
+      // The runner must not assume the previous six-row value.
+      scenario.renderer.fixed_rows = 8;
+
+      expect(
+        await scenario.runner.run(),
+        RudraExitCode.success.value,
+      );
+
+      final frame = scenario.renderer.frames.single;
+
+      // 10 terminal rows - 8 fixed rows - 1 safety row.
+      expect(frame.visible_row_limit, 1);
+      expect(frame.visible_rows, hasLength(1));
+      expect(frame.observed_count, 3);
+      expect(scenario.terminal.restored, isTrue);
+    });
+
+    test('rejects negative renderer height before inspection', () async {
+      final scenario = _Scenario(
+        children: {'/root': []},
+        entries: [],
+      );
+
+      scenario.renderer.fixed_rows = -1;
+
+      await expectLater(
+        scenario.runner.run(),
+        throwsStateError,
+      );
+
+      expect(scenario.inspector.listed, isEmpty);
+      expect(scenario.terminal.invocations, 0);
+    });
   });
 }
 
@@ -744,7 +797,13 @@ final class _FakeTerminalHost implements ExplorerTerminalHost {
 ///
 /// Rendering may be configured to fail to verify exception
 /// propagation through the terminal lifecycle boundary.
-final class _RecordingRenderer implements Renderer<ExplorerViewModel> {
+final class _RecordingRenderer implements ViewportRenderer<ExplorerViewModel> {
+  /// Configurable fixed layout height for viewport tests.
+  ///
+  /// The default matches the current composed Explorer screen.
+  @override
+  int fixed_rows = 6;
+
   /// Screens successfully accepted by this renderer.
   final List<ExplorerViewModel> frames = [];
 

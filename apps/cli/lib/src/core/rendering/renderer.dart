@@ -61,3 +61,39 @@ abstract interface class Renderer<TViewModel extends Object> {
   /// This operation performs no filesystem inspection or mutation.
   void render(TViewModel view_model);
 }
+
+/// Rendering contract for screens with a scrollable content viewport.
+///
+/// A viewport-aware renderer declares how many terminal rows
+/// are occupied by non-scrollable presentation components.
+///
+/// The application runner uses [fixed_rows] to determine how
+/// many remaining rows may be allocated to scrollable content.
+///
+/// The reported value must be nonnegative and consistent with
+/// the layout produced by [render].
+///
+/// The renderer does not reserve terminal safety margins.
+/// The application host remains responsible for those.
+///
+/// This contract is independent of the concrete rendering
+/// backend and can be implemented by bare or widget-based
+/// terminal renderers.
+///
+/// Example:
+/// ```dart
+/// final ViewportRenderer<ExplorerViewModel> renderer =
+///     BareExplorerRenderer(
+///       output: stdout,
+///       terminal_columns: () => stdout.terminalColumns,
+///     );
+///
+/// final available_rows = terminal_rows - renderer.fixed_rows;
+/// ```
+abstract interface class ViewportRenderer<TViewModel extends Object>
+    implements Renderer<TViewModel> {
+  /// Terminal rows occupied by fixed screen components.
+  ///
+  /// This excludes the scrollable entry viewport.
+  int get fixed_rows;
+}
