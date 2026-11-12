@@ -46,6 +46,11 @@ export 'package:rudra_target_contracts/rudra_target_contracts.dart';
 export 'src/filesystem/directory_listing.dart';
 export 'src/filesystem/inspection_issue.dart';
 
+/// Workflow domain events, identity, and immutable lifecycle states.
+export 'src/workflow/workflow_identity.dart';
+export 'src/workflow/workflow_event.dart';
+export 'src/workflow/workflow_state.dart';
+
 export 'src/rudra_sdk.dart';
 export 'src/filesystem/filesystem_service.dart';
 
