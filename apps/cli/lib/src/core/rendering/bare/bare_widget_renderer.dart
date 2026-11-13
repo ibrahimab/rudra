@@ -1,4 +1,3 @@
-
 import '../terminal_text.dart';
 import '../theme.dart';
 import '../widgets/terminal_widget.dart';

@@ -1,4 +1,3 @@
-
 import '../../../../../core/rendering/terminal_text.dart';
 import '../../../../../core/rendering/theme.dart';
 import '../../../../../core/rendering/widgets/terminal_widget.dart';
@@ -80,11 +79,10 @@ final class DirectoryListingWidget implements TerminalWidget {
     return switch (view_model.layout) {
       DirectoryListingLayout.compact =>
         _compact_heading_rows + view_model.rows.length,
-      DirectoryListingLayout.detailed =>
-        _detailed_heading_rows +
-            view_model.rows.length +
-            _detailed_summary_rows +
-            (view_model.is_incomplete ? 1 : 0),
+      DirectoryListingLayout.detailed => _detailed_heading_rows +
+          view_model.rows.length +
+          _detailed_summary_rows +
+          (view_model.is_incomplete ? 1 : 0),
     };
   }
 

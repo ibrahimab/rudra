@@ -1,4 +1,3 @@
-
 import '../../core/rendering/bare/ansi_text.dart';
 import '../../core/rendering/bare/bare_widget_renderer.dart';
 import '../../core/rendering/renderer.dart';
@@ -127,7 +126,9 @@ final class BareFilesystemRenderer
     );
 
     renderer.render(
-      DirectoryInspectionIssuesWidget(view_model),
+      DirectoryInspectionIssuesWidget(
+        view_model.inspection_issues,
+      ),
     );
   }
 }

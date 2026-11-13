@@ -2,6 +2,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../../filesystem/directory_listing_presenter.dart';
 import '../../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
+import '../../filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 
 import '../application/explorer_model.dart';
 import 'explorer_view_model.dart';
@@ -152,7 +153,7 @@ final class ExplorerPresenter {
           '  |  $scroll_label',
       inspection_status: _inspection_status(
         is_complete: directory.is_complete,
-        issues: listing_view_model.issues,
+        issues: listing_view_model.inspection_issues.issues,
       ),
       is_warning: directory.is_incomplete,
       navigation_hints: model.is_closed

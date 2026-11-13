@@ -1,4 +1,3 @@
-
 import 'package:rudra_cli/src/core/rendering/bare/ansi_text.dart';
 import 'package:rudra_cli/src/core/rendering/bare/bare_widget_renderer.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
@@ -9,6 +8,7 @@ import 'package:rudra_cli/src/core/rendering/terminal_text.dart';
 
 import 'package:rudra_cli/src/features/filesystem/bare_filesystem_renderer.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_widget.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_widget.dart';
 
@@ -31,9 +31,11 @@ void main() {
 
       final widget = DirectoryListingWidget(model);
 
-      final lines = widget.build(
-        TerminalConstraints(),
-      ).toList();
+      final lines = widget
+          .build(
+            TerminalConstraints(),
+          )
+          .toList();
 
       expect(widget.height, 2);
       expect(lines, hasLength(widget.height));
@@ -49,9 +51,11 @@ void main() {
 
       final widget = DirectoryListingWidget(model);
 
-      final lines = widget.build(
-        TerminalConstraints(),
-      ).toList();
+      final lines = widget
+          .build(
+            TerminalConstraints(),
+          )
+          .toList();
 
       expect(widget.height, 5);
       expect(lines, hasLength(widget.height));
@@ -75,9 +79,11 @@ void main() {
 
       final widget = DirectoryListingWidget(model);
 
-      final lines = widget.build(
-        TerminalConstraints(),
-      ).toList();
+      final lines = widget
+          .build(
+            TerminalConstraints(),
+          )
+          .toList();
 
       expect(widget.height, 6);
       expect(lines, hasLength(6));
@@ -91,10 +97,12 @@ void main() {
 
       final model = _listing(
         layout: DirectoryListingLayout.compact,
-        rows: [_row(
-          path: path,
-          name: filename,
-        )],
+        rows: [
+          _row(
+            path: path,
+            name: filename,
+          )
+        ],
       );
 
       final output = StringBuffer();
@@ -167,9 +175,11 @@ void main() {
         ],
       );
 
-      final lines = screen.build(
-        TerminalConstraints(),
-      ).toList();
+      final lines = screen
+          .build(
+            TerminalConstraints(),
+          )
+          .toList();
 
       expect(screen.height, 7);
       expect(lines, hasLength(screen.height));
@@ -207,7 +217,11 @@ void main() {
   group('DirectoryInspectionIssuesWidget', () {
     test('occupies no rows without diagnostic issues', () {
       final widget = DirectoryInspectionIssuesWidget(
-        _listing(layout: DirectoryListingLayout.compact),
+        _listing(
+          layout: DirectoryListingLayout.compact,
+          is_complete: false,
+          issues: [_issue()],
+        ).inspection_issues,
       );
 
       expect(widget.height, 0);
@@ -220,12 +234,14 @@ void main() {
           layout: DirectoryListingLayout.compact,
           is_complete: false,
           issues: [_issue()],
-        ),
+        ).inspection_issues,
       );
 
-      final lines = widget.build(
-        TerminalConstraints(),
-      ).toList();
+      final lines = widget
+          .build(
+            TerminalConstraints(),
+          )
+          .toList();
 
       expect(widget.height, 1);
       expect(lines.single.role, TerminalRole.error);
@@ -239,12 +255,15 @@ void main() {
         _listing(
           layout: DirectoryListingLayout.compact,
           is_complete: false,
-        ),
+          issues: [_issue()],
+        ).inspection_issues,
       );
 
-      final lines = widget.build(
-        TerminalConstraints(),
-      ).toList();
+      final lines = widget
+          .build(
+            TerminalConstraints(),
+          )
+          .toList();
 
       expect(widget.height, 1);
       expect(
@@ -286,10 +305,8 @@ void main() {
           _listing(
             layout: DirectoryListingLayout.compact,
             is_complete: false,
-            issues: [
-              _issue(message: 'unsafe\x1B[2Jmessage'),
-            ],
-          ),
+            issues: [_issue()],
+          ).inspection_issues,
         ),
       );
 

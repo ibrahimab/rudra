@@ -1,5 +1,7 @@
 import '../../../../../core/rendering/theme.dart';
 
+import '../directory_inspection_issues/directory_inspection_issues_view_model.dart';
+
 /// Identifies the presentation layout for a directory listing.
 ///
 /// The layout describes the intended CLI presentation, not
@@ -77,37 +79,6 @@ final class DirectoryEntryViewModel {
   final TerminalRole role;
 }
 
-/// Immutable presentation data for one inspection issue.
-///
-/// These fields originate from typed SDK inspection issues.
-///
-/// The view model preserves the error classification, operation,
-/// target-native path, and diagnostic text without interpreting
-/// native exceptions.
-///
-/// A renderer must sanitize the fields before terminal output.
-final class DirectoryInspectionIssueViewModel {
-  /// Creates a display-ready inspection diagnostic.
-  const DirectoryInspectionIssueViewModel({
-    required this.operation,
-    required this.code,
-    required this.path,
-    required this.message,
-  });
-
-  /// Name of the failed inspection operation.
-  final String operation;
-
-  /// Name of the typed inspection error category.
-  final String code;
-
-  /// Target-native path associated with the issue.
-  final String path;
-
-  /// Human-readable diagnostic information.
-  final String message;
-}
-
 /// Immutable presentation model for a CLI directory listing.
 ///
 /// This model is constructed by `DirectoryListingPresenter`
@@ -138,17 +109,13 @@ final class DirectoryInspectionIssueViewModel {
 /// renderer.render(view_model);
 /// ```
 final class DirectoryListingViewModel {
-  /// Creates an immutable directory listing presentation.
+  /// Creates an immutable filesystem listing presentation.
   ///
-  /// [directory_path] retains the observed target-native path.
-  /// [target_id] identifies the inspected SDK target.
+  /// Entry rows remain owned by the listing component.
+  /// Diagnostics are represented by their dedicated
+  /// [DirectoryInspectionIssuesViewModel].
   ///
-  /// [rows] contains display-ready entry values.
-  /// [issues] contains display-ready inspection diagnostics.
-  ///
-  /// The supplied lists are copied before being stored.
-  ///
-  /// Construction performs no filesystem or terminal I/O.
+  /// Both components describe the same inspection result.
   DirectoryListingViewModel({
     required this.layout,
     required this.directory_path,
@@ -157,8 +124,9 @@ final class DirectoryListingViewModel {
     required List<DirectoryEntryViewModel> rows,
     required List<DirectoryInspectionIssueViewModel> issues,
   })  : rows = List<DirectoryEntryViewModel>.unmodifiable(rows),
-        issues = List<DirectoryInspectionIssueViewModel>.unmodifiable(
-          issues,
+        inspection_issues = DirectoryInspectionIssuesViewModel(
+          is_complete: is_complete,
+          issues: issues,
         );
 
   /// Requested CLI presentation layout.
@@ -179,8 +147,11 @@ final class DirectoryListingViewModel {
   /// Immutable collection of observed entry rows.
   final List<DirectoryEntryViewModel> rows;
 
-  /// Immutable collection of inspection diagnostics.
-  final List<DirectoryInspectionIssueViewModel> issues;
+  /// Independent presentation of inspection diagnostics.
+  ///
+  /// This component can be rendered separately from entry rows,
+  /// including to a diagnostic output stream.
+  final DirectoryInspectionIssuesViewModel inspection_issues;
 
   /// Number of successfully observed entries.
   int get observed_count => rows.length;

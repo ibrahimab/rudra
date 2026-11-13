@@ -1,4 +1,3 @@
-
 import '../../../../../core/rendering/theme.dart';
 import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
@@ -36,7 +35,7 @@ final class DirectoryInspectionIssuesWidget implements TerminalWidget {
   const DirectoryInspectionIssuesWidget(this.view_model);
 
   /// Listing containing prepared diagnostic information.
-  final DirectoryListingViewModel view_model;
+  final DirectoryInspectionIssuesViewModel view_model;
 
   @override
   int get height {

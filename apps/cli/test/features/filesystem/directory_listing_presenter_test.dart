@@ -337,9 +337,9 @@ void main() {
       expect(model.is_complete, isFalse);
       expect(model.is_incomplete, isTrue);
       expect(model.observed_count, 1);
-      expect(model.issues, hasLength(1));
+      expect(model.inspection_issues.issues, hasLength(1));
 
-      final diagnostic = model.issues.single;
+      final diagnostic = model.inspection_issues.issues.single;
 
       expect(diagnostic.operation, 'inspect');
       expect(diagnostic.code, 'permissionDenied');
@@ -353,7 +353,7 @@ void main() {
       );
 
       expect(model.is_incomplete, isTrue);
-      expect(model.issues, isEmpty);
+      expect(model.inspection_issues.issues, isEmpty);
       expect(model.rows, isEmpty);
     });
 
@@ -373,7 +373,7 @@ void main() {
       );
 
       expect(
-        () => model.issues.clear(),
+        () => model.inspection_issues.issues.clear(),
         throwsUnsupportedError,
       );
     });

@@ -1,6 +1,7 @@
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/bare/ansi_text.dart';
 import 'package:rudra_cli/src/features/filesystem/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:test/test.dart';
 

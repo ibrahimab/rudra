@@ -141,13 +141,13 @@ void main() {
 
       expect(directory.is_complete, isFalse);
       expect(directory.observed_count, 1);
-      expect(directory.issues, hasLength(1));
+      expect(directory.inspection_issues.issues, hasLength(1));
       expect(
-        directory.issues.single.code,
+        directory.inspection_issues.issues.single.code,
         'permissionDenied',
       );
       expect(
-        directory.issues.single.path,
+        directory.inspection_issues.issues.single.path,
         '/fixture/blocked',
       );
     });
@@ -163,7 +163,7 @@ void main() {
       );
 
       expect(result.has_incomplete_listing, isTrue);
-      expect(result.listing!.issues, isEmpty);
+      expect(result.listing!.inspection_issues.issues, isEmpty);
       expect(result.listing!.observed_count, 0);
     });
 
