@@ -1,4 +1,4 @@
-import '../../../filesystem/directory_listing_view_model.dart';
+import '../../../../filesystem/directory_listing_view_model.dart';
 
 /// Immutable presentation model for ExplorerDirectory.
 ///

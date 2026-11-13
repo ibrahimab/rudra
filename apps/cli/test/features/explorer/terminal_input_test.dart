@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:rudra_cli/src/features/explorer/terminal_input.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/terminal_input.dart';
 import 'package:test/test.dart';
 
 /// Verifies terminal keyboard decoding for the CLI explorer.

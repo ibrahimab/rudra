@@ -18,12 +18,15 @@ import 'features/filesystem/filesystem_cli_module.dart';
 import 'features/welcome/bare_welcome_renderer.dart';
 import 'features/welcome/welcome_controller.dart';
 
-import 'features/explorer/bare_explorer_renderer.dart';
-import 'features/explorer/dart_explorer_terminal_host.dart';
-import 'features/explorer/explorer_cli_module.dart';
-import 'features/explorer/explorer_controller.dart';
-import 'features/explorer/explorer_runner.dart';
-import 'features/explorer/explorer_terminal_host.dart';
+import 'features/explorer/presentation/bare_explorer_renderer.dart';
+
+import 'features/explorer/terminal/dart_explorer_terminal_host.dart';
+import 'features/explorer/terminal/explorer_terminal_host.dart';
+
+import 'features/explorer/cli/explorer_cli_module.dart';
+
+import 'features/explorer/application/explorer_controller.dart';
+import 'features/explorer/application/explorer_runner.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///

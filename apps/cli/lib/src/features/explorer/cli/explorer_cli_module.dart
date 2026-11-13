@@ -1,10 +1,10 @@
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../core/cli/rudra_cli_module.dart';
+import '../../../core/cli/rudra_cli_module.dart';
 
 import 'explore_command.dart';
-import 'explorer_runner.dart';
+import '../application/explorer_runner.dart';
 
 /// Registers Rudra's interactive filesystem Explorer command.
 ///

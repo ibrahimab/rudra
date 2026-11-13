@@ -1,8 +1,8 @@
-import '../../../../core/rendering/terminal_text.dart';
-import '../../../../core/rendering/theme.dart';
-import '../../../../core/rendering/widgets/terminal_widget.dart';
+import '../../../../../core/rendering/terminal_text.dart';
+import '../../../../../core/rendering/theme.dart';
+import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
-import '../../../filesystem/directory_listing_view_model.dart';
+import '../../../../filesystem/directory_listing_view_model.dart';
 
 import 'explorer_directory_view_model.dart';
 

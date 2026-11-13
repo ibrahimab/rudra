@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:rudra_cli/src/features/explorer/explorer_controller.dart';
+import 'package:rudra_cli/src/features/explorer/application/explorer_controller.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 

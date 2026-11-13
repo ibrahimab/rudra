@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';

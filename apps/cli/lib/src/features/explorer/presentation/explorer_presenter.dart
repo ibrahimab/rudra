@@ -1,9 +1,9 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../filesystem/directory_listing_presenter.dart';
-import '../filesystem/directory_listing_view_model.dart';
+import '../../filesystem/directory_listing_presenter.dart';
+import '../../filesystem/directory_listing_view_model.dart';
 
-import 'explorer_model.dart';
+import '../application/explorer_model.dart';
 import 'explorer_view_model.dart';
 
 import 'widgets/directory/explorer_directory_view_model.dart';

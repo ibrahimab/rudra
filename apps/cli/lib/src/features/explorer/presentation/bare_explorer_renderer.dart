@@ -1,7 +1,7 @@
-import '../../core/rendering/bare/ansi_text.dart';
-import '../../core/rendering/bare/bare_widget_renderer.dart';
-import '../../core/rendering/renderer.dart';
-import '../../core/rendering/theme.dart';
+import '../../../core/rendering/bare/ansi_text.dart';
+import '../../../core/rendering/bare/bare_widget_renderer.dart';
+import '../../../core/rendering/renderer.dart';
+import '../../../core/rendering/theme.dart';
 
 import 'explorer_view_model.dart';
 import 'widgets/explorer_screen.dart';

@@ -1,16 +1,16 @@
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:rudra_cli/src/core/rendering/widgets/terminal_widget.dart';
 
-import 'package:rudra_cli/src/features/explorer/explorer_view_model.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 
-import 'package:rudra_cli/src/features/explorer/widgets/directory/explorer_directory.dart';
-import 'package:rudra_cli/src/features/explorer/widgets/directory/explorer_directory_view_model.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/directory/explorer_directory.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/directory/explorer_directory_view_model.dart';
 
-import 'package:rudra_cli/src/features/explorer/widgets/footer/explorer_footer.dart';
-import 'package:rudra_cli/src/features/explorer/widgets/footer/explorer_footer_view_model.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/footer/explorer_footer.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/footer/explorer_footer_view_model.dart';
 
-import 'package:rudra_cli/src/features/explorer/widgets/header/explorer_header.dart';
-import 'package:rudra_cli/src/features/explorer/widgets/header/explorer_header_view_model.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/header/explorer_header.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/header/explorer_header_view_model.dart';
 
 import 'package:test/test.dart';
 

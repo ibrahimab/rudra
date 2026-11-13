@@ -1,5 +1,5 @@
-import 'package:rudra_cli/src/features/explorer/explorer_model.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_presenter.dart';
+import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/explorer_presenter.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 

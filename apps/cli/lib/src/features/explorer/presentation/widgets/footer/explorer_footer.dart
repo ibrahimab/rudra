@@ -1,5 +1,5 @@
-import '../../../../core/rendering/theme.dart';
-import '../../../../core/rendering/widgets/terminal_widget.dart';
+import '../../../../../core/rendering/theme.dart';
+import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
 import 'explorer_footer_view_model.dart';
 

@@ -3,12 +3,12 @@ import 'dart:convert';
 
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
-import 'package:rudra_cli/src/features/explorer/dart_explorer_terminal_host.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_controller.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_runner.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_terminal_device.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_terminal_host.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_view_model.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/dart_explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/explorer/application/explorer_controller.dart';
+import 'package:rudra_cli/src/features/explorer/application/explorer_runner.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';

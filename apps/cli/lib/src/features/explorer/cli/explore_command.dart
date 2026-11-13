@@ -1,7 +1,7 @@
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import 'explorer_runner.dart';
+import '../application/explorer_runner.dart';
 
 /// Starts the interactive, read-only filesystem Explorer.
 ///

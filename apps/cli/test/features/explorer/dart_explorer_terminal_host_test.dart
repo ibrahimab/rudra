@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:rudra_cli/src/features/explorer/dart_explorer_terminal_host.dart';
-import 'package:rudra_cli/src/features/explorer/explorer_terminal_device.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/dart_explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:test/test.dart';
 
 /// Verifies the Explorer terminal lifecycle.

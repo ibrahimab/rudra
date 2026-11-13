@@ -1,12 +1,12 @@
-import '../../core/cli/rudra_exit_code.dart';
-import '../../core/rendering/renderer.dart';
+import '../../../core/cli/rudra_exit_code.dart';
+import '../../../core/rendering/renderer.dart';
 
 import 'explorer_controller.dart';
 import 'explorer_model.dart';
-import 'explorer_presenter.dart';
-import 'explorer_terminal_host.dart';
-import 'explorer_view_model.dart';
-import 'terminal_input.dart';
+import '../presentation/explorer_presenter.dart';
+import '../terminal/explorer_terminal_host.dart';
+import '../presentation/explorer_view_model.dart';
+import '../terminal/terminal_input.dart';
 
 /// Coordinates one interactive, read-only Explorer workflow.
 ///

@@ -1,5 +1,5 @@
-import '../../../core/rendering/widgets/terminal_column.dart';
-import '../../../core/rendering/widgets/terminal_widget.dart';
+import '../../../../core/rendering/widgets/terminal_column.dart';
+import '../../../../core/rendering/widgets/terminal_widget.dart';
 
 import '../explorer_view_model.dart';
 
