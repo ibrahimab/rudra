@@ -1,4 +1,4 @@
-import '../filesystem/directory_listing_view_model.dart';
+import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
 /// Immutable presentation data for Rudra's welcome screen.
 ///

@@ -111,6 +111,25 @@ void main() {
         throwsStateError,
       );
     });
+
+    test('supports explicitly unbounded constraints', () {
+      final constraints = TerminalConstraints();
+
+      expect(constraints.is_bounded, isFalse);
+      expect(constraints.columns, isNull);
+
+      expect(
+        () => constraints.require_bounded_columns(),
+        throwsStateError,
+      );
+    });
+
+    test('returns a required bounded width', () {
+      final constraints = TerminalConstraints(columns: 80);
+
+      expect(constraints.is_bounded, isTrue);
+      expect(constraints.require_bounded_columns(), 80);
+    });
   });
 
   group('BareWidgetRenderer', () {
@@ -223,6 +242,39 @@ void main() {
       );
 
       expect(output.toString(), isEmpty);
+    });
+
+    test('preserves long text in unbounded output', () {
+      final output = StringBuffer();
+      final long_text = List<String>.filled(240, 'x').join();
+
+      final renderer = BareWidgetRenderer(
+        output: output,
+      );
+
+      renderer.render(
+        TerminalLabel(long_text),
+      );
+
+      expect(output.toString(), '$long_text\n');
+    });
+
+    test('sanitizes unbounded output without truncating it', () {
+      final output = StringBuffer();
+      final long_text = List<String>.filled(160, 'x').join();
+
+      BareWidgetRenderer(
+        output: output,
+      ).render(
+        TerminalLabel('$long_text\x1B[2J'),
+      );
+
+      expect(
+        output.toString(),
+        '$long_text?[2J\n',
+      );
+
+      expect(output.toString(), isNot(contains('\x1B')));
     });
   });
 }

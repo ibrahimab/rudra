@@ -1,31 +1,35 @@
+
 import '../../core/rendering/bare/ansi_text.dart';
+import '../../core/rendering/bare/bare_widget_renderer.dart';
 import '../../core/rendering/renderer.dart';
-import '../../core/rendering/terminal_text.dart';
 import '../../core/rendering/theme.dart';
 
-import 'directory_listing_view_model.dart';
+import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
+import 'presentation/widgets/directory_inspection_issues/directory_inspection_issues_widget.dart';
+import 'presentation/widgets/directory_listing/directory_listing_widget.dart';
 
-/// Renders filesystem view models using Rudra's bare backend.
+/// Bare rendering adapter for filesystem directory observations.
 ///
-/// Supports the existing compact and detailed directory layouts.
+/// This class connects the existing backend-independent
+/// [Renderer] contract to Rudra's shared widget renderer.
 ///
-/// This renderer owns:
-/// - Terminal column alignment.
-/// - Table headers and separators.
-/// - Semantic text styling.
-/// - Incomplete-inspection notices.
-/// - Inspection diagnostic output.
+/// Directory layout belongs to [DirectoryListingWidget].
+/// Diagnostic layout belongs to [DirectoryInspectionIssuesWidget].
 ///
-/// It receives presentation-ready data and never calls the SDK.
+/// Both widgets are independently composable by other CLI
+/// features, including Welcome.
 ///
-/// Compact listings preserve their established plain-text
-/// format, regardless of the configured theme.
+/// The renderer uses unbounded output by default, ensuring that
+/// filesystem paths and diagnostic information are not silently
+/// truncated by terminal-width assumptions.
 ///
-/// Detailed listings may use ANSI styling when explicitly
-/// enabled through the injected [AnsiText].
+/// Optional ANSI styling is delegated to [BareWidgetRenderer].
 ///
-/// No terminal modes are changed and no filesystem operations
-/// are performed.
+/// The renderer does not:
+/// - Call SDK services or filesystem adapters.
+/// - Format filesystem domain metadata.
+/// - Implement application navigation or workflow behavior.
+/// - Modify or authorize filesystem operations.
 ///
 /// Example:
 /// ```dart
@@ -34,21 +38,18 @@ import 'directory_listing_view_model.dart';
 ///   error_output: stderr,
 /// );
 ///
-/// renderer.render(view_model);
+/// renderer.render(listing_view_model);
 /// ```
 final class BareFilesystemRenderer
     implements Renderer<DirectoryListingViewModel> {
-  /// Creates a bare filesystem listing renderer.
+  /// Creates a directory-listing rendering adapter.
   ///
-  /// [output] receives listing content.
+  /// [output] receives the listing presentation.
   ///
-  /// [error_output], when supplied, receives inspection
-  /// diagnostics during [render].
+  /// [error_output], when provided, receives typed inspection
+  /// diagnostics using the same theme and ANSI configuration.
   ///
-  /// [theme] controls semantic appearance.
-  ///
-  /// [ansi_text] encodes optional terminal styling.
-  /// ANSI output is disabled by default.
+  /// Output is unbounded to preserve meaningful directory data.
   ///
   /// Construction performs no terminal or filesystem I/O.
   BareFilesystemRenderer({
@@ -56,45 +57,43 @@ final class BareFilesystemRenderer
     StringSink? error_output,
     TerminalTheme? theme,
     AnsiText ansi_text = const AnsiText(),
-  })  : _output = output,
+  })  : _listing_renderer = BareWidgetRenderer(
+          output: output,
+          theme: theme,
+          ansi_text: ansi_text,
+        ),
         _error_output = error_output,
         _theme = theme ?? TerminalTheme.plain,
         _ansi_text = ansi_text;
 
-  /// Destination for listing presentation.
-  final StringSink _output;
+  /// Generic rendering backend used for listing content.
+  final BareWidgetRenderer _listing_renderer;
 
   /// Optional destination for inspection diagnostics.
   final StringSink? _error_output;
 
-  /// Semantic styling configuration.
+  /// Semantic style configuration for diagnostic rendering.
   final TerminalTheme _theme;
 
-  /// Bare-backend ANSI encoder.
+  /// ANSI encoder shared with diagnostic rendering.
   final AnsiText _ansi_text;
 
-  /// Renders the requested directory presentation layout.
+  /// Renders one directory listing and its optional diagnostics.
   ///
-  /// Compact output preserves SDK observation ordering
-  /// and the established column names.
+  /// Directory data is passed to the reusable listing widget.
   ///
-  /// Detailed output uses the ordering prepared by the
-  /// presenter and displays observed filesystem metadata.
+  /// If a diagnostic sink is configured, inspection issues are
+  /// rendered separately after the listing completes.
   ///
-  /// Inspection issues are written only when an error
-  /// output sink was supplied.
+  /// An incomplete listing without typed issues still produces
+  /// an explicit fallback diagnostic.
   ///
-  /// Errors from output sinks propagate to the caller.
-  /// Terminal lifecycle cleanup belongs to the terminal host.
-  ///
-  /// This method does not inspect or modify the filesystem.
+  /// Rendering performs no SDK or filesystem operations.
   @override
   void render(DirectoryListingViewModel view_model) {
-    if (view_model.layout == DirectoryListingLayout.compact) {
-      _render_compact(view_model);
-    } else {
-      _render_detailed(view_model);
-    }
+    _listing_renderer.render(
+      DirectoryListingWidget(view_model),
+    );
 
     final error_output = _error_output;
 
@@ -106,202 +105,29 @@ final class BareFilesystemRenderer
     }
   }
 
-  /// Renders the original compact filesystem layout.
+  /// Renders inspection diagnostics to an explicit output sink.
   ///
-  /// Compact output intentionally remains unstyled.
-  /// It must be suitable for redirected output and scripts.
+  /// This method is useful when the caller wants diagnostics
+  /// independently of directory contents.
   ///
-  /// The row order comes directly from the presenter.
-  void _render_compact(DirectoryListingViewModel view_model) {
-    const type_header = 'TYPE';
-    const size_header = 'LOGICAL_BYTES';
-    const path_header = 'PATH';
-    const spacing = '  ';
-
-    final type_width = view_model.rows.fold<int>(
-      type_header.length,
-      (width, row) {
-        final length = TerminalText.estimated_columns(
-          row.compact_type,
-        );
-
-        return length > width ? length : width;
-      },
-    );
-
-    final size_width = view_model.rows.fold<int>(
-      size_header.length,
-      (width, row) {
-        final length = TerminalText.estimated_columns(
-          row.logical_bytes,
-        );
-
-        return length > width ? length : width;
-      },
-    );
-
-    _output.writeln(
-      '${TerminalText.pad_right(type_header, min_columns: type_width)}'
-      '$spacing'
-      '${TerminalText.pad_left(size_header, min_columns: size_width)}'
-      '$spacing'
-      '$path_header',
-    );
-
-    for (final row in view_model.rows) {
-      _output.writeln(
-        '${TerminalText.pad_right(row.compact_type, min_columns: type_width)}'
-        '$spacing'
-        '${TerminalText.pad_left(row.logical_bytes, min_columns: size_width)}'
-        '$spacing'
-        '${TerminalText.sanitize(row.path)}',
-      );
-    }
-  }
-
-  /// Renders a detailed, human-readable filesystem listing.
+  /// Formatting is delegated to the composable diagnostic
+  /// widget rather than duplicated in this renderer.
   ///
-  /// Directory sizes are already marked as unavailable by
-  /// the presenter. No recursive size calculation occurs.
+  /// Complete observations without issues produce no output.
   ///
-  /// Column widths account for estimated Unicode display
-  /// widths rather than Dart string lengths.
-  ///
-  /// Styling is applied only after text has been padded.
-  void _render_detailed(
-    DirectoryListingViewModel view_model,
-  ) {
-    const name_header = 'NAME';
-    const type_header = 'TYPE';
-    const size_header = 'SIZE';
-    const permissions_header = 'PERMISSIONS';
-
-    final name_width = view_model.rows.fold<int>(
-      name_header.length,
-      (width, row) {
-        final length = TerminalText.estimated_columns(
-          row.name,
-        );
-
-        return length > width ? length : width;
-      },
-    );
-
-    _output.writeln(
-      '  ${_style(
-        TerminalText.pad_right(name_header, min_columns: name_width),
-        TerminalRole.heading,
-      )}  '
-      '${_style(
-        type_header.padRight(9),
-        TerminalRole.heading,
-      )}  '
-      '${_style(
-        size_header.padLeft(9),
-        TerminalRole.heading,
-      )}  '
-      '${_style(
-        permissions_header.padRight(11),
-        TerminalRole.heading,
-      )}  '
-      '${_style('MODIFIED (UTC)', TerminalRole.heading)}',
-    );
-
-    _output.writeln(
-      '  ${''.padRight(name_width, '─')}  '
-      '${''.padRight(9, '─')}  '
-      '${''.padRight(9, '─')}  '
-      '${''.padRight(11, '─')}  '
-      '${''.padRight(16, '─')}',
-    );
-
-    for (final row in view_model.rows) {
-      final name = TerminalText.pad_right(
-        row.name,
-        min_columns: name_width,
-      );
-
-      _output.writeln(
-        '  ${_style(name, row.role)}  '
-        '${TerminalText.pad_right(row.type_label, min_columns: 9)}  '
-        '${TerminalText.pad_left(row.size_label, min_columns: 9)}  '
-        '${TerminalText.pad_right(row.permissions, min_columns: 11)}  '
-        '${TerminalText.sanitize(row.modified_utc)}',
-      );
-    }
-
-    _output.writeln();
-
-    _output.writeln(
-      '  ${view_model.observed_count} observed entries'
-      ' · immediate children only',
-    );
-
-    if (view_model.is_incomplete) {
-      _output.writeln(
-        _style(
-          '  WARNING: This directory listing is incomplete.',
-          TerminalRole.warning,
-        ),
-      );
-    }
-  }
-
-  /// Renders typed inspection issues to a supplied destination.
-  ///
-  /// This method is public so existing CLI presentation
-  /// adapters can render diagnostics independently from
-  /// directory content during the migration.
-  ///
-  /// It preserves the established diagnostic field order:
-  /// operation, code, path, message.
-  ///
-  /// All diagnostic text is sanitized before terminal output.
-  ///
-  /// An incomplete result without issues produces an explicit
-  /// fallback diagnostic rather than appearing successful.
-  ///
-  /// No SDK operations or filesystem mutations occur.
+  /// Untrusted diagnostic text is sanitized before encoding.
   void render_issues(
     DirectoryListingViewModel view_model, {
     required StringSink output,
   }) {
-    for (final issue in view_model.issues) {
-      output.writeln(
-        _style(
-          '${issue.operation}: '
-          '${issue.code}: '
-          '${issue.path}: '
-          '${issue.message}',
-          TerminalRole.error,
-        ),
-      );
-    }
+    final renderer = BareWidgetRenderer(
+      output: output,
+      theme: _theme,
+      ansi_text: _ansi_text,
+    );
 
-    if (view_model.is_incomplete && view_model.issues.isEmpty) {
-      output.writeln(
-        _style(
-          'Filesystem inspection did not complete.',
-          TerminalRole.error,
-        ),
-      );
-    }
-  }
-
-  /// Applies semantic styling through the bare ANSI encoder.
-  ///
-  /// The encoder sanitizes text before inserting any ANSI
-  /// escape sequences.
-  ///
-  /// Plain themes and disabled ANSI encoders produce safe
-  /// unstyled output.
-  String _style(
-    String value,
-    TerminalRole role,
-  ) {
-    return _ansi_text.format(
-      value,
-      style: _theme.style_for(role),
+    renderer.render(
+      DirectoryInspectionIssuesWidget(view_model),
     );
   }
 }

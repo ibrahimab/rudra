@@ -5,7 +5,7 @@ import '../../core/cli/rudra_exit_code.dart';
 import '../../core/rendering/renderer.dart';
 
 import 'directory_listing_presenter.dart';
-import 'directory_listing_view_model.dart';
+import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
 /// Lists the immediate children of a filesystem directory.
 ///

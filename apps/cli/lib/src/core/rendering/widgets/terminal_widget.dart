@@ -1,32 +1,73 @@
 import '../theme.dart';
 
-/// Immutable constraints supplied by a terminal rendering backend.
+/// Immutable layout constraints supplied to terminal widgets.
 ///
-/// Widgets receive the available terminal width without reading
-/// process or platform-specific terminal properties themselves.
+/// [columns] determines whether horizontal output is bounded.
+///
+/// A non-null value limits each rendered line to that number
+/// of estimated terminal display columns.
+///
+/// Null represents unbounded output, appropriate for redirected
+/// command output, logs, and non-interactive presentation.
+///
+/// Unbounded output is still sanitized. It is never truncated
+/// solely to an arbitrary terminal width.
+///
+/// Widgets requiring an interactive viewport must call
+/// [require_bounded_columns] instead of assuming a width.
 ///
 /// Example:
 /// ```dart
-/// final constraints = TerminalConstraints(columns: 80);
-/// print(constraints.columns);
+/// final interactive = TerminalConstraints(columns: 80);
+/// final redirected = TerminalConstraints();
+///
+/// print(interactive.require_bounded_columns());
 /// // 80
+///
+/// print(redirected.columns);
+/// // null
 /// ```
 final class TerminalConstraints {
-  /// Creates validated terminal layout constraints.
+  /// Creates immutable terminal constraints.
   ///
-  /// Zero columns are supported. Negative widths are rejected.
-  TerminalConstraints({required this.columns}) {
-    if (columns < 0) {
+  /// Null means unbounded. Zero is a valid bounded width.
+  ///
+  /// Throws [RangeError] for a negative width.
+  TerminalConstraints({this.columns}) {
+    final width = columns;
+
+    if (width != null && width < 0) {
       throw RangeError.value(
-        columns,
+        width,
         'columns',
         'Terminal width cannot be negative.',
       );
     }
   }
 
-  /// Available terminal display columns.
-  final int columns;
+  /// Maximum display columns, or null for unbounded output.
+  final int? columns;
+
+  /// Whether the rendering backend imposes a width limit.
+  bool get is_bounded => columns != null;
+
+  /// Returns the required fixed terminal width.
+  ///
+  /// Interactive widgets use this method to fail explicitly
+  /// when accidentally rendered in an unbounded context.
+  ///
+  /// Throws [StateError] when no bounded width was supplied.
+  int require_bounded_columns() {
+    final width = columns;
+
+    if (width == null) {
+      throw StateError(
+        'This widget requires bounded terminal columns.',
+      );
+    }
+
+    return width;
+  }
 }
 
 /// One unstyled line produced by a terminal widget.

@@ -2,7 +2,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../../core/rendering/theme.dart';
 
-import 'directory_listing_view_model.dart';
+import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
 /// Prepares SDK directory observations for CLI presentation.
 ///

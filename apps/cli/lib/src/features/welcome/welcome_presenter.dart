@@ -1,5 +1,5 @@
 import '../filesystem/directory_listing_presenter.dart';
-import '../filesystem/directory_listing_view_model.dart';
+import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'welcome_model.dart';
 import 'welcome_view_model.dart';
 

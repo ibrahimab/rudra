@@ -1,54 +1,61 @@
+
 import '../terminal_text.dart';
 import '../theme.dart';
 import '../widgets/terminal_widget.dart';
 import 'ansi_text.dart';
 
-/// Renders any composable terminal widget tree using plain or ANSI text.
+/// Renders composable terminal widgets using plain or ANSI text.
 ///
-/// Feature-specific renderers construct widget trees and delegate
-/// the actual output encoding to this shared backend.
+/// Feature-specific renderers supply widget trees. This shared
+/// backend owns their final text encoding and output.
 ///
-/// The backend owns:
-/// - Terminal width acquisition.
-/// - Text sanitization and truncation.
-/// - Semantic theme application.
-/// - Optional trusted screen redraw sequences.
-/// - Validation of widget height contracts.
-/// - Writing the completed frame.
+/// When [terminal_columns] is provided, the output is bounded
+/// to the current terminal display width.
 ///
-/// The widget tree is built completely before any frame content
-/// reaches the output sink.
+/// When omitted, output is unbounded. This is appropriate for
+/// non-interactive commands and avoids truncating filenames,
+/// paths, diagnostics, or other meaningful data.
 ///
-/// This renderer does not own terminal input, screen lifecycle,
-/// application state, navigation, or SDK services.
+/// Both modes sanitize untrusted display text before applying
+/// any trusted ANSI styling.
+///
+/// The backend validates each widget tree's declared height
+/// before writing the completed frame.
+///
+/// It does not:
+/// - Read filesystem content or invoke SDK services.
+/// - Modify presentation models.
+/// - Handle input or application navigation.
+/// - Manage terminal modes or lifecycle.
 ///
 /// Example:
 /// ```dart
 /// final renderer = BareWidgetRenderer(
 ///   output: stdout,
-///   terminal_columns: () => stdout.terminalColumns,
 /// );
 ///
 /// renderer.render(
-///   TerminalColumn(
-///     children: [
-///       TerminalLabel('RUDRA'),
-///       TerminalLabel('Ready'),
-///     ],
-///   ),
+///   const TerminalLabel('RUDRA'),
 /// );
 /// ```
 final class BareWidgetRenderer {
-  /// Creates a backend for rendering composable widgets.
+  /// Creates a shared bare terminal rendering backend.
   ///
-  /// [terminal_columns] is evaluated on every render.
+  /// [terminal_columns] is optional.
   ///
-  /// When [redraw_screen] is true, ANSI output must be enabled.
+  /// When supplied, it is evaluated on every render.
+  /// Omitting it enables unbounded non-interactive output.
   ///
-  /// Construction does not perform terminal I/O.
+  /// [theme] maps semantic roles to styles.
+  /// [ansi_text] controls trusted ANSI encoding.
+  ///
+  /// [redraw_screen] requires enabled ANSI output and must
+  /// only be used in a suitable terminal-hosting context.
+  ///
+  /// Construction performs no terminal I/O.
   BareWidgetRenderer({
     required StringSink output,
-    required int Function() terminal_columns,
+    int Function()? terminal_columns,
     TerminalTheme? theme,
     AnsiText ansi_text = const AnsiText(),
     bool redraw_screen = false,
@@ -64,48 +71,52 @@ final class BareWidgetRenderer {
     }
   }
 
-  /// Output destination for completed frames.
+  /// Destination for completed frames.
   final StringSink _output;
 
-  /// Current terminal width provider.
-  final int Function() _terminal_columns;
+  /// Optional terminal width provider.
+  final int Function()? _terminal_columns;
 
   /// Semantic styling configuration.
   final TerminalTheme _theme;
 
-  /// Backend-specific ANSI text encoder.
+  /// Trusted ANSI styling encoder.
   final AnsiText _ansi_text;
 
-  /// Whether a trusted screen-clear sequence precedes each frame.
+  /// Whether a trusted screen redraw precedes each frame.
   final bool _redraw_screen;
 
-  /// Renders one complete widget tree.
+  /// Renders one complete composable widget tree.
+  ///
+  /// The tree is built before any output is written.
   ///
   /// Each widget must produce exactly its declared height.
+  /// Incorrect heights fail with [StateError].
   ///
-  /// Malformed layouts raise [StateError] before writing output.
+  /// A bounded output is sanitized and truncated.
+  /// An unbounded output is sanitized without truncation.
   ///
-  /// Unsafe text is sanitized before ANSI styling is applied.
-  /// No widget-provided escape sequence is interpreted.
+  /// Styling is applied after sanitization.
   ///
-  /// Output sink failures propagate to the caller.
-  ///
-  /// The terminal host remains responsible for restoring
-  /// terminal modes if rendering fails.
+  /// Errors propagate to the caller. Terminal restoration
+  /// remains the hosting application's responsibility.
   void render(TerminalWidget widget) {
     final constraints = TerminalConstraints(
-      columns: _terminal_columns(),
+      columns: _terminal_columns?.call(),
     );
 
     final expected_height = widget.height;
 
     if (expected_height < 0) {
-      throw StateError('A widget cannot declare negative height.');
+      throw StateError(
+        'A widget cannot declare negative height.',
+      );
     }
 
     final frame = StringBuffer();
 
     if (_redraw_screen) {
+      // Trusted renderer-owned terminal control sequence.
       frame.write('\x1B[H\x1B[2J');
     }
 
@@ -120,10 +131,14 @@ final class BareWidgetRenderer {
         );
       }
 
-      final safe_text = TerminalText.truncate(
-        line.text,
-        max_columns: constraints.columns,
-      );
+      final columns = constraints.columns;
+
+      final safe_text = columns == null
+          ? TerminalText.sanitize(line.text)
+          : TerminalText.truncate(
+              line.text,
+              max_columns: columns,
+            );
 
       frame.writeln(
         _ansi_text.format(
@@ -139,6 +154,7 @@ final class BareWidgetRenderer {
       );
     }
 
+    // Layout and encoding finish before output begins.
     _output.write(frame.toString());
   }
 }

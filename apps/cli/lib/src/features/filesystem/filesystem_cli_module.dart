@@ -4,7 +4,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import '../../core/cli/rudra_cli_module.dart';
 import '../../core/rendering/renderer.dart';
 
-import 'directory_listing_view_model.dart';
+import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'list_command.dart';
 
 /// Registers SDK-backed filesystem commands for Rudra.

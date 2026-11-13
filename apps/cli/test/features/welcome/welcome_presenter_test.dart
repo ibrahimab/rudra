@@ -1,4 +1,4 @@
-import 'package:rudra_cli/src/features/filesystem/directory_listing_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/features/welcome/welcome_model.dart';
 import 'package:rudra_cli/src/features/welcome/welcome_presenter.dart';
 import 'package:rudra_cli/src/features/welcome/welcome_view_model.dart';

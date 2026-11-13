@@ -1,5 +1,5 @@
 import 'package:rudra_cli/src/features/filesystem/directory_listing_presenter.dart';
-import 'package:rudra_cli/src/features/filesystem/directory_listing_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';

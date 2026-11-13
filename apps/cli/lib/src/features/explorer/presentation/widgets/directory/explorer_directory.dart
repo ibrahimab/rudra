@@ -2,7 +2,7 @@ import '../../../../../core/rendering/terminal_text.dart';
 import '../../../../../core/rendering/theme.dart';
 import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
-import '../../../../filesystem/directory_listing_view_model.dart';
+import '../../../../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
 import 'explorer_directory_view_model.dart';
 
@@ -73,7 +73,7 @@ final class ExplorerDirectory implements TerminalWidget {
   Iterable<TerminalLine> build(
     TerminalConstraints constraints,
   ) sync* {
-    final columns = constraints.columns;
+    final columns = constraints.require_bounded_columns();
 
     yield TerminalLine(
       _column_header(columns),
