@@ -219,8 +219,6 @@ void main() {
       final widget = DirectoryInspectionIssuesWidget(
         _listing(
           layout: DirectoryListingLayout.compact,
-          is_complete: false,
-          issues: [_issue()],
         ).inspection_issues,
       );
 
@@ -255,7 +253,6 @@ void main() {
         _listing(
           layout: DirectoryListingLayout.compact,
           is_complete: false,
-          issues: [_issue()],
         ).inspection_issues,
       );
 
@@ -305,7 +302,9 @@ void main() {
           _listing(
             layout: DirectoryListingLayout.compact,
             is_complete: false,
-            issues: [_issue()],
+            issues: [
+              _issue(message: 'unsafe\x1B[2Jmessage'),
+            ],
           ).inspection_issues,
         ),
       );
