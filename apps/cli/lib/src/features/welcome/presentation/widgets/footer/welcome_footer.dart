@@ -21,14 +21,9 @@ final class WelcomeFooter implements TerminalWidget {
   int get height => fixed_rows;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine('');
 
-    yield TerminalLine(
-      view_model.safety_statement,
-      role: TerminalRole.muted,
-    );
+    yield TerminalLine(view_model.safety_statement, role: TerminalRole.muted);
   }
 }

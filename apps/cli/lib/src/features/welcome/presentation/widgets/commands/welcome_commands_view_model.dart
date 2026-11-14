@@ -16,9 +16,7 @@
 /// ```
 final class WelcomeCommandsViewModel {
   /// Creates a command-hint presentation.
-  const WelcomeCommandsViewModel({
-    required this.show_filesystem_commands,
-  });
+  const WelcomeCommandsViewModel({required this.show_filesystem_commands});
 
   /// Whether filesystem commands should appear in the hints.
   final bool show_filesystem_commands;

@@ -15,10 +15,7 @@ void main() {
       const initial = WorkflowInitialState();
       final event = _start_event();
 
-      final result = machine.transition(
-        state: initial,
-        event: event,
-      );
+      final result = machine.transition(state: initial, event: event);
 
       expect(result, isA<WorkflowStartRequestedState>());
 
@@ -66,9 +63,7 @@ void main() {
     test('accepts separately constructed equivalent root paths', () {
       final requested = _requested_state();
 
-      final identity = _create_identity(
-        root: '/Users/example/Downloads',
-      );
+      final identity = _create_identity(root: '/Users/example/Downloads');
 
       // The identity has a different TargetPath instance
       // containing the same target-native path.
@@ -89,9 +84,7 @@ void main() {
 
       final result = machine.transition(
         state: active,
-        event: WorkflowEndedEvent(
-          workflow_id: identity.workflow_id,
-        ),
+        event: WorkflowEndedEvent(workflow_id: identity.workflow_id),
       );
 
       expect(result, isA<WorkflowEndedState>());
@@ -107,9 +100,7 @@ void main() {
       final requested = _requested_state();
 
       final event = WorkflowStartedEvent(
-        identity: _create_identity(
-          target_id: 'local-windows',
-        ),
+        identity: _create_identity(target_id: 'local-windows'),
       );
 
       _expect_transition_error(
@@ -126,9 +117,7 @@ void main() {
       final requested = _requested_state();
 
       final event = WorkflowStartedEvent(
-        identity: _create_identity(
-          root: '/Users/example/Documents',
-        ),
+        identity: _create_identity(root: '/Users/example/Documents'),
       );
 
       _expect_transition_error(
@@ -163,18 +152,13 @@ void main() {
 
       final active = result as WorkflowActiveState;
 
-      expect(
-        active.identity.root.value,
-        r'C:\Users\example\Downloads',
-      );
+      expect(active.identity.root.value, r'C:\Users\example\Downloads');
     });
 
     test('rejects ending another workflow', () {
       final active = _active_state();
 
-      final event = WorkflowEndedEvent(
-        workflow_id: 'different-workflow',
-      );
+      final event = WorkflowEndedEvent(workflow_id: 'different-workflow');
 
       _expect_transition_error(
         machine,
@@ -273,10 +257,7 @@ void main() {
       expect(ended.identity.os_user_id, 'user-1');
       expect(ended.identity.target_id, 'local-macos');
 
-      expect(
-        ended.identity.root.value,
-        '/Users/example/Downloads',
-      );
+      expect(ended.identity.root.value, '/Users/example/Downloads');
     });
 
     test('replays incomplete workflow histories', () {
@@ -301,10 +282,7 @@ void main() {
       WorkflowState state = const WorkflowInitialState();
 
       for (final event in events) {
-        state = machine.transition(
-          state: state,
-          event: event,
-        );
+        state = machine.transition(state: state, event: event);
       }
 
       final replayed = machine.replay(events);
@@ -315,25 +293,13 @@ void main() {
       final direct = state as WorkflowEndedState;
       final reconstructed = replayed as WorkflowEndedState;
 
-      expect(
-        reconstructed.identity.workflow_id,
-        direct.identity.workflow_id,
-      );
+      expect(reconstructed.identity.workflow_id, direct.identity.workflow_id);
 
-      expect(
-        reconstructed.identity.os_user_id,
-        direct.identity.os_user_id,
-      );
+      expect(reconstructed.identity.os_user_id, direct.identity.os_user_id);
 
-      expect(
-        reconstructed.identity.target_id,
-        direct.identity.target_id,
-      );
+      expect(reconstructed.identity.target_id, direct.identity.target_id);
 
-      expect(
-        reconstructed.identity.root.value,
-        direct.identity.root.value,
-      );
+      expect(reconstructed.identity.root.value, direct.identity.root.value);
     });
 
     test('repeating replay is deterministic', () {
@@ -353,19 +319,14 @@ void main() {
         second_ended.identity.workflow_id,
       );
 
-      expect(
-        first_ended.identity.root.value,
-        second_ended.identity.root.value,
-      );
+      expect(first_ended.identity.root.value, second_ended.identity.root.value);
     });
 
     test('rejects contradictory history with event index', () {
       final events = <WorkflowEvent>[
         _start_event(),
         WorkflowStartedEvent(
-          identity: _create_identity(
-            root: '/different-root',
-          ),
+          identity: _create_identity(root: '/different-root'),
         ),
       ];
 
@@ -373,11 +334,7 @@ void main() {
         () => machine.replay(events),
         throwsA(
           isA<WorkflowReplayException>()
-              .having(
-                (error) => error.event_index,
-                'event_index',
-                1,
-              )
+              .having((error) => error.event_index, 'event_index', 1)
               .having(
                 (error) => error.cause.code,
                 'cause.code',
@@ -401,11 +358,7 @@ void main() {
         () => machine.replay(events),
         throwsA(
           isA<WorkflowReplayException>()
-              .having(
-                (error) => error.event_index,
-                'event_index',
-                0,
-              )
+              .having((error) => error.event_index, 'event_index', 0)
               .having(
                 (error) => error.cause.code,
                 'cause.code',
@@ -416,20 +369,13 @@ void main() {
     });
 
     test('rejects history containing events after termination', () {
-      final events = <WorkflowEvent>[
-        ..._valid_history(),
-        _start_event(),
-      ];
+      final events = <WorkflowEvent>[..._valid_history(), _start_event()];
 
       expect(
         () => machine.replay(events),
         throwsA(
           isA<WorkflowReplayException>()
-              .having(
-                (error) => error.event_index,
-                'event_index',
-                3,
-              )
+              .having((error) => error.event_index, 'event_index', 3)
               .having(
                 (error) => error.cause.code,
                 'cause.code',
@@ -440,20 +386,13 @@ void main() {
     });
 
     test('rejects unsupported events during replay', () {
-      final events = <WorkflowEvent>[
-        _start_event(),
-        _UnknownWorkflowEvent(),
-      ];
+      final events = <WorkflowEvent>[_start_event(), _UnknownWorkflowEvent()];
 
       expect(
         () => machine.replay(events),
         throwsA(
           isA<WorkflowReplayException>()
-              .having(
-                (error) => error.event_index,
-                'event_index',
-                1,
-              )
+              .having((error) => error.event_index, 'event_index', 1)
               .having(
                 (error) => error.cause.code,
                 'cause.code',
@@ -472,10 +411,7 @@ WorkflowStartEvent _start_event({
   String target_id = 'local-macos',
   String root = '/Users/example/Downloads',
 }) {
-  return WorkflowStartEvent(
-    target_id: target_id,
-    root: TargetPath(root),
-  );
+  return WorkflowStartEvent(target_id: target_id, root: TargetPath(root));
 }
 
 /// Creates an established workflow identity for test fixtures.
@@ -505,9 +441,7 @@ WorkflowStartRequestedState _requested_state() {
 }
 
 /// Creates a valid active workflow state.
-WorkflowActiveState _active_state({
-  WorkflowIdentity? identity,
-}) {
+WorkflowActiveState _active_state({WorkflowIdentity? identity}) {
   return WorkflowActiveState(
     identity: identity ?? _create_identity(),
     version: 2,
@@ -516,10 +450,7 @@ WorkflowActiveState _active_state({
 
 /// Creates a valid terminal workflow state.
 WorkflowEndedState _ended_state() {
-  return WorkflowEndedState(
-    identity: _create_identity(),
-    version: 3,
-  );
+  return WorkflowEndedState(identity: _create_identity(), version: 3);
 }
 
 /// Creates a complete, valid workflow event history.
@@ -528,12 +459,8 @@ WorkflowEndedState _ended_state() {
 List<WorkflowEvent> _valid_history() {
   return [
     _start_event(),
-    WorkflowStartedEvent(
-      identity: _create_identity(),
-    ),
-    WorkflowEndedEvent(
-      workflow_id: 'workflow-1',
-    ),
+    WorkflowStartedEvent(identity: _create_identity()),
+    WorkflowEndedEvent(workflow_id: 'workflow-1'),
   ];
 }
 
@@ -548,27 +475,12 @@ void _expect_transition_error(
   WorkflowTransitionErrorCode code,
 ) {
   expect(
-    () => machine.transition(
-      state: state,
-      event: event,
-    ),
+    () => machine.transition(state: state, event: event),
     throwsA(
       isA<WorkflowTransitionException>()
-          .having(
-            (error) => error.code,
-            'code',
-            code,
-          )
-          .having(
-            (error) => error.state,
-            'state',
-            same(state),
-          )
-          .having(
-            (error) => error.event,
-            'event',
-            same(event),
-          ),
+          .having((error) => error.code, 'code', code)
+          .having((error) => error.state, 'state', same(state))
+          .having((error) => error.event, 'event', same(event)),
     ),
   );
 }

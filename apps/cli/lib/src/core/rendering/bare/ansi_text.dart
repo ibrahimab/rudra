@@ -62,9 +62,7 @@ final class AnsiText {
   /// determining that the destination supports it.
   ///
   /// Construction performs no terminal or filesystem I/O.
-  const AnsiText({
-    this.enabled = false,
-  });
+  const AnsiText({this.enabled = false});
 
   /// Whether ANSI styling is permitted.
   ///
@@ -111,10 +109,7 @@ final class AnsiText {
   ///   ),
   /// );
   /// ```
-  String format(
-    String value, {
-    required TerminalStyle style,
-  }) {
+  String format(String value, {required TerminalStyle style}) {
     // Sanitization must precede generation of ANSI codes.
     // Already-styled strings must not be passed as input.
     final safe_text = TerminalText.sanitize(value);
@@ -133,9 +128,7 @@ final class AnsiText {
       codes.add(_reverse_code);
     }
 
-    final foreground_code = _foreground_code(
-      style.foreground,
-    );
+    final foreground_code = _foreground_code(style.foreground);
 
     if (foreground_code != null) {
       codes.add(foreground_code);

@@ -44,9 +44,9 @@ final class FilesystemMetadata {
     DateTime? accessed_at,
     this.identity,
     this.permissions,
-  })  : created_at = created_at?.toUtc(),
-        modified_at = modified_at?.toUtc(),
-        accessed_at = accessed_at?.toUtc() {
+  }) : created_at = created_at?.toUtc(),
+       modified_at = modified_at?.toUtc(),
+       accessed_at = accessed_at?.toUtc() {
     if (logical_size_bytes != null && logical_size_bytes! < 0) {
       throw ArgumentError.value(
         logical_size_bytes,

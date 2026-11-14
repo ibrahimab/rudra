@@ -80,9 +80,7 @@ abstract interface class TargetInspector {
   ///   TargetInspectionFeature.allocatedSize,
   /// );
   /// ```
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  );
+  Future<TargetCapabilities> capabilities_for(TargetPath path);
 
   /// Inspects a single filesystem entry at [path].
   ///
@@ -116,9 +114,7 @@ abstract interface class TargetInspector {
   ///
   /// print(entry.metadata.logical_size_bytes);
   /// ```
-  Future<FilesystemEntry> inspect(
-    TargetPath path,
-  );
+  Future<FilesystemEntry> inspect(TargetPath path);
 
   /// Lazily enumerates the immediate children of a directory.
   ///
@@ -166,9 +162,7 @@ abstract interface class TargetInspector {
   ///   print(entry.kind);
   /// }
   /// ```
-  Stream<TargetPath> list_directory(
-    TargetPath path,
-  );
+  Stream<TargetPath> list_directory(TargetPath path);
 
   /// Reads the raw stored destination of a symbolic link.
   ///
@@ -196,7 +190,5 @@ abstract interface class TargetInspector {
   ///
   /// print(destination.value);
   /// ```
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  );
+  Future<TargetPath> read_symbolic_link(TargetPath path);
 }

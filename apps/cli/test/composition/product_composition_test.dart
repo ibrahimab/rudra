@@ -22,10 +22,7 @@ void main() {
       if (Platform.isMacOS) {
         expect(composition, isNotNull);
 
-        expect(
-          composition!.sdk.target_id,
-          'local-macos',
-        );
+        expect(composition!.sdk.target_id, 'local-macos');
 
         expect(
           composition.working_directory.value,
@@ -40,28 +37,17 @@ void main() {
       final inspector = _RecordingInspector();
 
       final composition = ProductSdkComposition(
-        sdk: RudraSdk(
-          target_id: 'test-target',
-          inspector: inspector,
-        ),
+        sdk: RudraSdk(target_id: 'test-target', inspector: inspector),
         working_directory: TargetPath('/fixture'),
       );
 
-      final cli = RudraCli.product(
-        target_composition: composition,
-      );
+      final cli = RudraCli.product(target_composition: composition);
 
-      expect(
-        cli.command_names,
-        containsAll(['about', 'ls']),
-      );
+      expect(cli.command_names, containsAll(['about', 'ls']));
 
       expect(
         cli.module_ids,
-        containsAll([
-          'rudra.product.about',
-          'rudra.product.filesystem',
-        ]),
+        containsAll(['rudra.product.about', 'rudra.product.filesystem']),
       );
 
       // Application composition must not inspect anything.
@@ -75,23 +61,16 @@ void main() {
       final file = FilesystemEntry(
         path: TargetPath('/fixture/example.txt'),
         kind: FilesystemEntryKind.regularFile,
-        metadata: FilesystemMetadata(
-          logical_size_bytes: 2048,
-        ),
+        metadata: FilesystemMetadata(logical_size_bytes: 2048),
       );
 
       final inspector = _RecordingInspector(
         children: [file.path],
-        entries: {
-          file.path.value: file,
-        },
+        entries: {file.path.value: file},
       );
 
       final composition = ProductSdkComposition(
-        sdk: RudraSdk(
-          target_id: 'test-target',
-          inspector: inspector,
-        ),
+        sdk: RudraSdk(target_id: 'test-target', inspector: inspector),
         working_directory: directory,
       );
 
@@ -108,15 +87,9 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        inspector.listed_directories,
-        [same(directory)],
-      );
+      expect(inspector.listed_directories, [same(directory)]);
 
-      expect(
-        inspector.inspected_paths,
-        [same(file.path)],
-      );
+      expect(inspector.inspected_paths, [same(file.path)]);
 
       expect(
         output.toString(),
@@ -135,25 +108,14 @@ void main() {
         working_directory: TargetPath('/fixture'),
       );
 
-      final cli = RudraCli.product(
-        target_composition: composition,
-      );
+      final cli = RudraCli.product(target_composition: composition);
 
       expect(cli.command_names, contains('about'));
       expect(cli.command_names, contains('ls'));
 
       // Development commands must remain excluded.
-      for (final name in [
-        'check',
-        'test',
-        'format',
-        'analyze',
-        'build',
-      ]) {
-        expect(
-          cli.command_names,
-          isNot(contains(name)),
-        );
+      for (final name in ['check', 'test', 'format', 'analyze', 'build']) {
+        expect(cli.command_names, isNot(contains(name)));
       }
     });
   });
@@ -178,15 +140,9 @@ void main() {
           //
           // This uses the exact production composition that
           // the CLI executable uses on macOS.
-          final cli = RudraCli.product(
-            output: output,
-            error_output: errors,
-          );
+          final cli = RudraCli.product(output: output, error_output: errors);
 
-          final status = await cli.run([
-            'ls',
-            fixture.path,
-          ]);
+          final status = await cli.run(['ls', fixture.path]);
 
           expect(status, RudraExitCode.success.value);
 
@@ -224,8 +180,8 @@ final class _RecordingInspector implements TargetInspector {
   _RecordingInspector({
     List<TargetPath> children = const [],
     Map<String, FilesystemEntry> entries = const {},
-  })  : _children = List<TargetPath>.unmodifiable(children),
-        _entries = Map<String, FilesystemEntry>.unmodifiable(entries);
+  }) : _children = List<TargetPath>.unmodifiable(children),
+       _entries = Map<String, FilesystemEntry>.unmodifiable(entries);
 
   /// Immediate children exposed by directory enumeration.
   final List<TargetPath> _children;
@@ -262,9 +218,7 @@ final class _RecordingInspector implements TargetInspector {
     final entry = _entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'No test entry configured for ${path.value}',
-      );
+      throw StateError('No test entry configured for ${path.value}');
     }
 
     return entry;
@@ -272,21 +226,13 @@ final class _RecordingInspector implements TargetInspector {
 
   /// Rejects unexpected capability discovery.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
-    throw StateError(
-      'Unexpected capabilities_for call: ${path.value}',
-    );
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
+    throw StateError('Unexpected capabilities_for call: ${path.value}');
   }
 
   /// Rejects unexpected symbolic-link destination requests.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
-    throw StateError(
-      'Unexpected read_symbolic_link call: ${path.value}',
-    );
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
+    throw StateError('Unexpected read_symbolic_link call: ${path.value}');
   }
 }

@@ -20,8 +20,8 @@ final class WorkflowStartRequestedState extends WorkflowState {
     required String target_id,
     required this.root,
     required int version,
-  })  : target_id = _require_target_id(target_id),
-        version = WorkflowState.require_positive_version(version);
+  }) : target_id = _require_target_id(target_id),
+       version = WorkflowState.require_positive_version(version);
 
   /// Requested configured filesystem target.
   final String target_id;

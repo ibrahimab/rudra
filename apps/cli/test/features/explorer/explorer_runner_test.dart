@@ -28,9 +28,7 @@ void main() {
         children: {
           '/root': ['/root/docs'],
         },
-        entries: [
-          _entry('/root/docs', FilesystemEntryKind.directory),
-        ],
+        entries: [_entry('/root/docs', FilesystemEntryKind.directory)],
         keys: 'q',
       );
 
@@ -40,10 +38,7 @@ void main() {
       expect(scenario.inspector.listed, ['/root']);
       expect(scenario.renderer.frames, hasLength(1));
 
-      expect(
-        scenario.renderer.frames.single.header.current_directory,
-        '/root',
-      );
+      expect(scenario.renderer.frames.single.header.current_directory, '/root');
 
       expect(
         scenario.renderer.frames.single.directory.visible_rows.single.name,
@@ -72,16 +67,11 @@ void main() {
       expect(scenario.inspector.listed, ['/root']);
 
       expect(
-        scenario.renderer.frames.map(
-          (frame) => frame.directory.selected_index,
-        ),
+        scenario.renderer.frames.map((frame) => frame.directory.selected_index),
         orderedEquals([0, 1, 0]),
       );
 
-      expect(
-        scenario.inspector.inspected,
-        hasLength(2),
-      );
+      expect(scenario.inspector.inspected, hasLength(2));
     });
 
     test('enters directories and navigates back', () async {
@@ -92,10 +82,7 @@ void main() {
         },
         entries: [
           _entry('/root/docs', FilesystemEntryKind.directory),
-          _entry(
-            '/root/docs/readme.md',
-            FilesystemEntryKind.regularFile,
-          ),
+          _entry('/root/docs/readme.md', FilesystemEntryKind.regularFile),
         ],
         keys: '\r\x1B[Dq',
       );
@@ -106,22 +93,12 @@ void main() {
 
       expect(
         scenario.inspector.listed,
-        orderedEquals([
-          '/root',
-          '/root/docs',
-          '/root',
-        ]),
+        orderedEquals(['/root', '/root/docs', '/root']),
       );
 
       expect(
-        scenario.renderer.frames.map(
-          (frame) => frame.header.current_directory,
-        ),
-        orderedEquals([
-          '/root',
-          '/root/docs',
-          '/root',
-        ]),
+        scenario.renderer.frames.map((frame) => frame.header.current_directory),
+        orderedEquals(['/root', '/root/docs', '/root']),
       );
 
       expect(scenario.controller.model?.can_go_back, isFalse);
@@ -147,9 +124,7 @@ void main() {
       expect(scenario.inspector.capability_reads, 0);
 
       expect(
-        scenario.renderer.frames.map(
-          (frame) => frame.header.current_directory,
-        ),
+        scenario.renderer.frames.map((frame) => frame.header.current_directory),
         everyElement('/root'),
       );
 
@@ -165,9 +140,7 @@ void main() {
           '/root': ['/root/docs', blocked_path.value],
           '/root/docs': [],
         },
-        entries: [
-          _entry('/root/docs', FilesystemEntryKind.directory),
-        ],
+        entries: [_entry('/root/docs', FilesystemEntryKind.directory)],
         failures: {
           blocked_path.value: TargetInspectionException(
             code: TargetInspectionErrorCode.permissionDenied,
@@ -181,10 +154,7 @@ void main() {
 
       final status = await scenario.runner.run();
 
-      expect(
-        status,
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(status, RudraExitCode.inspection_incomplete.value);
 
       expect(scenario.renderer.frames.first.directory.is_incomplete, isTrue);
 
@@ -207,9 +177,7 @@ void main() {
           '/root': ['/root/docs'],
           '/root/docs': [blocked_path.value],
         },
-        entries: [
-          _entry('/root/docs', FilesystemEntryKind.directory),
-        ],
+        entries: [_entry('/root/docs', FilesystemEntryKind.directory)],
         failures: {
           blocked_path.value: TargetInspectionException(
             code: TargetInspectionErrorCode.permissionDenied,
@@ -226,9 +194,7 @@ void main() {
       expect(status, RudraExitCode.inspection_incomplete.value);
 
       expect(
-        scenario.renderer.frames.map(
-          (frame) => frame.directory.is_incomplete,
-        ),
+        scenario.renderer.frames.map((frame) => frame.directory.is_incomplete),
         orderedEquals([false, true, false]),
       );
     });
@@ -244,10 +210,7 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
       expect(scenario.renderer.frames.single.directory.is_empty, isTrue);
-      expect(
-        scenario.renderer.frames.single.directory.selected_index,
-        isNull,
-      );
+      expect(scenario.renderer.frames.single.directory.selected_index, isNull);
 
       expect(scenario.controller.model?.is_closed, isTrue);
       expect(scenario.terminal.restored, isTrue);
@@ -324,17 +287,12 @@ void main() {
         children: {
           '/root': ['/root/a.txt'],
         },
-        entries: [
-          _entry('/root/a.txt', FilesystemEntryKind.regularFile),
-        ],
+        entries: [_entry('/root/a.txt', FilesystemEntryKind.regularFile)],
         keys: 'q',
         rows: 7,
       );
 
-      expect(
-        await scenario.runner.run(),
-        RudraExitCode.success.value,
-      );
+      expect(await scenario.runner.run(), RudraExitCode.success.value);
 
       final frame = scenario.renderer.frames.single;
 
@@ -344,10 +302,7 @@ void main() {
     });
 
     test('rejects unsupported terminals without inspection', () async {
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-      );
+      final scenario = _Scenario(children: {'/root': []}, entries: []);
 
       scenario.terminal.interactive = false;
 
@@ -360,11 +315,7 @@ void main() {
     });
 
     test('rejects initially undersized terminals', () async {
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-        rows: 6,
-      );
+      final scenario = _Scenario(children: {'/root': []}, entries: [], rows: 6);
 
       final status = await scenario.runner.run();
 
@@ -374,17 +325,11 @@ void main() {
     });
 
     test('does not enter terminal mode when startup fails', () async {
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-      );
+      final scenario = _Scenario(children: {'/root': []}, entries: []);
 
       scenario.inspector.unexpected_directory = '/root';
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.terminal.invocations, 0);
       expect(scenario.controller.model, isNull);
@@ -396,18 +341,13 @@ void main() {
           '/root': ['/root/docs'],
           '/root/docs': [],
         },
-        entries: [
-          _entry('/root/docs', FilesystemEntryKind.directory),
-        ],
+        entries: [_entry('/root/docs', FilesystemEntryKind.directory)],
         keys: '\r',
       );
 
       scenario.inspector.unexpected_directory = '/root/docs';
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.current_directory.value, '/root');
@@ -415,17 +355,11 @@ void main() {
     });
 
     test('restores terminal after rendering failure', () async {
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-      );
+      final scenario = _Scenario(children: {'/root': []}, entries: []);
 
       scenario.renderer.fail_render = true;
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.is_closed, isTrue);
@@ -435,15 +369,10 @@ void main() {
       final scenario = _Scenario(
         children: {'/root': []},
         entries: [],
-        source: Stream<List<int>>.error(
-          StateError('Injected input failure.'),
-        ),
+        source: Stream<List<int>>.error(StateError('Injected input failure.')),
       );
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.is_closed, isTrue);
@@ -454,9 +383,7 @@ void main() {
         children: {'/root': []},
         entries: [],
         source: Stream<List<int>>.error(
-          const ExplorerTerminalInterrupted(
-            ExplorerTerminalSignal.terminate,
-          ),
+          const ExplorerTerminalInterrupted(ExplorerTerminalSignal.terminate),
         ),
       );
 
@@ -474,9 +401,7 @@ void main() {
         children: {
           '/root': ['/root/a.txt'],
         },
-        entries: [
-          _entry('/root/a.txt', FilesystemEntryKind.regularFile),
-        ],
+        entries: [_entry('/root/a.txt', FilesystemEntryKind.regularFile)],
         keys: '\x1B[B',
       );
 
@@ -484,10 +409,7 @@ void main() {
         scenario.terminal.rows = 5;
       };
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.terminal.restored, isTrue);
     });
@@ -499,15 +421,9 @@ void main() {
         keys: 'q',
       );
 
-      expect(
-        await scenario.runner.run(),
-        RudraExitCode.success.value,
-      );
+      expect(await scenario.runner.run(), RudraExitCode.success.value);
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.inspector.listed, ['/root']);
       expect(scenario.terminal.invocations, 1);
@@ -516,11 +432,7 @@ void main() {
     test('allocates viewport rows using renderer layout height', () async {
       final scenario = _Scenario(
         children: {
-          '/root': [
-            '/root/a.txt',
-            '/root/b.txt',
-            '/root/c.txt',
-          ],
+          '/root': ['/root/a.txt', '/root/b.txt', '/root/c.txt'],
         },
         entries: [
           _entry('/root/a.txt', FilesystemEntryKind.regularFile),
@@ -535,10 +447,7 @@ void main() {
       // The runner must not assume the previous six-row value.
       scenario.renderer.fixed_rows = 8;
 
-      expect(
-        await scenario.runner.run(),
-        RudraExitCode.success.value,
-      );
+      expect(await scenario.runner.run(), RudraExitCode.success.value);
 
       final frame = scenario.renderer.frames.single;
 
@@ -550,17 +459,11 @@ void main() {
     });
 
     test('rejects negative renderer height before inspection', () async {
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-      );
+      final scenario = _Scenario(children: {'/root': []}, entries: []);
 
       scenario.renderer.fixed_rows = -1;
 
-      await expectLater(
-        scenario.runner.run(),
-        throwsStateError,
-      );
+      await expectLater(scenario.runner.run(), throwsStateError);
 
       expect(scenario.inspector.listed, isEmpty);
       expect(scenario.terminal.invocations, 0);
@@ -584,17 +487,12 @@ final class _Scenario {
   }) {
     inspector = _Inspector(
       children: children,
-      entries: {
-        for (final entry in entries) entry.path.value: entry,
-      },
+      entries: {for (final entry in entries) entry.path.value: entry},
       failures: failures,
     );
 
     terminal = _FakeTerminalHost(
-      source: source ??
-          Stream<List<int>>.fromIterable([
-            ascii.encode(keys),
-          ]),
+      source: source ?? Stream<List<int>>.fromIterable([ascii.encode(keys)]),
       rows: rows,
     );
 
@@ -602,10 +500,7 @@ final class _Scenario {
     errors = StringBuffer();
 
     controller = ExplorerController(
-      sdk: RudraSdk(
-        target_id: 'fixture-target',
-        inspector: inspector,
-      ),
+      sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
       starting_directory: TargetPath('/root'),
     );
 
@@ -646,9 +541,9 @@ final class _Inspector implements TargetInspector {
     required Map<String, List<String>> children,
     required Map<String, FilesystemEntry> entries,
     required Map<String, TargetInspectionException> failures,
-  })  : _children = children,
-        _entries = entries,
-        _failures = failures;
+  }) : _children = children,
+       _entries = entries,
+       _failures = failures;
 
   final Map<String, List<String>> _children;
   final Map<String, FilesystemEntry> _entries;
@@ -724,10 +619,8 @@ final class _Inspector implements TargetInspector {
 /// The actual Dart host has separate native lifecycle tests.
 final class _FakeTerminalHost implements ExplorerTerminalHost {
   /// Creates a terminal with injected input and dimensions.
-  _FakeTerminalHost({
-    required Stream<List<int>> source,
-    required this.rows,
-  }) : _source = source;
+  _FakeTerminalHost({required Stream<List<int>> source, required this.rows})
+    : _source = source;
 
   final Stream<List<int>> _source;
 
@@ -773,9 +666,7 @@ final class _FakeTerminalHost implements ExplorerTerminalHost {
 
   /// Runs an interaction with deterministic restoration.
   @override
-  Future<T> run_interactive<T>(
-    Future<T> Function() interaction,
-  ) async {
+  Future<T> run_interactive<T>(Future<T> Function() interaction) async {
     if (!interactive || _active) {
       throw StateError('Terminal interaction unavailable.');
     }
@@ -825,10 +716,7 @@ final class _RecordingRenderer implements ViewportRenderer<ExplorerViewModel> {
 }
 
 /// Creates one observed filesystem entry without native I/O.
-FilesystemEntry _entry(
-  String path,
-  FilesystemEntryKind kind,
-) {
+FilesystemEntry _entry(String path, FilesystemEntryKind kind) {
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,

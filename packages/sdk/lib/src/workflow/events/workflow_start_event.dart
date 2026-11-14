@@ -23,10 +23,7 @@ final class WorkflowStartEvent implements WorkflowCommandEvent {
   ///
   /// Throws [ArgumentError] if [target_id] is blank.
   /// The original target-native path is preserved.
-  WorkflowStartEvent({
-    required this.target_id,
-    required this.root,
-  }) {
+  WorkflowStartEvent({required this.target_id, required this.root}) {
     if (target_id.trim().isEmpty) {
       throw ArgumentError.value(
         target_id,

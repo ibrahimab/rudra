@@ -64,11 +64,11 @@ final class ExplorerRunner {
     required ViewportRenderer<ExplorerViewModel> renderer,
     required StringSink error_output,
     ExplorerPresenter presenter = const ExplorerPresenter(),
-  })  : _controller = controller,
-        _terminal = terminal,
-        _renderer = renderer,
-        _error_output = error_output,
-        _presenter = presenter;
+  }) : _controller = controller,
+       _terminal = terminal,
+       _renderer = renderer,
+       _error_output = error_output,
+       _presenter = presenter;
 
   /// Read-only navigation coordinator.
   final ExplorerController _controller;
@@ -109,9 +109,7 @@ final class ExplorerRunner {
     final fixed_rows = _renderer.fixed_rows;
 
     if (fixed_rows < 0) {
-      throw StateError(
-        'Explorer renderer reported a negative fixed height.',
-      );
+      throw StateError('Explorer renderer reported a negative fixed height.');
     }
 
     return fixed_rows + _terminal_safety_rows;
@@ -164,9 +162,7 @@ final class ExplorerRunner {
   /// No filesystem mutations or cleanup operations occur.
   Future<int> run() async {
     if (_has_started) {
-      throw StateError(
-        'ExplorerRunner supports only one invocation.',
-      );
+      throw StateError('ExplorerRunner supports only one invocation.');
     }
 
     _has_started = true;
@@ -227,9 +223,7 @@ final class ExplorerRunner {
 
         render_current();
 
-        final input = TerminalInput(
-          source: _terminal.input_bytes,
-        );
+        final input = TerminalInput(source: _terminal.input_bytes);
 
         await for (final key in input.read_keys()) {
           if (key == ExplorerKey.quit) {

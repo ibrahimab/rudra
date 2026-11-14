@@ -28,9 +28,7 @@ void main() {
 
   group('WelcomePresenter', () {
     test('prepares the application title', () {
-      final model = WelcomeModel(
-        product_name: 'Rudra',
-      );
+      final model = WelcomeModel(product_name: 'Rudra');
 
       final result = presenter.present(model);
 
@@ -63,16 +61,11 @@ void main() {
         WelcomeModel(
           product_name: 'Rudra',
           target_id: 'local-windows',
-          starting_directory: TargetPath(
-            r'C:\Users\example',
-          ),
+          starting_directory: TargetPath(r'C:\Users\example'),
         ),
       );
 
-      expect(
-        result.target.starting_directory,
-        r'C:\Users\example',
-      );
+      expect(result.target.starting_directory, r'C:\Users\example');
     });
 
     test('creates a detailed filesystem view model', () {
@@ -82,22 +75,14 @@ void main() {
           FilesystemEntryKind.regularFile,
           bytes: 1024,
         ),
-        _entry(
-          '/fixture/docs',
-          FilesystemEntryKind.directory,
-        ),
+        _entry('/fixture/docs', FilesystemEntryKind.directory),
       ]);
 
-      final result = presenter.present(
-        _welcome_model(listing: listing),
-      );
+      final result = presenter.present(_welcome_model(listing: listing));
 
       final directory = result.filesystem!;
 
-      expect(
-        directory.listing.layout,
-        DirectoryListingLayout.detailed,
-      );
+      expect(directory.listing.layout, DirectoryListingLayout.detailed);
 
       expect(directory.listing.target_id, 'fixture-target');
       expect(directory.listing.directory_path, '/fixture');
@@ -106,19 +91,13 @@ void main() {
       // Detailed presentation sorts directories first.
       expect(
         directory.listing.rows.map((row) => row.name),
-        orderedEquals([
-          'docs/',
-          'readme.txt',
-        ]),
+        orderedEquals(['docs/', 'readme.txt']),
       );
 
       expect(directory.listing.rows.last.size_label, '1.0 KiB');
 
       // The original SDK observation remains unchanged.
-      expect(
-        listing.entries.first.path.value,
-        '/fixture/readme.txt',
-      );
+      expect(listing.entries.first.path.value, '/fixture/readme.txt');
     });
 
     test('preserves incomplete inspection results', () {
@@ -130,19 +109,12 @@ void main() {
       );
 
       final listing = _listing(
-        [
-          _entry(
-            '/fixture/visible.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
+        [_entry('/fixture/visible.txt', FilesystemEntryKind.regularFile)],
         is_complete: false,
         issues: [issue],
       );
 
-      final result = presenter.present(
-        _welcome_model(listing: listing),
-      );
+      final result = presenter.present(_welcome_model(listing: listing));
 
       expect(result.has_incomplete_listing, isTrue);
 
@@ -163,12 +135,7 @@ void main() {
 
     test('preserves incomplete results without issues', () {
       final result = presenter.present(
-        _welcome_model(
-          listing: _listing(
-            [],
-            is_complete: false,
-          ),
-        ),
+        _welcome_model(listing: _listing([], is_complete: false)),
       );
 
       expect(result.has_incomplete_listing, isTrue);
@@ -177,9 +144,7 @@ void main() {
     });
 
     test('does not report absent listings as complete', () {
-      final result = presenter.present(
-        _welcome_model(),
-      );
+      final result = presenter.present(_welcome_model());
 
       expect(result.filesystem, isNull);
       expect(result.has_incomplete_listing, isFalse);
@@ -188,10 +153,7 @@ void main() {
     test('produces deterministic presentation data', () {
       final model = _welcome_model(
         listing: _listing([
-          _entry(
-            '/fixture/example.txt',
-            FilesystemEntryKind.regularFile,
-          ),
+          _entry('/fixture/example.txt', FilesystemEntryKind.regularFile),
         ]),
       );
 
@@ -203,9 +165,7 @@ void main() {
 
       expect(
         first.filesystem!.listing.rows.map((row) => row.path),
-        orderedEquals(
-          second.filesystem!.listing.rows.map((row) => row.path),
-        ),
+        orderedEquals(second.filesystem!.listing.rows.map((row) => row.path)),
       );
     });
   });
@@ -214,9 +174,7 @@ void main() {
     test('rejects blank product titles', () {
       for (final title in ['', ' ', '\t', '\n']) {
         expect(
-          () => WelcomeHeaderViewModel(
-            product_title: title,
-          ),
+          () => WelcomeHeaderViewModel(product_title: title),
           throwsArgumentError,
         );
       }
@@ -224,16 +182,12 @@ void main() {
 
     test('requires target and starting directory together', () {
       expect(
-        () => WelcomeTargetViewModel(
-          target_id: 'fixture-target',
-        ),
+        () => WelcomeTargetViewModel(target_id: 'fixture-target'),
         throwsArgumentError,
       );
 
       expect(
-        () => WelcomeTargetViewModel(
-          starting_directory: '/fixture',
-        ),
+        () => WelcomeTargetViewModel(starting_directory: '/fixture'),
         throwsArgumentError,
       );
     });
@@ -258,9 +212,7 @@ void main() {
 
     test('rejects blank safety statements', () {
       expect(
-        () => WelcomeFooterViewModel(
-          safety_statement: ' ',
-        ),
+        () => WelcomeFooterViewModel(safety_statement: ' '),
         throwsArgumentError,
       );
     });
@@ -309,17 +261,13 @@ void main() {
 
     test('rejects command hints inconsistent with the target', () {
       expect(
-        () => _welcome_view_model(
-          show_filesystem_commands: false,
-        ),
+        () => _welcome_view_model(show_filesystem_commands: false),
         throwsArgumentError,
       );
     });
 
     test('accepts matching detailed filesystem presentation', () {
-      final model = _welcome_view_model(
-        filesystem: _directory_view_model(),
-      );
+      final model = _welcome_view_model(filesystem: _directory_view_model());
 
       expect(model.can_inspect, isTrue);
       expect(model.filesystem, isNotNull);
@@ -358,9 +306,7 @@ WelcomeViewModel _welcome_view_model({
   );
 
   return WelcomeViewModel(
-    header: WelcomeHeaderViewModel(
-      product_title: 'RUDRA',
-    ),
+    header: WelcomeHeaderViewModel(product_title: 'RUDRA'),
     target: target,
     commands: WelcomeCommandsViewModel(
       show_filesystem_commands: show_filesystem_commands ?? target.can_inspect,
@@ -377,9 +323,7 @@ WelcomeViewModel _welcome_view_model({
 ///
 /// The directory and target identifiers match the SDK
 /// observation fixtures used by this test suite.
-WelcomeModel _welcome_model({
-  DirectoryListing? listing,
-}) {
+WelcomeModel _welcome_model({DirectoryListing? listing}) {
   return WelcomeModel(
     product_name: 'Rudra',
     target_id: 'fixture-target',
@@ -409,17 +353,11 @@ DirectoryListing _listing(
 /// Constructs one filesystem entry with optional logical size.
 ///
 /// Missing metadata is represented explicitly as unknown.
-FilesystemEntry _entry(
-  String path,
-  FilesystemEntryKind kind, {
-  int? bytes,
-}) {
+FilesystemEntry _entry(String path, FilesystemEntryKind kind, {int? bytes}) {
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,
-    metadata: FilesystemMetadata(
-      logical_size_bytes: bytes,
-    ),
+    metadata: FilesystemMetadata(logical_size_bytes: bytes),
   );
 }
 

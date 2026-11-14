@@ -21,9 +21,7 @@ import 'package:test/test.dart';
 void main() {
   group('ExplorerScreen', () {
     test('derives fixed height from its child widgets', () {
-      final view_model = _view_model(
-        visible_row_limit: 2,
-      );
+      final view_model = _view_model(visible_row_limit: 2);
 
       final header = ExplorerHeader(view_model.header);
       final directory = ExplorerDirectory(view_model.directory);
@@ -35,10 +33,7 @@ void main() {
         header.height + ExplorerDirectory.heading_rows + footer.height,
       );
 
-      expect(
-        screen.height,
-        header.height + directory.height + footer.height,
-      );
+      expect(screen.height, header.height + directory.height + footer.height);
 
       expect(
         screen.height,
@@ -47,15 +42,9 @@ void main() {
     });
 
     test('composes children in the expected order', () {
-      final screen = ExplorerScreen(
-        _view_model(visible_row_limit: 2),
-      );
+      final screen = ExplorerScreen(_view_model(visible_row_limit: 2));
 
-      final lines = screen
-          .build(
-            TerminalConstraints(columns: 80),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints(columns: 80)).toList();
 
       expect(lines, hasLength(screen.height));
 
@@ -72,9 +61,7 @@ void main() {
     });
 
     test('supports a zero-height entry viewport', () {
-      final view_model = _view_model(
-        visible_row_limit: 0,
-      );
+      final view_model = _view_model(visible_row_limit: 0);
 
       final directory = ExplorerDirectory(view_model.directory);
       final screen = ExplorerScreen(view_model);
@@ -82,19 +69,13 @@ void main() {
       expect(directory.height, ExplorerDirectory.heading_rows);
       expect(screen.height, ExplorerScreen.fixed_rows);
 
-      final lines = screen
-          .build(
-            TerminalConstraints(columns: 80),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints(columns: 80)).toList();
 
       expect(lines, hasLength(ExplorerScreen.fixed_rows));
 
       // No entry placeholder is emitted without an entry row.
       expect(
-        lines.any(
-          (line) => line.text.contains('(empty directory)'),
-        ),
+        lines.any((line) => line.text.contains('(empty directory)')),
         isFalse,
       );
     });
@@ -107,9 +88,7 @@ void main() {
         terminal_columns: () => 80,
       );
 
-      final view_model = _view_model(
-        visible_row_limit: 2,
-      );
+      final view_model = _view_model(visible_row_limit: 2);
 
       expect(renderer.fixed_rows, ExplorerScreen.fixed_rows);
 
@@ -118,10 +97,7 @@ void main() {
       final rendered_lines = output.toString().split('\n');
 
       // The final split item represents the trailing newline.
-      expect(
-        rendered_lines.length,
-        ExplorerScreen.fixed_rows + 2 + 1,
-      );
+      expect(rendered_lines.length, ExplorerScreen.fixed_rows + 2 + 1);
 
       expect(rendered_lines.first, contains('RUDRA / EXPLORER'));
       expect(rendered_lines[1], 'Directory: /fixture');

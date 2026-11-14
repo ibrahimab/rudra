@@ -69,10 +69,10 @@ final class ListCommand extends Command<int> {
     required TargetPath working_directory,
     required Renderer<FilesystemViewModel> renderer,
     DirectoryListingPresenter presenter = const DirectoryListingPresenter(),
-  })  : _sdk = sdk,
-        _working_directory = working_directory,
-        _renderer = renderer,
-        _presenter = presenter;
+  }) : _sdk = sdk,
+       _working_directory = working_directory,
+       _renderer = renderer,
+       _presenter = presenter;
 
   /// Command identifier used by the CLI argument parser.
   @override
@@ -131,26 +131,19 @@ final class ListCommand extends Command<int> {
     final arguments = argResults?.rest ?? const <String>[];
 
     if (arguments.length > 1) {
-      throw UsageException(
-        'Expected at most one directory argument.',
-        usage,
-      );
+      throw UsageException('Expected at most one directory argument.', usage);
     }
 
     if (arguments.isNotEmpty && arguments.single.isEmpty) {
-      throw UsageException(
-        'The directory argument must not be empty.',
-        usage,
-      );
+      throw UsageException('The directory argument must not be empty.', usage);
     }
 
-    final directory =
-        arguments.isEmpty ? _working_directory : TargetPath(arguments.single);
+    final directory = arguments.isEmpty
+        ? _working_directory
+        : TargetPath(arguments.single);
 
     // Only the SDK performs filesystem inspection.
-    final listing = await _sdk.filesystem.list(
-      directory: directory,
-    );
+    final listing = await _sdk.filesystem.list(directory: directory);
 
     // Preserve the established compact listing format.
     final view_model = _presenter.present(

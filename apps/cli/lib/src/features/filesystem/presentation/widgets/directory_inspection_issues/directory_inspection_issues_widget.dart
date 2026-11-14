@@ -61,9 +61,7 @@ final class DirectoryInspectionIssuesWidget implements TerminalWidget {
   ///
   /// The widget performs no terminal or filesystem I/O.
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     for (final issue in view_model.issues) {
       yield TerminalLine(
         '${issue.operation}: '

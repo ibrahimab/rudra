@@ -21,10 +21,7 @@ void main() {
     test('registers ls without inspecting the filesystem', () {
       final inspector = _FakeTargetInspector();
 
-      final sdk = RudraSdk(
-        target_id: 'local-macos',
-        inspector: inspector,
-      );
+      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
 
       final cli = RudraCli();
 
@@ -41,10 +38,7 @@ void main() {
 
       expect(cli.command_names, contains('ls'));
 
-      expect(
-        cli.module_ids,
-        contains('rudra.product.filesystem'),
-      );
+      expect(cli.module_ids, contains('rudra.product.filesystem'));
 
       expect(inspector.listed_directories, isEmpty);
       expect(inspector.inspected_paths, isEmpty);
@@ -63,9 +57,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
       );
 
       final output = StringBuffer();
@@ -82,15 +74,9 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        inspector.listed_directories,
-        [same(directory)],
-      );
+      expect(inspector.listed_directories, [same(directory)]);
 
-      expect(
-        inspector.inspected_paths,
-        [same(entry.path)],
-      );
+      expect(inspector.inspected_paths, [same(entry.path)]);
 
       expect(
         output.toString(),
@@ -113,17 +99,11 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      final status = await cli.run([
-        'ls',
-        requested_directory,
-      ]);
+      final status = await cli.run(['ls', requested_directory]);
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        inspector.listed_directories.single.value,
-        requested_directory,
-      );
+      expect(inspector.listed_directories.single.value, requested_directory);
     });
 
     test('renders unknown logical sizes explicitly', () async {
@@ -134,9 +114,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
       );
 
       final output = StringBuffer();
@@ -177,16 +155,9 @@ void main() {
       );
 
       final inspector = _FakeTargetInspector(
-        children: [
-          successful_entry.path,
-          failed_path,
-        ],
-        entries: {
-          successful_entry.path.value: successful_entry,
-        },
-        inspection_failures: {
-          failed_path.value: failure,
-        },
+        children: [successful_entry.path, failed_path],
+        entries: {successful_entry.path.value: successful_entry},
+        inspection_failures: {failed_path.value: failure},
       );
 
       final output = StringBuffer();
@@ -201,10 +172,7 @@ void main() {
 
       final status = await cli.run(['ls']);
 
-      expect(
-        status,
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(status, RudraExitCode.inspection_incomplete.value);
 
       expect(
         output.toString(),
@@ -228,9 +196,7 @@ void main() {
         message: 'Cannot enumerate directory.',
       );
 
-      final inspector = _FakeTargetInspector(
-        enumeration_failure: failure,
-      );
+      final inspector = _FakeTargetInspector(enumeration_failure: failure);
 
       final errors = StringBuffer();
 
@@ -243,10 +209,7 @@ void main() {
 
       final status = await cli.run(['ls']);
 
-      expect(
-        status,
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(status, RudraExitCode.inspection_incomplete.value);
 
       expect(errors.toString(), contains('listDirectory'));
       expect(errors.toString(), contains('permissionDenied'));
@@ -257,14 +220,9 @@ void main() {
       final inspector = _FakeTargetInspector();
       final diagnostics = StringBuffer();
 
-      final sdk = RudraSdk(
-        target_id: 'local-macos',
-        inspector: inspector,
-      );
+      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
 
-      final cli = RudraCli(
-        error_output: diagnostics,
-      );
+      final cli = RudraCli(error_output: diagnostics);
 
       cli.register_module(
         FilesystemCliModule(
@@ -277,11 +235,7 @@ void main() {
         ),
       );
 
-      final status = await cli.run([
-        'ls',
-        '/tmp/first',
-        '/tmp/second',
-      ]);
+      final status = await cli.run(['ls', '/tmp/first', '/tmp/second']);
 
       expect(status, RudraExitCode.invalid_usage.value);
       expect(diagnostics.isNotEmpty, isTrue);
@@ -292,9 +246,7 @@ void main() {
     });
 
     test('preserves Windows-native directory paths', () async {
-      final directory = TargetPath(
-        r'C:\Users\example',
-      );
+      final directory = TargetPath(r'C:\Users\example');
 
       final entry = _create_entry(
         r'C:\Users\example\file.txt',
@@ -303,9 +255,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
       );
 
       final output = StringBuffer();
@@ -322,22 +272,14 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        inspector.listed_directories.single.value,
-        r'C:\Users\example',
-      );
+      expect(inspector.listed_directories.single.value, r'C:\Users\example');
 
-      expect(
-        output.toString(),
-        contains(r'C:\Users\example\file.txt'),
-      );
+      expect(output.toString(), contains(r'C:\Users\example\file.txt'));
     });
 
     test('propagates unexpected SDK failures', () async {
       final inspector = _FakeTargetInspector(
-        unexpected_failure: StateError(
-          'Unexpected inspection failure',
-        ),
+        unexpected_failure: StateError('Unexpected inspection failure'),
       );
 
       final cli = _create_cli(
@@ -347,10 +289,7 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      await expectLater(
-        cli.run(['ls']),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(cli.run(['ls']), throwsA(isA<StateError>()));
     });
 
     test('renders through an injected renderer contract', () async {
@@ -364,9 +303,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
       );
 
       final renderer = _RecordingFilesystemRenderer();
@@ -387,15 +324,9 @@ void main() {
       expect(status, RudraExitCode.success.value);
 
       // Exactly one SDK listing is requested.
-      expect(
-        inspector.listed_directories,
-        [same(directory)],
-      );
+      expect(inspector.listed_directories, [same(directory)]);
 
-      expect(
-        inspector.inspected_paths,
-        [same(entry.path)],
-      );
+      expect(inspector.inspected_paths, [same(entry.path)]);
 
       // The controller uses the injected renderer rather
       // than constructing a concrete terminal backend.
@@ -403,10 +334,7 @@ void main() {
 
       final view_model = renderer.models.single;
 
-      expect(
-        view_model.listing.layout,
-        DirectoryListingLayout.compact,
-      );
+      expect(view_model.listing.layout, DirectoryListingLayout.compact);
 
       expect(view_model.listing.directory_path, '/fixture');
       expect(view_model.listing.target_id, 'local-macos');
@@ -445,16 +373,11 @@ RudraCli _create_cli({
   String target_id = 'local-macos',
   Renderer<FilesystemViewModel>? renderer,
 }) {
-  final sdk = RudraSdk(
-    target_id: target_id,
-    inspector: inspector,
-  );
+  final sdk = RudraSdk(target_id: target_id, inspector: inspector);
 
-  final filesystem_renderer = renderer ??
-      BareFilesystemRenderer(
-        output: output,
-        error_output: error_output,
-      );
+  final filesystem_renderer =
+      renderer ??
+      BareFilesystemRenderer(output: output, error_output: error_output);
 
   final cli = RudraCli();
 
@@ -480,9 +403,7 @@ FilesystemEntry _create_entry(
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,
-    metadata: FilesystemMetadata(
-      logical_size_bytes: logical_size_bytes,
-    ),
+    metadata: FilesystemMetadata(logical_size_bytes: logical_size_bytes),
   );
 }
 
@@ -531,12 +452,12 @@ final class _FakeTargetInspector implements TargetInspector {
     Map<String, TargetInspectionException> inspection_failures = const {},
     this.enumeration_failure,
     this.unexpected_failure,
-  })  : _children = List<TargetPath>.unmodifiable(children),
-        _entries = Map<String, FilesystemEntry>.unmodifiable(entries),
-        _inspection_failures =
-            Map<String, TargetInspectionException>.unmodifiable(
-          inspection_failures,
-        );
+  }) : _children = List<TargetPath>.unmodifiable(children),
+       _entries = Map<String, FilesystemEntry>.unmodifiable(entries),
+       _inspection_failures =
+           Map<String, TargetInspectionException>.unmodifiable(
+             inspection_failures,
+           );
 
   /// Paths supplied by directory enumeration.
   final List<TargetPath> _children;
@@ -598,9 +519,7 @@ final class _FakeTargetInspector implements TargetInspector {
     final entry = _entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'No fixture configured for ${path.value}',
-      );
+      throw StateError('No fixture configured for ${path.value}');
     }
 
     return entry;
@@ -608,23 +527,15 @@ final class _FakeTargetInspector implements TargetInspector {
 
   /// Rejects unexpected capability requests.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
-    throw StateError(
-      'Unexpected capabilities_for call: ${path.value}',
-    );
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
+    throw StateError('Unexpected capabilities_for call: ${path.value}');
   }
 
   /// Rejects unexpected symbolic-link destination requests.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
     symbolic_link_calls++;
 
-    throw StateError(
-      'Unexpected read_symbolic_link call: ${path.value}',
-    );
+    throw StateError('Unexpected read_symbolic_link call: ${path.value}');
   }
 }

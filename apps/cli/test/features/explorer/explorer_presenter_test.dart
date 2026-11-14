@@ -20,33 +20,16 @@ void main() {
           FilesystemEntryKind.regularFile,
           logical_bytes: 2048,
         ),
-        _entry(
-          '/fixture/apps',
-          FilesystemEntryKind.directory,
-        ),
-        _entry(
-          '/fixture/alpha.txt',
-          FilesystemEntryKind.regularFile,
-        ),
-        _entry(
-          '/fixture/link',
-          FilesystemEntryKind.symbolicLink,
-        ),
+        _entry('/fixture/apps', FilesystemEntryKind.directory),
+        _entry('/fixture/alpha.txt', FilesystemEntryKind.regularFile),
+        _entry('/fixture/link', FilesystemEntryKind.symbolicLink),
       ]);
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 10,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 10);
 
       expect(
         view_model.directory.visible_rows.map((row) => row.name),
-        orderedEquals([
-          'apps/',
-          'alpha.txt',
-          'link',
-          'zeta.txt',
-        ]),
+        orderedEquals(['apps/', 'alpha.txt', 'link', 'zeta.txt']),
       );
 
       expect(view_model.directory.selected_index, 0);
@@ -64,10 +47,7 @@ void main() {
     test('scrolls forward to retain the selected row', () {
       final model = _model(_six_entries()).with_selection(5);
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 2,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 2);
 
       expect(view_model.directory.first_visible_index, 4);
       expect(view_model.directory.selected_index, 5);
@@ -137,10 +117,7 @@ void main() {
     test('supports a zero-height entry viewport', () {
       final model = _model(_six_entries());
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 0,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 0);
 
       expect(view_model.directory.visible_rows, isEmpty);
       expect(view_model.directory.selected_index, 0);
@@ -153,19 +130,13 @@ void main() {
       final model = _model([]);
 
       expect(
-        () => presenter.present(
-          model,
-          visible_row_limit: -1,
-        ),
+        () => presenter.present(model, visible_row_limit: -1),
         throwsRangeError,
       );
     });
 
     test('distinguishes empty and incomplete directories', () {
-      final empty = presenter.present(
-        _model([]),
-        visible_row_limit: 10,
-      );
+      final empty = presenter.present(_model([]), visible_row_limit: 10);
 
       expect(empty.directory.is_empty, isTrue);
       expect(empty.directory.selected_index, isNull);
@@ -179,11 +150,7 @@ void main() {
       );
 
       final incomplete = presenter.present(
-        _model(
-          [],
-          is_complete: false,
-          issues: [issue],
-        ),
+        _model([], is_complete: false, issues: [issue]),
         visible_row_limit: 10,
       );
 
@@ -196,14 +163,8 @@ void main() {
         incomplete.footer.inspection_status,
         contains('1 inspection issue(s)'),
       );
-      expect(
-        incomplete.footer.inspection_status,
-        contains('permissionDenied'),
-      );
-      expect(
-        incomplete.footer.inspection_status,
-        contains('listDirectory'),
-      );
+      expect(incomplete.footer.inspection_status, contains('permissionDenied'));
+      expect(incomplete.footer.inspection_status, contains('listDirectory'));
     });
 
     test('retains partial observations and diagnostics', () {
@@ -215,20 +176,12 @@ void main() {
       );
 
       final model = _model(
-        [
-          _entry(
-            '/fixture/visible.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
+        [_entry('/fixture/visible.txt', FilesystemEntryKind.regularFile)],
         is_complete: false,
         issues: [issue],
       );
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 5,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 5);
 
       expect(view_model.directory.visible_rows.single.name, 'visible.txt');
       expect(view_model.directory.is_complete, isFalse);
@@ -237,30 +190,18 @@ void main() {
         view_model.footer.inspection_status,
         contains('1 inspection issue(s)'),
       );
-      expect(
-        view_model.footer.inspection_status,
-        contains('/fixture/private'),
-      );
+      expect(view_model.footer.inspection_status, contains('/fixture/private'));
     });
 
     test('preserves target-native paths without interpretation', () {
       const root = r'C:\workspace';
       const child_path = r'C:\workspace\src';
 
-      final model = _model(
-        [
-          _entry(
-            child_path,
-            FilesystemEntryKind.directory,
-          ),
-        ],
-        root: root,
-      );
+      final model = _model([
+        _entry(child_path, FilesystemEntryKind.directory),
+      ], root: root);
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 5,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 5);
 
       expect(model.root_directory.value, root);
       expect(view_model.header.current_directory, root);
@@ -270,20 +211,11 @@ void main() {
 
     test('retains row identity when entry paths are duplicated', () {
       final model = _model([
-        _entry(
-          '/fixture/same',
-          FilesystemEntryKind.regularFile,
-        ),
-        _entry(
-          '/fixture/same',
-          FilesystemEntryKind.directory,
-        ),
+        _entry('/fixture/same', FilesystemEntryKind.regularFile),
+        _entry('/fixture/same', FilesystemEntryKind.directory),
       ]).with_selection(1);
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 2,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 2);
 
       expect(
         view_model.directory.visible_rows.map((row) => row.type_label),
@@ -298,16 +230,10 @@ void main() {
       const unsafe_path = '/fixture/unsafe\x1B[31m';
 
       final model = _model([
-        _entry(
-          unsafe_path,
-          FilesystemEntryKind.regularFile,
-        ),
+        _entry(unsafe_path, FilesystemEntryKind.regularFile),
       ]);
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 1,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 1);
 
       // Renderer sanitization occurs before ANSI encoding.
       // Presentation does not change the observed path.
@@ -330,15 +256,9 @@ void main() {
     test('preserves the closed navigation state', () {
       final model = _model([]).close();
 
-      final view_model = presenter.present(
-        model,
-        visible_row_limit: 5,
-      );
+      final view_model = presenter.present(model, visible_row_limit: 5);
 
-      expect(
-        view_model.footer.navigation_hints,
-        'Explorer closed.',
-      );
+      expect(view_model.footer.navigation_hints, 'Explorer closed.');
       expect(model.can_go_back, isFalse);
     });
   });
@@ -355,9 +275,7 @@ FilesystemEntry _entry(
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,
-    metadata: FilesystemMetadata(
-      logical_size_bytes: logical_bytes,
-    ),
+    metadata: FilesystemMetadata(logical_size_bytes: logical_bytes),
   );
 }
 
@@ -392,9 +310,6 @@ ExplorerModel _model(
 List<FilesystemEntry> _six_entries() {
   return [
     for (final name in ['a', 'b', 'c', 'd', 'e', 'f'])
-      _entry(
-        '/fixture/$name.txt',
-        FilesystemEntryKind.regularFile,
-      ),
+      _entry('/fixture/$name.txt', FilesystemEntryKind.regularFile),
   ];
 }

@@ -21,10 +21,7 @@ void main() {
         root: TargetPath('/workspace'),
       );
 
-      final result = await manager.trigger(
-        event,
-        idempotency_key: 'request-1',
-      );
+      final result = await manager.trigger(event, idempotency_key: 'request-1');
 
       expect(result, same(receipt));
       expect(store.accepted_event, same(event));
@@ -33,9 +30,7 @@ void main() {
     });
 
     test('propagates submission failures', () async {
-      final manager = EventManager(
-        store: _FailingStore(),
-      );
+      final manager = EventManager(store: _FailingStore());
 
       await expectLater(
         manager.trigger(
@@ -64,10 +59,7 @@ void main() {
       );
 
       expect(
-        () => EventSubmissionReceipt(
-          event_id: 'event-1',
-          correlation_id: ' ',
-        ),
+        () => EventSubmissionReceipt(event_id: 'event-1', correlation_id: ' '),
         throwsArgumentError,
       );
     });

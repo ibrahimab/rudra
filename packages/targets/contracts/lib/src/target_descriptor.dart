@@ -46,9 +46,9 @@ final class TargetDescriptor {
     required String display_name,
     required this.platform,
     required Set<TargetCapability> capabilities,
-  })  : target_id = _require_non_blank(target_id, 'target_id'),
-        display_name = _require_non_blank(display_name, 'display_name'),
-        capabilities = Set<TargetCapability>.unmodifiable(capabilities);
+  }) : target_id = _require_non_blank(target_id, 'target_id'),
+       display_name = _require_non_blank(display_name, 'display_name'),
+       capabilities = Set<TargetCapability>.unmodifiable(capabilities);
 
   /// Unique identifier of this target within its configured registry.
   ///

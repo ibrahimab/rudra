@@ -151,10 +151,7 @@ final class TerminalText {
   /// print(result);
   /// // abcde…
   /// ```
-  static String truncate(
-    String value, {
-    required int max_columns,
-  }) {
+  static String truncate(String value, {required int max_columns}) {
     _validate_columns(max_columns, 'max_columns');
 
     if (max_columns == 0) {
@@ -210,10 +207,7 @@ final class TerminalText {
   /// print('$result|');
   /// // DIR   |
   /// ```
-  static String pad_right(
-    String value, {
-    required int min_columns,
-  }) {
+  static String pad_right(String value, {required int min_columns}) {
     _validate_columns(min_columns, 'min_columns');
 
     final safe = sanitize(value);
@@ -223,9 +217,7 @@ final class TerminalText {
       return safe;
     }
 
-    return safe.padRight(
-      safe.length + min_columns - width,
-    );
+    return safe.padRight(safe.length + min_columns - width);
   }
 
   /// Pads text on the left to an estimated terminal width.
@@ -247,10 +239,7 @@ final class TerminalText {
   /// print('|$result');
   /// // |   42
   /// ```
-  static String pad_left(
-    String value, {
-    required int min_columns,
-  }) {
+  static String pad_left(String value, {required int min_columns}) {
     _validate_columns(min_columns, 'min_columns');
 
     final safe = sanitize(value);
@@ -260,18 +249,13 @@ final class TerminalText {
       return safe;
     }
 
-    return safe.padLeft(
-      safe.length + min_columns - width,
-    );
+    return safe.padLeft(safe.length + min_columns - width);
   }
 
   /// Rejects negative terminal column counts.
   ///
   /// Zero is valid for truncation and padding operations.
-  static void _validate_columns(
-    int columns,
-    String parameter_name,
-  ) {
+  static void _validate_columns(int columns, String parameter_name) {
     if (columns < 0) {
       throw ArgumentError.value(
         columns,

@@ -72,13 +72,9 @@ final class ExplorerTerminalLifecycleException implements Exception {
   ExplorerTerminalLifecycleException({
     required this.interaction_error,
     required List<Object> restoration_errors,
-  }) : restoration_errors = List<Object>.unmodifiable(
-          restoration_errors,
-        ) {
+  }) : restoration_errors = List<Object>.unmodifiable(restoration_errors) {
     if (restoration_errors.isEmpty) {
-      throw ArgumentError(
-        'At least one restoration error is required.',
-      );
+      throw ArgumentError('At least one restoration error is required.');
     }
   }
 
@@ -94,8 +90,9 @@ final class ExplorerTerminalLifecycleException implements Exception {
   /// and its original error message.
   @override
   String toString() {
-    final details =
-        restoration_errors.map((error) => error.toString()).join('; ');
+    final details = restoration_errors
+        .map((error) => error.toString())
+        .join('; ');
 
     return 'Explorer terminal lifecycle failure: '
         '${restoration_errors.length} restoration error(s); '
@@ -149,9 +146,8 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
   /// is used.
   ///
   /// Construction performs no terminal-mode changes.
-  DartExplorerTerminalHost({
-    ExplorerTerminalDevice? device,
-  }) : _device = device ?? const DartExplorerTerminalDevice();
+  DartExplorerTerminalHost({ExplorerTerminalDevice? device})
+    : _device = device ?? const DartExplorerTerminalDevice();
 
   /// Device providing low-level terminal operations.
   final ExplorerTerminalDevice _device;
@@ -213,9 +209,7 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
     final controller = _active_input;
 
     if (!_is_active || controller == null) {
-      throw StateError(
-        'Explorer input is available only during interaction.',
-      );
+      throw StateError('Explorer input is available only during interaction.');
     }
 
     return controller.stream;
@@ -265,13 +259,9 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
   ///
   /// No filesystem inspection or mutation occurs here.
   @override
-  Future<T> run_interactive<T>(
-    Future<T> Function() interaction,
-  ) async {
+  Future<T> run_interactive<T>(Future<T> Function() interaction) async {
     if (_is_active || _has_started) {
-      throw StateError(
-        'This Explorer terminal host cannot be reused.',
-      );
+      throw StateError('This Explorer terminal host cannot be reused.');
     }
 
     if (!is_interactive) {
@@ -317,9 +307,7 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
       signal_subscription = _device.signals.listen(
         (signal) {
           if (!controller.isClosed) {
-            controller.addError(
-              ExplorerTerminalInterrupted(signal),
-            );
+            controller.addError(ExplorerTerminalInterrupted(signal));
           }
         },
         onError: (Object error, StackTrace stack) {
@@ -373,13 +361,9 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
     //
     // The interaction has finished, so new interruptions
     // should not be delivered into its closing input stream.
-    await _attempt_restoration(
-      'cancel signal subscription',
-      () async {
-        await signal_subscription?.cancel();
-      },
-      restoration_errors,
-    );
+    await _attempt_restoration('cancel signal subscription', () async {
+      await signal_subscription?.cancel();
+    }, restoration_errors);
 
     // Stop delivering further keyboard events while restoring
     // terminal state, but keep the underlying stdin subscription
@@ -387,13 +371,9 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
     //
     // Canceling a native stdin subscription too early may make
     // its terminal descriptor unavailable to the mode setters.
-    await _attempt_restoration(
-      'pause terminal input',
-      () {
-        input_subscription?.pause();
-      },
-      restoration_errors,
-    );
+    await _attempt_restoration('pause terminal input', () {
+      input_subscription?.pause();
+    }, restoration_errors);
 
     // Restore visual terminal state independently.
     //
@@ -446,30 +426,22 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
 
     // Native input can now be released without risking the
     // availability of the terminal-mode restoration operations.
-    await _attempt_restoration(
-      'cancel terminal input subscription',
-      () async {
-        await input_subscription?.cancel();
-      },
-      restoration_errors,
-    );
+    await _attempt_restoration('cancel terminal input subscription', () async {
+      await input_subscription?.cancel();
+    }, restoration_errors);
 
     // Close the forwarded input stream after native input
     // has been released.
     //
     // Do not await StreamController.close() here: a setup
     // failure may occur before any consumer subscribes.
-    await _attempt_restoration(
-      'close forwarded input stream',
-      () {
-        final controller = input_controller;
+    await _attempt_restoration('close forwarded input stream', () {
+      final controller = input_controller;
 
-        if (controller != null && !controller.isClosed) {
-          controller.close();
-        }
-      },
-      restoration_errors,
-    );
+      if (controller != null && !controller.isClosed) {
+        controller.close();
+      }
+    }, restoration_errors);
 
     _active_input = null;
 
@@ -484,10 +456,7 @@ final class DartExplorerTerminalHost implements ExplorerTerminalHost {
     }
 
     if (interaction_error != null) {
-      Error.throwWithStackTrace(
-        interaction_error,
-        interaction_stack!,
-      );
+      Error.throwWithStackTrace(interaction_error, interaction_stack!);
     }
 
     return result;

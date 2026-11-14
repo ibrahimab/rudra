@@ -54,8 +54,9 @@ final class ExplorerDirectoryViewModel {
     }
 
     final remaining = total_entries - first_visible_index;
-    final expected_count =
-        remaining < visible_row_limit ? remaining : visible_row_limit;
+    final expected_count = remaining < visible_row_limit
+        ? remaining
+        : visible_row_limit;
 
     if (this.visible_rows.length != expected_count) {
       throw ArgumentError(
@@ -73,7 +74,8 @@ final class ExplorerDirectoryViewModel {
       );
     }
 
-    final int? expected_visible_selection = selected != null &&
+    final int? expected_visible_selection =
+        selected != null &&
             selected >= first_visible_index &&
             selected < first_visible_index + this.visible_rows.length
         ? selected - first_visible_index

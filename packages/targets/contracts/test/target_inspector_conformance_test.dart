@@ -27,9 +27,7 @@ void main() {
     test('enumeration is lazy', () async {
       final inspector = _ConformanceInspector();
 
-      final stream = inspector.list_directory(
-        TargetPath('/fixture'),
-      );
+      final stream = inspector.list_directory(TargetPath('/fixture'));
 
       expect(inspector.enumeration_starts, 0);
 
@@ -42,9 +40,7 @@ void main() {
       final inspector = _ConformanceInspector();
 
       await expectLater(
-        inspector.list_directory(
-          TargetPath('/fixture/partial'),
-        ),
+        inspector.list_directory(TargetPath('/fixture/partial')),
         emitsInOrder([
           isA<TargetPath>().having(
             (path) => path.value,
@@ -124,13 +120,8 @@ final class _ConformanceInspector implements TargetInspector {
   ///
   /// Missing and relative paths produce typed inspection failures.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
-    _require_absolute(
-      path,
-      TargetInspectionOperation.capabilitiesFor,
-    );
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
+    _require_absolute(path, TargetInspectionOperation.capabilitiesFor);
 
     if (!_known_paths.contains(path.value)) {
       throw _failure(
@@ -153,10 +144,7 @@ final class _ConformanceInspector implements TargetInspector {
   /// Missing and relative paths produce typed inspection failures.
   @override
   Future<FilesystemEntry> inspect(TargetPath path) async {
-    _require_absolute(
-      path,
-      TargetInspectionOperation.inspect,
-    );
+    _require_absolute(path, TargetInspectionOperation.inspect);
 
     final kind = switch (path.value) {
       '/fixture' => FilesystemEntryKind.directory,
@@ -191,15 +179,10 @@ final class _ConformanceInspector implements TargetInspector {
   ///
   /// All other invalid requests produce typed stream errors.
   @override
-  Stream<TargetPath> list_directory(
-    TargetPath path,
-  ) async* {
+  Stream<TargetPath> list_directory(TargetPath path) async* {
     enumeration_starts++;
 
-    _require_absolute(
-      path,
-      TargetInspectionOperation.listDirectory,
-    );
+    _require_absolute(path, TargetInspectionOperation.listDirectory);
 
     if (path.value == '/fixture') {
       try {
@@ -254,13 +237,8 @@ final class _ConformanceInspector implements TargetInspector {
   ///
   /// Neither symbolic link is followed or resolved.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
-    _require_absolute(
-      path,
-      TargetInspectionOperation.readSymbolicLink,
-    );
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
+    _require_absolute(path, TargetInspectionOperation.readSymbolicLink);
 
     if (path.value == '/fixture/link') {
       return TargetPath('empty');
@@ -291,16 +269,9 @@ final class _ConformanceInspector implements TargetInspector {
   /// adapters must implement their own native path semantics.
   ///
   /// Throws a typed invalid-path error for relative paths.
-  void _require_absolute(
-    TargetPath path,
-    TargetInspectionOperation operation,
-  ) {
+  void _require_absolute(TargetPath path, TargetInspectionOperation operation) {
     if (!path.value.startsWith('/')) {
-      throw _failure(
-        TargetInspectionErrorCode.invalidPath,
-        operation,
-        path,
-      );
+      throw _failure(TargetInspectionErrorCode.invalidPath, operation, path);
     }
   }
 

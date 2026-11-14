@@ -26,13 +26,9 @@ import 'src/dev_tools_cli_module.dart';
 Future<void> main(List<String> arguments) async {
   final repo_root = Directory.current.absolute;
 
-  final cli_manifest = File(
-    '${repo_root.path}/apps/cli/pubspec.yaml',
-  );
+  final cli_manifest = File('${repo_root.path}/apps/cli/pubspec.yaml');
 
-  final sdk_manifest = File(
-    '${repo_root.path}/packages/sdk/pubspec.yaml',
-  );
+  final sdk_manifest = File('${repo_root.path}/packages/sdk/pubspec.yaml');
 
   if (!cli_manifest.existsSync() || !sdk_manifest.existsSync()) {
     stderr.writeln(
@@ -49,9 +45,7 @@ Future<void> main(List<String> arguments) async {
 
   final tasks = DevTasks(repo_root);
 
-  cli.register_module(
-    DevToolsCliModule(tasks),
-  );
+  cli.register_module(DevToolsCliModule(tasks));
 
   exitCode = await cli.run(arguments);
 }

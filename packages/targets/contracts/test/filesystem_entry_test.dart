@@ -6,9 +6,7 @@ void main() {
     test('represents a regular file', () {
       final path = TargetPath('/tmp/example.txt');
 
-      final metadata = FilesystemMetadata(
-        logical_size_bytes: 1024,
-      );
+      final metadata = FilesystemMetadata(logical_size_bytes: 1024);
 
       final entry = FilesystemEntry(
         path: path,
@@ -61,9 +59,7 @@ void main() {
       final entry = FilesystemEntry(
         path: TargetPath('/tmp/cache-link'),
         kind: FilesystemEntryKind.symbolicLink,
-        metadata: FilesystemMetadata(
-          identity: link_identity,
-        ),
+        metadata: FilesystemMetadata(identity: link_identity),
       );
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);

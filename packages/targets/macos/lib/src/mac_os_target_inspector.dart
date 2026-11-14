@@ -209,9 +209,7 @@ final class MacOsTargetInspector implements TargetInspector {
   /// // TargetCapabilityStatus.supported
   /// ```
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
     try {
       // Confirm that the requested entry is addressable.
       // lstat does not follow the final symbolic link.
@@ -305,7 +303,8 @@ final class MacOsTargetInspector implements TargetInspector {
     // must not become fabricated allocated-size observations.
     final allocated_blocks = snapshot.allocated_blocks;
 
-    final allocated_size_bytes = allocated_blocks >= 0 &&
+    final allocated_size_bytes =
+        allocated_blocks >= 0 &&
             allocated_blocks <=
                 _maximum_signed_int64 ~/ _darwin_allocation_block_bytes
         ? allocated_blocks * _darwin_allocation_block_bytes
@@ -406,8 +405,9 @@ final class MacOsTargetInspector implements TargetInspector {
 
           // Avoid introducing a double separator under filesystem
           // root while preserving the caller's original spelling.
-          final child_path =
-              path.value == '/' ? '/$child_name' : '${path.value}/$child_name';
+          final child_path = path.value == '/'
+              ? '/$child_name'
+              : '${path.value}/$child_name';
 
           // Yielding permits backpressure and cancellation.
           yield TargetPath(child_path);
@@ -423,11 +423,7 @@ final class MacOsTargetInspector implements TargetInspector {
 
         failure_stack = stack;
       } on FileSystemException catch (error, stack) {
-        failure = _directory_failure(
-          error,
-          path,
-          during_open: cursor == null,
-        );
+        failure = _directory_failure(error, path, during_open: cursor == null);
 
         failure_stack = stack;
       }
@@ -438,11 +434,7 @@ final class MacOsTargetInspector implements TargetInspector {
         } on FileSystemException catch (error, stack) {
           // Closing can fail too. Do not discard an earlier
           // enumeration error in favor of a cleanup failure.
-          failure ??= _directory_failure(
-            error,
-            path,
-            during_open: false,
-          );
+          failure ??= _directory_failure(error, path, during_open: false);
 
           failure_stack ??= stack;
         }
@@ -452,10 +444,7 @@ final class MacOsTargetInspector implements TargetInspector {
     // Emit the terminal failure after releasing native resources.
     // A successful enumeration reaches this point without error.
     if (failure != null) {
-      Error.throwWithStackTrace(
-        failure,
-        failure_stack!,
-      );
+      Error.throwWithStackTrace(failure, failure_stack!);
     }
   }
 
@@ -519,9 +508,7 @@ final class MacOsTargetInspector implements TargetInspector {
     try {
       // readlink() observes the final symbolic link without
       // following its stored destination.
-      destination = _symbolic_link_reader.read_target(
-        path.value,
-      );
+      destination = _symbolic_link_reader.read_target(path.value);
     } on ArgumentError catch (error) {
       throw TargetInspectionException(
         code: TargetInspectionErrorCode.invalidPath,
@@ -615,10 +602,7 @@ final class MacOsTargetInspector implements TargetInspector {
   ///
   /// This prevents corrupted or incompatible native metadata
   /// from being interpreted as a successfully identified entry.
-  static FilesystemEntryKind _entry_kind(
-    int mode,
-    TargetPath path,
-  ) {
+  static FilesystemEntryKind _entry_kind(int mode, TargetPath path) {
     final file_type = mode & _file_type_mask;
 
     switch (file_type) {
@@ -654,9 +638,7 @@ final class MacOsTargetInspector implements TargetInspector {
   ///
   /// Unrecognized and unavailable errno values map to ioFailure,
   /// preserving the original exception separately as the cause.
-  static TargetInspectionErrorCode _translate_errno(
-    int? error_number,
-  ) {
+  static TargetInspectionErrorCode _translate_errno(int? error_number) {
     switch (error_number) {
       case _errno_not_found:
         return TargetInspectionErrorCode.notFound;

@@ -31,11 +31,7 @@ void main() {
       expect(model.listing.layout, DirectoryListingLayout.compact);
       expect(
         model.listing.rows.map((row) => row.path),
-        orderedEquals([
-          '/fixture/z.txt',
-          '/fixture/docs',
-          '/fixture/a.txt',
-        ]),
+        orderedEquals(['/fixture/z.txt', '/fixture/docs', '/fixture/a.txt']),
       );
     });
 
@@ -57,12 +53,7 @@ void main() {
 
       expect(
         model.listing.rows.map((row) => row.name),
-        orderedEquals([
-          'Alpha/',
-          'zeta/',
-          'a.txt',
-          'z.txt',
-        ]),
+        orderedEquals(['Alpha/', 'zeta/', 'a.txt', 'z.txt']),
       );
 
       // The SDK observation must retain its original order.
@@ -79,10 +70,7 @@ void main() {
 
       expect(
         model.listing.rows.map((row) => row.path),
-        orderedEquals([
-          '/fixture/A.txt',
-          '/fixture/a.txt',
-        ]),
+        orderedEquals(['/fixture/A.txt', '/fixture/a.txt']),
       );
     });
   });
@@ -108,15 +96,9 @@ void main() {
     });
 
     test('preserves Windows-native path spelling', () {
-      final listing = _listing(
-        [
-          _entry(
-            r'C:\workspace\src',
-            FilesystemEntryKind.directory,
-          ),
-        ],
-        directory: r'C:\workspace',
-      );
+      final listing = _listing([
+        _entry(r'C:\workspace\src', FilesystemEntryKind.directory),
+      ], directory: r'C:\workspace');
 
       final model = presenter.present(listing);
 
@@ -127,23 +109,14 @@ void main() {
 
     test('preserves unexpected paths instead of rewriting them', () {
       final listing = _listing([
-        _entry(
-          '/fixture-extra/file.txt',
-          FilesystemEntryKind.regularFile,
-        ),
+        _entry('/fixture-extra/file.txt', FilesystemEntryKind.regularFile),
       ]);
 
       final model = presenter.present(listing);
 
-      expect(
-        model.listing.rows.single.name,
-        '/fixture-extra/file.txt',
-      );
+      expect(model.listing.rows.single.name, '/fixture-extra/file.txt');
 
-      expect(
-        model.listing.rows.single.path,
-        '/fixture-extra/file.txt',
-      );
+      expect(model.listing.rows.single.path, '/fixture-extra/file.txt');
     });
 
     test('maps entry kinds and semantic styles', () {
@@ -161,12 +134,7 @@ void main() {
 
       expect(
         model.listing.rows.map((row) => row.type_label),
-        orderedEquals([
-          'Directory',
-          'File',
-          'Link',
-          'Other',
-        ]),
+        orderedEquals(['Directory', 'File', 'Link', 'Other']),
       );
 
       expect(
@@ -181,27 +149,14 @@ void main() {
 
       expect(
         model.listing.rows.map((row) => row.compact_type),
-        orderedEquals([
-          'directory',
-          'regularFile',
-          'symbolicLink',
-          'other',
-        ]),
+        orderedEquals(['directory', 'regularFile', 'symbolicLink', 'other']),
       );
     });
 
     test('formats logical bytes without recursive accounting', () {
       final listing = _listing([
-        _entry(
-          '/fixture/d',
-          FilesystemEntryKind.directory,
-          bytes: 4096,
-        ),
-        _entry(
-          '/fixture/empty.txt',
-          FilesystemEntryKind.regularFile,
-          bytes: 0,
-        ),
+        _entry('/fixture/d', FilesystemEntryKind.directory, bytes: 4096),
+        _entry('/fixture/empty.txt', FilesystemEntryKind.regularFile, bytes: 0),
         _entry(
           '/fixture/small.txt',
           FilesystemEntryKind.regularFile,
@@ -226,34 +181,18 @@ void main() {
 
       expect(
         model.listing.rows.map((row) => row.logical_bytes),
-        orderedEquals([
-          '4096',
-          '0',
-          '1023',
-          '1024',
-          '1048576',
-        ]),
+        orderedEquals(['4096', '0', '1023', '1024', '1048576']),
       );
 
       expect(
         model.listing.rows.map((row) => row.size_label),
-        orderedEquals([
-          '—',
-          '0 B',
-          '1023 B',
-          '1.0 KiB',
-          '1.0 MiB',
-        ]),
+        orderedEquals(['—', '0 B', '1023 B', '1.0 KiB', '1.0 MiB']),
       );
     });
 
     test('formats ordinary and special POSIX permissions', () {
       final listing = _listing([
-        _entry(
-          '/fixture/file',
-          FilesystemEntryKind.regularFile,
-          mode: 0x1A4,
-        ),
+        _entry('/fixture/file', FilesystemEntryKind.regularFile, mode: 0x1A4),
         _entry(
           '/fixture/executable',
           FilesystemEntryKind.regularFile,
@@ -273,11 +212,7 @@ void main() {
 
       expect(
         model.listing.rows.map((row) => row.permissions),
-        orderedEquals([
-          '-rw-r--r--',
-          '-rwsr-xr-x',
-          'drwxr-xr-t',
-        ]),
+        orderedEquals(['-rw-r--r--', '-rwsr-xr-x', 'drwxr-xr-t']),
       );
     });
 
@@ -297,10 +232,7 @@ void main() {
 
     test('preserves explicitly unknown metadata', () {
       final listing = _listing([
-        _entry(
-          '/fixture/unknown',
-          FilesystemEntryKind.other,
-        ),
+        _entry('/fixture/unknown', FilesystemEntryKind.other),
       ]);
 
       final row = presenter.present(listing).listing.rows.single;
@@ -322,12 +254,7 @@ void main() {
       );
 
       final listing = _listing(
-        [
-          _entry(
-            '/fixture/good.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
+        [_entry('/fixture/good.txt', FilesystemEntryKind.regularFile)],
         is_complete: false,
         issues: [issue],
       );
@@ -348,9 +275,7 @@ void main() {
     });
 
     test('preserves incomplete results without typed issues', () {
-      final model = presenter.present(
-        _listing([], is_complete: false),
-      );
+      final model = presenter.present(_listing([], is_complete: false));
 
       expect(model.listing.is_incomplete, isTrue);
       expect(model.inspection_issues.issues, isEmpty);
@@ -360,17 +285,11 @@ void main() {
     test('defensively preserves immutable collections', () {
       final model = presenter.present(
         _listing([
-          _entry(
-            '/fixture/file.txt',
-            FilesystemEntryKind.regularFile,
-          ),
+          _entry('/fixture/file.txt', FilesystemEntryKind.regularFile),
         ]),
       );
 
-      expect(
-        () => model.listing.rows.clear(),
-        throwsUnsupportedError,
-      );
+      expect(() => model.listing.rows.clear(), throwsUnsupportedError);
 
       expect(
         () => model.inspection_issues.issues.clear(),
@@ -415,8 +334,9 @@ FilesystemEntry _entry(
     metadata: FilesystemMetadata(
       logical_size_bytes: bytes,
       modified_at: modified,
-      permissions:
-          mode == null ? null : FilesystemPermissions(posix_mode: mode),
+      permissions: mode == null
+          ? null
+          : FilesystemPermissions(posix_mode: mode),
     ),
   );
 }

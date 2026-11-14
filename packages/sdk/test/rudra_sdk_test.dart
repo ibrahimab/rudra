@@ -15,10 +15,7 @@ void main() {
     test('constructs without performing filesystem operations', () {
       final inspector = _RecordingTargetInspector();
 
-      final sdk = RudraSdk(
-        target_id: 'local-macos',
-        inspector: inspector,
-      );
+      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
 
       expect(sdk.target_id, 'local-macos');
       expect(sdk.filesystem.target_id, 'local-macos');
@@ -47,26 +44,17 @@ void main() {
       final file = FilesystemEntry(
         path: TargetPath('/tmp/example.txt'),
         kind: FilesystemEntryKind.regularFile,
-        metadata: FilesystemMetadata(
-          logical_size_bytes: 1024,
-        ),
+        metadata: FilesystemMetadata(logical_size_bytes: 1024),
       );
 
       final inspector = _RecordingTargetInspector(
         children: [file.path],
-        entries: {
-          file.path.value: file,
-        },
+        entries: {file.path.value: file},
       );
 
-      final sdk = RudraSdk(
-        target_id: 'local-macos',
-        inspector: inspector,
-      );
+      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
 
-      final listing = await sdk.filesystem.list(
-        directory: directory,
-      );
+      final listing = await sdk.filesystem.list(directory: directory);
 
       expect(listing.target_id, sdk.target_id);
       expect(listing.directory, same(directory));
@@ -76,64 +64,41 @@ void main() {
       expect(listing.entries, hasLength(1));
       expect(listing.entries.single, same(file));
 
-      expect(
-        listing.entries.single.metadata.logical_size_bytes,
-        1024,
-      );
+      expect(listing.entries.single.metadata.logical_size_bytes, 1024);
 
       expect(inspector.enumeration_count, 1);
       expect(inspector.inspection_count, 1);
 
-      expect(
-        inspector.last_enumerated_path,
-        same(directory),
-      );
+      expect(inspector.last_enumerated_path, same(directory));
 
-      expect(
-        inspector.inspected_paths,
-        [same(file.path)],
-      );
+      expect(inspector.inspected_paths, [same(file.path)]);
 
       expect(inspector.capability_count, 0);
       expect(inspector.symbolic_link_count, 0);
     });
 
     test('preserves target-native Windows paths', () async {
-      final directory = TargetPath(
-        r'C:\Users\example\Downloads',
-      );
+      final directory = TargetPath(r'C:\Users\example\Downloads');
 
       final file = FilesystemEntry(
-        path: TargetPath(
-          r'C:\Users\example\Downloads\example.txt',
-        ),
+        path: TargetPath(r'C:\Users\example\Downloads\example.txt'),
         kind: FilesystemEntryKind.regularFile,
         metadata: FilesystemMetadata(),
       );
 
       final inspector = _RecordingTargetInspector(
         children: [file.path],
-        entries: {
-          file.path.value: file,
-        },
+        entries: {file.path.value: file},
       );
 
-      final sdk = RudraSdk(
-        target_id: 'local-windows',
-        inspector: inspector,
-      );
+      final sdk = RudraSdk(target_id: 'local-windows', inspector: inspector);
 
-      final listing = await sdk.filesystem.list(
-        directory: directory,
-      );
+      final listing = await sdk.filesystem.list(directory: directory);
 
       expect(sdk.target_id, 'local-windows');
       expect(listing.target_id, 'local-windows');
 
-      expect(
-        listing.directory.value,
-        r'C:\Users\example\Downloads',
-      );
+      expect(listing.directory.value, r'C:\Users\example\Downloads');
 
       expect(
         listing.entries.single.path.value,
@@ -163,26 +128,14 @@ void main() {
       );
 
       final inspector = _RecordingTargetInspector(
-        children: [
-          successful_entry.path,
-          failed_path,
-        ],
-        entries: {
-          successful_entry.path.value: successful_entry,
-        },
-        failures: {
-          failed_path.value: failure,
-        },
+        children: [successful_entry.path, failed_path],
+        entries: {successful_entry.path.value: successful_entry},
+        failures: {failed_path.value: failure},
       );
 
-      final sdk = RudraSdk(
-        target_id: 'local-macos',
-        inspector: inspector,
-      );
+      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
 
-      final listing = await sdk.filesystem.list(
-        directory: directory,
-      );
+      final listing = await sdk.filesystem.list(directory: directory);
 
       expect(listing.is_complete, isFalse);
       expect(listing.entries, [same(successful_entry)]);
@@ -190,15 +143,9 @@ void main() {
 
       final issue = listing.issues.single;
 
-      expect(
-        issue.code,
-        TargetInspectionErrorCode.permissionDenied,
-      );
+      expect(issue.code, TargetInspectionErrorCode.permissionDenied);
 
-      expect(
-        issue.operation,
-        TargetInspectionOperation.inspect,
-      );
+      expect(issue.operation, TargetInspectionOperation.inspect);
 
       expect(issue.path, same(failed_path));
       expect(issue.message, 'Permission denied.');
@@ -269,10 +216,11 @@ final class _RecordingTargetInspector implements TargetInspector {
     List<TargetPath> children = const [],
     Map<String, FilesystemEntry> entries = const {},
     Map<String, TargetInspectionException> failures = const {},
-  })  : _children = List<TargetPath>.unmodifiable(children),
-        _entries = Map<String, FilesystemEntry>.unmodifiable(entries),
-        _failures =
-            Map<String, TargetInspectionException>.unmodifiable(failures);
+  }) : _children = List<TargetPath>.unmodifiable(children),
+       _entries = Map<String, FilesystemEntry>.unmodifiable(entries),
+       _failures = Map<String, TargetInspectionException>.unmodifiable(
+         failures,
+       );
 
   /// Paths yielded during directory enumeration.
   final List<TargetPath> _children;
@@ -331,9 +279,7 @@ final class _RecordingTargetInspector implements TargetInspector {
     final entry = _entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'No fixture configured for ${path.value}',
-      );
+      throw StateError('No fixture configured for ${path.value}');
     }
 
     return entry;
@@ -341,25 +287,17 @@ final class _RecordingTargetInspector implements TargetInspector {
 
   /// Rejects unexpected capability discovery requests.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
     capability_count++;
 
-    throw StateError(
-      'Unexpected capabilities_for: ${path.value}',
-    );
+    throw StateError('Unexpected capabilities_for: ${path.value}');
   }
 
   /// Rejects unexpected symbolic-link reads.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
     symbolic_link_count++;
 
-    throw StateError(
-      'Unexpected read_symbolic_link: ${path.value}',
-    );
+    throw StateError('Unexpected read_symbolic_link: ${path.value}');
   }
 }

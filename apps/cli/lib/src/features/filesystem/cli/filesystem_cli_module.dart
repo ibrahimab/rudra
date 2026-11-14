@@ -67,9 +67,9 @@ final class FilesystemCliModule implements RudraCliModule {
     required RudraSdk sdk,
     required TargetPath working_directory,
     required Renderer<FilesystemViewModel> renderer,
-  })  : _sdk = sdk,
-        _working_directory = working_directory,
-        _renderer = renderer;
+  }) : _sdk = sdk,
+       _working_directory = working_directory,
+       _renderer = renderer;
 
   /// SDK shared by commands registered through this module.
   final RudraSdk _sdk;

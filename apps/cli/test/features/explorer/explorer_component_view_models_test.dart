@@ -64,10 +64,7 @@ void main() {
     test('retains immutable viewport rows', () {
       final model = _empty_directory();
 
-      expect(
-        () => model.visible_rows.clear(),
-        throwsUnsupportedError,
-      );
+      expect(() => model.visible_rows.clear(), throwsUnsupportedError);
     });
 
     test('rejects viewport and entry-count inconsistencies', () {
@@ -134,9 +131,7 @@ void main() {
 
   group('ExplorerViewModel', () {
     test('contains only independently composed component models', () {
-      final header = ExplorerHeaderViewModel(
-        current_directory: '/workspace',
-      );
+      final header = ExplorerHeaderViewModel(current_directory: '/workspace');
 
       final directory = _empty_directory();
 

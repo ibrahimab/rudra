@@ -32,11 +32,7 @@ void main() {
 
       final widget = DirectoryListingWidget(model.listing);
 
-      final lines = widget
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = widget.build(TerminalConstraints()).toList();
 
       expect(widget.height, 2);
       expect(lines, hasLength(widget.height));
@@ -52,11 +48,7 @@ void main() {
 
       final widget = DirectoryListingWidget(model.listing);
 
-      final lines = widget
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = widget.build(TerminalConstraints()).toList();
 
       expect(widget.height, 5);
       expect(lines, hasLength(widget.height));
@@ -80,11 +72,7 @@ void main() {
 
       final widget = DirectoryListingWidget(model.listing);
 
-      final lines = widget
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = widget.build(TerminalConstraints()).toList();
 
       expect(widget.height, 6);
       expect(lines, hasLength(6));
@@ -98,19 +86,12 @@ void main() {
 
       final model = _listing(
         layout: DirectoryListingLayout.compact,
-        rows: [
-          _row(
-            path: path,
-            name: filename,
-          )
-        ],
+        rows: [_row(path: path, name: filename)],
       );
 
       final output = StringBuffer();
 
-      BareFilesystemRenderer(
-        output: output,
-      ).render(model);
+      BareFilesystemRenderer(output: output).render(model);
 
       expect(output.toString(), contains(path));
       expect(output.toString(), isNot(contains('…')));
@@ -119,18 +100,13 @@ void main() {
     test('sanitizes malicious names in unbounded output', () {
       final model = _listing(
         layout: DirectoryListingLayout.detailed,
-        rows: [
-          _row(name: 'unsafe\x1B[2Jname.txt'),
-        ],
+        rows: [_row(name: 'unsafe\x1B[2Jname.txt')],
       );
 
       final output = StringBuffer();
 
-      BareWidgetRenderer(
-        output: output,
-      ).render(
-        DirectoryListingWidget(model.listing),
-      );
+      BareWidgetRenderer(output: output)
+          .render(DirectoryListingWidget(model.listing));
 
       expect(output.toString(), contains('unsafe?[2Jname.txt'));
       expect(output.toString(), isNot(contains('\x1B[2J')));
@@ -147,15 +123,10 @@ void main() {
       BareWidgetRenderer(
         output: output,
         terminal_columns: () => 12,
-      ).render(
-        DirectoryListingWidget(model.listing),
-      );
+      ).render(DirectoryListingWidget(model.listing));
 
       for (final line in output.toString().split('\n')) {
-        expect(
-          TerminalText.estimated_columns(line),
-          lessThanOrEqualTo(12),
-        );
+        expect(TerminalText.estimated_columns(line), lessThanOrEqualTo(12));
       }
     });
 
@@ -167,20 +138,13 @@ void main() {
 
       final screen = TerminalColumn(
         children: [
-          const TerminalLabel(
-            'WELCOME',
-            role: TerminalRole.title,
-          ),
+          const TerminalLabel('WELCOME', role: TerminalRole.title),
           DirectoryListingWidget(model.listing),
           const TerminalLabel('Available commands:'),
         ],
       );
 
-      final lines = screen
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints()).toList();
 
       expect(screen.height, 7);
       expect(lines, hasLength(screen.height));
@@ -192,12 +156,7 @@ void main() {
     test('preserves semantic styling for detailed entries', () {
       final model = _listing(
         layout: DirectoryListingLayout.detailed,
-        rows: [
-          _row(
-            name: 'docs/',
-            role: TerminalRole.directory,
-          ),
-        ],
+        rows: [_row(name: 'docs/', role: TerminalRole.directory)],
       );
 
       final output = StringBuffer();
@@ -206,9 +165,7 @@ void main() {
         output: output,
         theme: TerminalTheme.ansi,
         ansi_text: const AnsiText(enabled: true),
-      ).render(
-        DirectoryListingWidget(model.listing),
-      );
+      ).render(DirectoryListingWidget(model.listing));
 
       expect(output.toString(), contains('\x1B[1;36m'));
       expect(output.toString(), contains('\x1B[1;34m'));
@@ -218,9 +175,7 @@ void main() {
   group('DirectoryInspectionIssuesWidget', () {
     test('occupies no rows without diagnostic issues', () {
       final widget = DirectoryInspectionIssuesWidget(
-        _listing(
-          layout: DirectoryListingLayout.compact,
-        ).inspection_issues,
+        _listing(layout: DirectoryListingLayout.compact).inspection_issues,
       );
 
       expect(widget.height, 0);
@@ -236,11 +191,7 @@ void main() {
         ).inspection_issues,
       );
 
-      final lines = widget
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = widget.build(TerminalConstraints()).toList();
 
       expect(widget.height, 1);
       expect(lines.single.role, TerminalRole.error);
@@ -257,27 +208,17 @@ void main() {
         ).inspection_issues,
       );
 
-      final lines = widget
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = widget.build(TerminalConstraints()).toList();
 
       expect(widget.height, 1);
-      expect(
-        lines.single.text,
-        'Filesystem inspection did not complete.',
-      );
+      expect(lines.single.text, 'Filesystem inspection did not complete.');
     });
 
     test('renders diagnostics to an independent output sink', () {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      BareFilesystemRenderer(
-        output: output,
-        error_output: errors,
-      ).render(
+      BareFilesystemRenderer(output: output, error_output: errors).render(
         _listing(
           layout: DirectoryListingLayout.compact,
           is_complete: false,
@@ -296,16 +237,12 @@ void main() {
     test('sanitizes diagnostic control sequences', () {
       final errors = StringBuffer();
 
-      BareWidgetRenderer(
-        output: errors,
-      ).render(
+      BareWidgetRenderer(output: errors).render(
         DirectoryInspectionIssuesWidget(
           _listing(
             layout: DirectoryListingLayout.compact,
             is_complete: false,
-            issues: [
-              _issue(message: 'unsafe\x1B[2Jmessage'),
-            ],
+            issues: [_issue(message: 'unsafe\x1B[2Jmessage')],
           ).inspection_issues,
         ),
       );
@@ -345,10 +282,7 @@ void main() {
       );
 
       expect(
-        () => FilesystemViewModel(
-          listing: listing,
-          inspection_issues: issues,
-        ),
+        () => FilesystemViewModel(listing: listing, inspection_issues: issues),
         throwsArgumentError,
       );
     });

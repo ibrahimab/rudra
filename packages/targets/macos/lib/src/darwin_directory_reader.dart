@@ -10,7 +10,8 @@ const int _open_no_follow = 0x00000100;
 const int _open_directory_only = 0x00100000;
 const int _open_close_on_exec = 0x01000000;
 
-const int _directory_open_flags = _open_read_only |
+const int _directory_open_flags =
+    _open_read_only |
     _open_no_follow |
     _open_directory_only |
     _open_close_on_exec;
@@ -50,24 +51,14 @@ final class _DarwinDirent extends Struct {
   external Array<Uint8> d_name;
 }
 
-typedef _OpenNative = Int32 Function(
-  Pointer<Utf8>,
-  Int32,
-);
-typedef _OpenDart = int Function(
-  Pointer<Utf8>,
-  int,
-);
+typedef _OpenNative = Int32 Function(Pointer<Utf8>, Int32);
+typedef _OpenDart = int Function(Pointer<Utf8>, int);
 
 typedef _FdOpenDirNative = Pointer<Void> Function(Int32);
 typedef _FdOpenDirDart = Pointer<Void> Function(int);
 
-typedef _ReadDirNative = Pointer<_DarwinDirent> Function(
-  Pointer<Void>,
-);
-typedef _ReadDirDart = Pointer<_DarwinDirent> Function(
-  Pointer<Void>,
-);
+typedef _ReadDirNative = Pointer<_DarwinDirent> Function(Pointer<Void>);
+typedef _ReadDirDart = Pointer<_DarwinDirent> Function(Pointer<Void>);
 
 typedef _CloseDirNative = Int32 Function(Pointer<Void>);
 typedef _CloseDirDart = int Function(Pointer<Void>);
@@ -134,25 +125,22 @@ final class DarwinDirectoryReader {
   /// Construction performs no filesystem traversal.
   DarwinDirectoryReader() {
     if (!Platform.isMacOS) {
-      throw UnsupportedError(
-        'DarwinDirectoryReader requires macOS.',
-      );
+      throw UnsupportedError('DarwinDirectoryReader requires macOS.');
     }
 
     final abi = Abi.current();
 
     if (abi != Abi.macosArm64 && abi != Abi.macosX64) {
-      throw UnsupportedError(
-        'Unsupported macOS native ABI: $abi',
-      );
+      throw UnsupportedError('Unsupported macOS native ABI: $abi');
     }
 
     final library = DynamicLibrary.process();
 
     // Intel macOS uses the versioned 64-bit inode symbols.
     // ARM64 macOS uses the native unsuffixed implementations.
-    final fdopendir_symbol =
-        abi == Abi.macosX64 ? 'fdopendir\$INODE64' : 'fdopendir';
+    final fdopendir_symbol = abi == Abi.macosX64
+        ? 'fdopendir\$INODE64'
+        : 'fdopendir';
 
     final readdir_symbol = abi == Abi.macosX64 ? 'readdir\$INODE64' : 'readdir';
 
@@ -161,11 +149,13 @@ final class DarwinDirectoryReader {
     _native_fdopendir = library
         .lookupFunction<_FdOpenDirNative, _FdOpenDirDart>(fdopendir_symbol);
 
-    _native_readdir =
-        library.lookupFunction<_ReadDirNative, _ReadDirDart>(readdir_symbol);
+    _native_readdir = library.lookupFunction<_ReadDirNative, _ReadDirDart>(
+      readdir_symbol,
+    );
 
-    _native_closedir =
-        library.lookupFunction<_CloseDirNative, _CloseDirDart>('closedir');
+    _native_closedir = library.lookupFunction<_CloseDirNative, _CloseDirDart>(
+      'closedir',
+    );
 
     _native_close = library.lookupFunction<_CloseNative, _CloseDart>('close');
 
@@ -216,15 +206,10 @@ final class DarwinDirectoryReader {
       );
     }
 
-    final native_path = path.toNativeUtf8(
-      allocator: calloc,
-    );
+    final native_path = path.toNativeUtf8(allocator: calloc);
 
     try {
-      final descriptor = _native_open(
-        native_path,
-        _directory_open_flags,
-      );
+      final descriptor = _native_open(native_path, _directory_open_flags);
 
       if (descriptor < 0) {
         final error_number = _native_errno().value;
@@ -241,11 +226,7 @@ final class DarwinDirectoryReader {
         // The descriptor is still caller-owned here.
         _native_close(descriptor);
 
-        throw _native_failure(
-          'fdopendir',
-          path,
-          error_number,
-        );
+        throw _native_failure('fdopendir', path, error_number);
       }
 
       return DarwinDirectoryCursor._(
@@ -296,10 +277,10 @@ final class DarwinDirectoryCursor {
     required _ReadDirDart read_dir,
     required _CloseDirDart close_dir,
     required _ErrnoDart errno,
-  })  : _directory = directory,
-        _read_dir = read_dir,
-        _close_dir = close_dir,
-        _errno = errno;
+  }) : _directory = directory,
+       _read_dir = read_dir,
+       _close_dir = close_dir,
+       _errno = errno;
 
   /// The original path used to open this directory.
   final String path;
@@ -360,11 +341,7 @@ final class DarwinDirectoryCursor {
         final error_number = _errno().value;
 
         if (error_number != 0) {
-          throw _native_failure(
-            'readdir',
-            path,
-            error_number,
-          );
+          throw _native_failure('readdir', path, error_number);
         }
 
         return null;
@@ -401,10 +378,7 @@ final class DarwinDirectoryCursor {
       late final String name;
 
       try {
-        name = utf8.decode(
-          name_bytes,
-          allowMalformed: false,
-        );
+        name = utf8.decode(name_bytes, allowMalformed: false);
       } on FormatException {
         throw FileSystemException(
           'Directory entry name is not valid UTF-8.',
@@ -448,11 +422,7 @@ final class DarwinDirectoryCursor {
     if (_close_dir(directory) != 0) {
       final error_number = _errno().value;
 
-      throw _native_failure(
-        'closedir',
-        path,
-        error_number,
-      );
+      throw _native_failure('closedir', path, error_number);
     }
   }
 }

@@ -65,9 +65,9 @@ final class TargetCapabilities {
   TargetCapabilities({
     Map<TargetInspectionFeature, TargetCapabilityStatus> statuses = const {},
   }) : statuses =
-            Map<TargetInspectionFeature, TargetCapabilityStatus>.unmodifiable(
-          statuses,
-        );
+           Map<TargetInspectionFeature, TargetCapabilityStatus>.unmodifiable(
+             statuses,
+           );
 
   /// The explicitly reported capability statuses.
   ///
@@ -94,9 +94,7 @@ final class TargetCapabilities {
   ///
   /// assert(status == TargetCapabilityStatus.unknown);
   /// ```
-  TargetCapabilityStatus status_for(
-    TargetInspectionFeature feature,
-  ) {
+  TargetCapabilityStatus status_for(TargetInspectionFeature feature) {
     return statuses[feature] ?? TargetCapabilityStatus.unknown;
   }
 }

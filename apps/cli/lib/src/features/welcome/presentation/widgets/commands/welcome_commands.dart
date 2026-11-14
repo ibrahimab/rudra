@@ -28,13 +28,8 @@ final class WelcomeCommands implements TerminalWidget {
       base_rows + (view_model.show_filesystem_commands ? filesystem_rows : 0);
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
-    yield const TerminalLine(
-      'Available commands:',
-      role: TerminalRole.heading,
-    );
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
+    yield const TerminalLine('Available commands:', role: TerminalRole.heading);
 
     if (view_model.show_filesystem_commands) {
       yield const TerminalLine(

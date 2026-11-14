@@ -18,8 +18,12 @@ import 'workflow_transition.dart';
 /// print(rule.trigger_event_type == WorkflowStartEvent);
 /// // true
 /// ```
-WorkflowTransition<WorkflowInitialState, WorkflowStartEvent,
-    WorkflowStartRequestedState> workflow_start_transition() {
+WorkflowTransition<
+  WorkflowInitialState,
+  WorkflowStartEvent,
+  WorkflowStartRequestedState
+>
+workflow_start_transition() {
   return WorkflowTransition(
     apply: (state, event, next_version) {
       return WorkflowStartRequestedState(

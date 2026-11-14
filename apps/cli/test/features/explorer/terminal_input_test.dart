@@ -32,18 +32,13 @@ void main() {
     });
 
     test('supports LF as an Enter key', () async {
-      final keys = await _decode([
-        ascii.encode('\n'),
-      ]);
+      final keys = await _decode([ascii.encode('\n')]);
 
       expect(keys, [ExplorerKey.open]);
     });
 
     test('treats CRLF as one Enter event', () async {
-      final keys = await _decode([
-        ascii.encode('\r'),
-        ascii.encode('\n'),
-      ]);
+      final keys = await _decode([ascii.encode('\r'), ascii.encode('\n')]);
 
       expect(keys, [ExplorerKey.open]);
     });
@@ -60,11 +55,7 @@ void main() {
 
       expect(
         keys,
-        orderedEquals([
-          ExplorerKey.up,
-          ExplorerKey.down,
-          ExplorerKey.back,
-        ]),
+        orderedEquals([ExplorerKey.up, ExplorerKey.down, ExplorerKey.back]),
       );
     });
 
@@ -77,11 +68,7 @@ void main() {
 
       expect(
         keys,
-        orderedEquals([
-          ExplorerKey.up,
-          ExplorerKey.down,
-          ExplorerKey.back,
-        ]),
+        orderedEquals([ExplorerKey.up, ExplorerKey.down, ExplorerKey.back]),
       );
     });
 
@@ -95,11 +82,7 @@ void main() {
       // Modifiers are intentionally ignored in Block 4C.2.
       expect(
         keys,
-        orderedEquals([
-          ExplorerKey.up,
-          ExplorerKey.down,
-          ExplorerKey.back,
-        ]),
+        orderedEquals([ExplorerKey.up, ExplorerKey.down, ExplorerKey.back]),
       );
     });
 
@@ -117,9 +100,7 @@ void main() {
     });
 
     test('ignores incomplete escape sequences at EOF', () async {
-      final prefix = await _decode([
-        ascii.encode('\x1B'),
-      ]);
+      final prefix = await _decode([ascii.encode('\x1B')]);
 
       final incomplete_csi = await _decode([
         ascii.encode('\x1B['),
@@ -143,10 +124,7 @@ void main() {
 
       final input = TerminalInput(source: source);
 
-      await expectLater(
-        input.read_keys(),
-        emitsError(isA<StateError>()),
-      );
+      await expectLater(input.read_keys(), emitsError(isA<StateError>()));
     });
 
     test('treats raw Ctrl+C as a controlled quit request', () async {
@@ -154,10 +132,7 @@ void main() {
         <int>[0x03],
       ]);
 
-      expect(
-        keys,
-        orderedEquals([ExplorerKey.quit]),
-      );
+      expect(keys, orderedEquals([ExplorerKey.quit]));
     });
   });
 }
@@ -178,12 +153,8 @@ void main() {
 ///
 /// // keys contains ExplorerKey.up.
 /// ```
-Future<List<ExplorerKey>> _decode(
-  List<List<int>> chunks,
-) {
-  final input = TerminalInput(
-    source: Stream<List<int>>.fromIterable(chunks),
-  );
+Future<List<ExplorerKey>> _decode(List<List<int>> chunks) {
+  final input = TerminalInput(source: Stream<List<int>>.fromIterable(chunks));
 
   return input.read_keys().toList();
 }

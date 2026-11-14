@@ -62,20 +62,13 @@ void main() {
       expect(metadata.modified_at!.isUtc, isTrue);
       expect(metadata.accessed_at!.isUtc, isTrue);
 
-      expect(
-        metadata.created_at!.isAtSameMomentAs(local_time),
-        isTrue,
-      );
+      expect(metadata.created_at!.isAtSameMomentAs(local_time), isTrue);
     });
 
     test('retains permission observations', () {
-      final permissions = FilesystemPermissions(
-        posix_mode: 0x1A4,
-      );
+      final permissions = FilesystemPermissions(posix_mode: 0x1A4);
 
-      final metadata = FilesystemMetadata(
-        permissions: permissions,
-      );
+      final metadata = FilesystemMetadata(permissions: permissions);
 
       expect(metadata.permissions, same(permissions));
     });
@@ -86,9 +79,7 @@ void main() {
         entry_id: '123',
       );
 
-      final metadata = FilesystemMetadata(
-        identity: identity,
-      );
+      final metadata = FilesystemMetadata(identity: identity);
 
       expect(metadata.identity, same(identity));
     });

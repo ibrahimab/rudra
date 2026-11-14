@@ -26,13 +26,9 @@ final class WelcomeTarget implements TerminalWidget {
   int get height => view_model.can_inspect ? configured_rows : unsupported_rows;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     if (view_model.can_inspect) {
-      yield TerminalLine(
-        'Target: ${view_model.target_id}',
-      );
+      yield TerminalLine('Target: ${view_model.target_id}');
 
       yield TerminalLine(
         'Starting directory: ${view_model.starting_directory}',

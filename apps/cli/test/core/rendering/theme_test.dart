@@ -35,17 +35,11 @@ void main() {
     });
 
     test('recognizes each styling property independently', () {
-      const colored = TerminalStyle(
-        foreground: TerminalColor.blue,
-      );
+      const colored = TerminalStyle(foreground: TerminalColor.blue);
 
-      const bold = TerminalStyle(
-        bold: true,
-      );
+      const bold = TerminalStyle(bold: true);
 
-      const reversed = TerminalStyle(
-        reverse: true,
-      );
+      const reversed = TerminalStyle(reverse: true);
 
       expect(colored.is_plain, isFalse);
       expect(bold.is_plain, isFalse);
@@ -55,9 +49,7 @@ void main() {
 
   group('TerminalTheme', () {
     test('preserves the supplied theme identifier', () {
-      final theme = TerminalTheme(
-        name: 'custom-theme',
-      );
+      final theme = TerminalTheme(name: 'custom-theme');
 
       expect(theme.name, 'custom-theme');
     });
@@ -73,9 +65,7 @@ void main() {
     });
 
     test('returns plain styles for unconfigured roles', () {
-      final theme = TerminalTheme(
-        name: 'minimal',
-      );
+      final theme = TerminalTheme(name: 'minimal');
 
       for (final role in TerminalRole.values) {
         final style = theme.style_for(role);
@@ -96,14 +86,10 @@ void main() {
 
       final theme = TerminalTheme(
         name: 'custom',
-        styles: {
-          TerminalRole.directory: directory_style,
-        },
+        styles: {TerminalRole.directory: directory_style},
       );
 
-      final result = theme.style_for(
-        TerminalRole.directory,
-      );
+      final result = theme.style_for(TerminalRole.directory);
 
       expect(result, same(directory_style));
       expect(result.foreground, TerminalColor.blue);
@@ -111,10 +97,7 @@ void main() {
       expect(result.reverse, isFalse);
 
       // An unrelated role must retain its default style.
-      expect(
-        theme.style_for(TerminalRole.error).is_plain,
-        isTrue,
-      );
+      expect(theme.style_for(TerminalRole.error).is_plain, isTrue);
     });
 
     test('defensively copies supplied style mappings', () {
@@ -124,29 +107,21 @@ void main() {
         ),
       };
 
-      final theme = TerminalTheme(
-        name: 'immutable',
-        styles: styles,
-      );
+      final theme = TerminalTheme(name: 'immutable', styles: styles);
 
       // Mutating the original map must not change the theme.
       styles[TerminalRole.directory] = const TerminalStyle(
         foreground: TerminalColor.red,
       );
 
-      styles[TerminalRole.warning] = const TerminalStyle(
-        bold: true,
-      );
+      styles[TerminalRole.warning] = const TerminalStyle(bold: true);
 
       expect(
         theme.style_for(TerminalRole.directory).foreground,
         TerminalColor.blue,
       );
 
-      expect(
-        theme.style_for(TerminalRole.warning).is_plain,
-        isTrue,
-      );
+      expect(theme.style_for(TerminalRole.warning).is_plain, isTrue);
 
       styles.clear();
 
@@ -225,13 +200,9 @@ void main() {
     });
 
     test('defines title and heading emphasis', () {
-      final title = TerminalTheme.ansi.style_for(
-        TerminalRole.title,
-      );
+      final title = TerminalTheme.ansi.style_for(TerminalRole.title);
 
-      final heading = TerminalTheme.ansi.style_for(
-        TerminalRole.heading,
-      );
+      final heading = TerminalTheme.ansi.style_for(TerminalRole.heading);
 
       expect(title.foreground, TerminalColor.cyan);
       expect(title.bold, isTrue);
@@ -243,21 +214,13 @@ void main() {
     test('distinguishes filesystem entry kinds', () {
       final theme = TerminalTheme.ansi;
 
-      final directory = theme.style_for(
-        TerminalRole.directory,
-      );
+      final directory = theme.style_for(TerminalRole.directory);
 
-      final file = theme.style_for(
-        TerminalRole.regular_file,
-      );
+      final file = theme.style_for(TerminalRole.regular_file);
 
-      final link = theme.style_for(
-        TerminalRole.symbolic_link,
-      );
+      final link = theme.style_for(TerminalRole.symbolic_link);
 
-      final other = theme.style_for(
-        TerminalRole.other_entry,
-      );
+      final other = theme.style_for(TerminalRole.other_entry);
 
       expect(directory.foreground, TerminalColor.blue);
       expect(directory.bold, isTrue);
@@ -271,22 +234,16 @@ void main() {
     });
 
     test('uses reverse video for selected entries', () {
-      final selected = TerminalTheme.ansi.style_for(
-        TerminalRole.selected,
-      );
+      final selected = TerminalTheme.ansi.style_for(TerminalRole.selected);
 
       expect(selected.bold, isTrue);
       expect(selected.reverse, isTrue);
     });
 
     test('distinguishes warnings and errors', () {
-      final warning = TerminalTheme.ansi.style_for(
-        TerminalRole.warning,
-      );
+      final warning = TerminalTheme.ansi.style_for(TerminalRole.warning);
 
-      final error = TerminalTheme.ansi.style_for(
-        TerminalRole.error,
-      );
+      final error = TerminalTheme.ansi.style_for(TerminalRole.error);
 
       expect(warning.foreground, TerminalColor.yellow);
       expect(warning.bold, isTrue);
@@ -296,9 +253,7 @@ void main() {
     });
 
     test('uses muted styling for secondary information', () {
-      final muted = TerminalTheme.ansi.style_for(
-        TerminalRole.muted,
-      );
+      final muted = TerminalTheme.ansi.style_for(TerminalRole.muted);
 
       expect(muted.foreground, TerminalColor.gray);
       expect(muted.bold, isFalse);
@@ -306,9 +261,7 @@ void main() {
     });
 
     test('leaves ordinary text unstyled', () {
-      final text_style = TerminalTheme.ansi.style_for(
-        TerminalRole.text,
-      );
+      final text_style = TerminalTheme.ansi.style_for(TerminalRole.text);
 
       expect(text_style.is_plain, isTrue);
     });

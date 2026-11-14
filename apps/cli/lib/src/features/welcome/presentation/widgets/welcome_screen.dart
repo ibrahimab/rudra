@@ -38,19 +38,17 @@ final class WelcomeScreen implements TerminalWidget {
   /// Composes the header, target, optional listing, commands,
   /// and safety footer into a complete terminal widget tree.
   WelcomeScreen(WelcomeViewModel view_model)
-      : _layout = TerminalColumn(
-          children: [
-            WelcomeHeader(view_model.header),
-            WelcomeTarget(view_model.target),
-            if (view_model.filesystem != null)
-              DirectoryListingWidget(
-                view_model.filesystem!.listing,
-              ),
-            if (view_model.filesystem != null) const TerminalLabel(''),
-            WelcomeCommands(view_model.commands),
-            WelcomeFooter(view_model.footer),
-          ],
-        );
+    : _layout = TerminalColumn(
+        children: [
+          WelcomeHeader(view_model.header),
+          WelcomeTarget(view_model.target),
+          if (view_model.filesystem != null)
+            DirectoryListingWidget(view_model.filesystem!.listing),
+          if (view_model.filesystem != null) const TerminalLabel(''),
+          WelcomeCommands(view_model.commands),
+          WelcomeFooter(view_model.footer),
+        ],
+      );
 
   /// Root terminal widget composition.
   final TerminalColumn _layout;
@@ -59,9 +57,7 @@ final class WelcomeScreen implements TerminalWidget {
   int get height => _layout.height;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return _layout.build(constraints);
   }
 }

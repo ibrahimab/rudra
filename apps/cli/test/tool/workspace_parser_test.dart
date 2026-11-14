@@ -6,33 +6,25 @@ import '../../tool/src/dev_tasks.dart';
 void main() {
   group('Workspace listing parser', () {
     test('extracts all workspace package paths', () {
-      const output = 'Package          Path\n'
+      const output =
+          'Package          Path\n'
           'rudra_workspace  ./\n'
           'rudra_cli        apps/cli/\n'
           'rudra_sdk        packages/sdk/\n';
 
       final paths = parse_workspace_paths(output);
 
-      expect(
-        paths,
-        equals([
-          './',
-          'apps/cli/',
-          'packages/sdk/',
-        ]),
-      );
+      expect(paths, equals(['./', 'apps/cli/', 'packages/sdk/']));
     });
 
     test('ignores empty lines', () {
-      const output = 'Package          Path\n'
+      const output =
+          'Package          Path\n'
           '\n'
           'rudra_cli        apps/cli/\n'
           '\n';
 
-      expect(
-        parse_workspace_paths(output),
-        equals(['apps/cli/']),
-      );
+      expect(parse_workspace_paths(output), equals(['apps/cli/']));
     });
 
     test('rejects unexpected output formats', () {
@@ -50,19 +42,18 @@ void main() {
     });
 
     test('rejects malformed package entries', () {
-      const output = 'Package          Path\n'
+      const output =
+          'Package          Path\n'
           'invalid-entry-without-path\n';
 
-      expect(
-        () => parse_workspace_paths(output),
-        throwsFormatException,
-      );
+      expect(() => parse_workspace_paths(output), throwsFormatException);
     });
   });
 
   group('Workspace package metadata', () {
     test('preserves package names and paths', () {
-      const output = 'Package          Path\n'
+      const output =
+          'Package          Path\n'
           'rudra_workspace  ./\n'
           'rudra_cli        apps/cli/\n'
           'rudra_sdk        packages/sdk/\n';
@@ -81,10 +72,7 @@ void main() {
 
   group('Test argument construction', () {
     test('defaults to all tests', () {
-      expect(
-        build_test_arguments(),
-        equals(['test']),
-      );
+      expect(build_test_arguments(), equals(['test']));
     });
 
     test('forwards test name and tag filters', () {
@@ -109,18 +97,9 @@ void main() {
     });
 
     test('preserves compound tag selectors', () {
-      final arguments = build_test_arguments(
-        tags: 'unit && !slow',
-      );
+      final arguments = build_test_arguments(tags: 'unit && !slow');
 
-      expect(
-        arguments,
-        equals([
-          'test',
-          '--tags',
-          'unit && !slow',
-        ]),
-      );
+      expect(arguments, equals(['test', '--tags', 'unit && !slow']));
     });
   });
 }

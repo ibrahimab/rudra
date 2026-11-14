@@ -42,8 +42,8 @@ final class ExplorerController {
   ExplorerController({
     required RudraSdk sdk,
     required TargetPath starting_directory,
-  })  : _sdk = sdk,
-        _root_directory = starting_directory;
+  }) : _sdk = sdk,
+       _root_directory = starting_directory;
 
   /// SDK used for all read-only filesystem observations.
   final RudraSdk _sdk;
@@ -79,10 +79,7 @@ final class ExplorerController {
       throw StateError('The explorer has already started.');
     }
 
-    return _load(
-      directory: _root_directory,
-      history: const [],
-    );
+    return _load(directory: _root_directory, history: const []);
   }
 
   /// Moves selection by [offset] entries.
@@ -103,8 +100,9 @@ final class ExplorerController {
 
     final previous_index = current.selected_index!;
 
-    final next_index =
-        (previous_index + offset).clamp(0, current.entries.length - 1).toInt();
+    final next_index = (previous_index + offset)
+        .clamp(0, current.entries.length - 1)
+        .toInt();
 
     final next = current.with_selection(next_index);
     _model = next;
@@ -138,10 +136,7 @@ final class ExplorerController {
 
     return _load(
       directory: selected.path,
-      history: [
-        ...current.history,
-        current.current_directory,
-      ],
+      history: [...current.history, current.current_directory],
     );
   }
 
@@ -167,10 +162,7 @@ final class ExplorerController {
       current.history.length - 1,
     );
 
-    return _load(
-      directory: previous_directory,
-      history: previous_history,
-    );
+    return _load(directory: previous_directory, history: previous_history);
   }
 
   /// Ends the current in-memory explorer interaction.
@@ -201,25 +193,19 @@ final class ExplorerController {
     required List<TargetPath> history,
   }) async {
     if (_is_loading) {
-      throw StateError(
-        'A directory inspection is already in progress.',
-      );
+      throw StateError('A directory inspection is already in progress.');
     }
 
     _is_loading = true;
 
     try {
-      final listing = await _sdk.filesystem.list(
-        directory: directory,
-      );
+      final listing = await _sdk.filesystem.list(directory: directory);
 
       // Reject inconsistent SDK observations instead of
       // silently displaying another target or directory.
       if (listing.target_id != _sdk.target_id ||
           listing.directory.value != directory.value) {
-        throw StateError(
-          'SDK returned a listing for an unexpected directory.',
-        );
+        throw StateError('SDK returned a listing for an unexpected directory.');
       }
 
       final next = ExplorerModel(
@@ -240,9 +226,7 @@ final class ExplorerController {
   /// Centralizes lifecycle validation for navigation operations.
   ExplorerModel _require_active() {
     if (_is_loading) {
-      throw StateError(
-        'Navigation is unavailable during inspection.',
-      );
+      throw StateError('Navigation is unavailable during inspection.');
     }
 
     final current = _model;

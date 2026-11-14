@@ -20,10 +20,7 @@ void main() {
         expect(device.echo_mode, isFalse);
         expect(device.line_mode, isFalse);
 
-        expect(
-          device.written,
-          contains('\x1B[?1049h\x1B[?25l'),
-        );
+        expect(device.written, contains('\x1B[?1049h\x1B[?25l'));
 
         return 42;
       });
@@ -63,10 +60,7 @@ void main() {
 
       device.send_bytes([0x1B, 0x5B, 0x41]);
 
-      expect(
-        await received,
-        orderedEquals([0x1B, 0x5B, 0x41]),
-      );
+      expect(await received, orderedEquals([0x1B, 0x5B, 0x41]));
 
       expect(device.input_canceled, isTrue);
     });
@@ -119,10 +113,7 @@ void main() {
 
       final host = DartExplorerTerminalHost(device: device);
 
-      await expectLater(
-        host.run_interactive(() async => 0),
-        throwsStateError,
-      );
+      await expectLater(host.run_interactive(() async => 0), throwsStateError);
 
       expect(device.written, contains('\x1B[?1049h'));
       expect(device.written, contains('\x1B[?25h'));
@@ -258,10 +249,7 @@ void main() {
 
       expect(host.is_interactive, isFalse);
 
-      await expectLater(
-        host.run_interactive(() async => 0),
-        throwsStateError,
-      );
+      await expectLater(host.run_interactive(() async => 0), throwsStateError);
 
       expect(device.mode_changes, isEmpty);
       expect(device.written, isEmpty);
@@ -298,10 +286,7 @@ void main() {
 
       expect(host.is_interactive, isFalse);
 
-      await expectLater(
-        host.run_interactive(() async => 0),
-        throwsStateError,
-      );
+      await expectLater(host.run_interactive(() async => 0), throwsStateError);
     });
 
     test('rejects nested and repeated interactions', () async {
@@ -317,16 +302,11 @@ void main() {
         return 0;
       });
 
-      await expectLater(
-        host.run_interactive(() async => 0),
-        throwsStateError,
-      );
+      await expectLater(host.run_interactive(() async => 0), throwsStateError);
     });
 
     test('rejects input access outside an interaction', () {
-      final host = DartExplorerTerminalHost(
-        device: _FakeTerminalDevice(),
-      );
+      final host = DartExplorerTerminalHost(device: _FakeTerminalDevice());
 
       expect(() => host.input_bytes, throwsStateError);
     });
@@ -376,25 +356,16 @@ void main() {
 
         final failure = error.restoration_errors.single;
 
-        expect(
-          failure,
-          isA<ExplorerTerminalRestorationFailure>(),
-        );
+        expect(failure, isA<ExplorerTerminalRestorationFailure>());
 
         final restoration_failure =
             failure as ExplorerTerminalRestorationFailure;
 
-        expect(
-          restoration_failure.operation,
-          'restore terminal echo mode',
-        );
+        expect(restoration_failure.operation, 'restore terminal echo mode');
 
         expect(restoration_failure.cause, isA<StateError>());
 
-        expect(
-          error.toString(),
-          contains('restore terminal echo mode'),
-        );
+        expect(error.toString(), contains('restore terminal echo mode'));
 
         expect(
           error.toString(),
@@ -420,8 +391,8 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
   _FakeTerminalDevice({
     bool initial_echo_mode = true,
     bool initial_line_mode = true,
-  })  : _echo_mode = initial_echo_mode,
-        _line_mode = initial_line_mode {
+  }) : _echo_mode = initial_echo_mode,
+       _line_mode = initial_line_mode {
     _input = StreamController<List<int>>.broadcast(
       onCancel: () => input_canceled = true,
       sync: true,
@@ -484,9 +455,7 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
     mode_changes.add('echo:$value');
 
     if (require_active_input_for_mode_restore && input_canceled) {
-      throw StateError(
-        'Cannot restore echo mode after stdin cancellation.',
-      );
+      throw StateError('Cannot restore echo mode after stdin cancellation.');
     }
 
     _echo_mode = value;
@@ -508,9 +477,7 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
     mode_changes.add('line:$value');
 
     if (require_active_input_for_mode_restore && input_canceled) {
-      throw StateError(
-        'Cannot restore line mode after stdin cancellation.',
-      );
+      throw StateError('Cannot restore line mode after stdin cancellation.');
     }
 
     _line_mode = value;

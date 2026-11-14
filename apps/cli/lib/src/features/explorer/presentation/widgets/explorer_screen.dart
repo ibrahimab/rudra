@@ -41,13 +41,13 @@ import 'header/explorer_header.dart';
 final class ExplorerScreen implements TerminalWidget {
   /// Composes the independently prepared component view models.
   ExplorerScreen(ExplorerViewModel view_model)
-      : _layout = TerminalColumn(
-          children: [
-            ExplorerHeader(view_model.header),
-            ExplorerDirectory(view_model.directory),
-            ExplorerFooter(view_model.footer),
-          ],
-        );
+    : _layout = TerminalColumn(
+        children: [
+          ExplorerHeader(view_model.header),
+          ExplorerDirectory(view_model.directory),
+          ExplorerFooter(view_model.footer),
+        ],
+      );
 
   /// Root vertical layout containing the screen components.
   final TerminalColumn _layout;
@@ -65,9 +65,7 @@ final class ExplorerScreen implements TerminalWidget {
   int get height => _layout.height;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return _layout.build(constraints);
   }
 }

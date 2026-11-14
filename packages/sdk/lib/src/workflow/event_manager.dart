@@ -32,9 +32,7 @@ final class EventManager {
   /// returning a successful receipt.
   ///
   /// Construction does not access persistence or the filesystem.
-  const EventManager({
-    required EventSubmissionStore store,
-  }) : _store = store;
+  const EventManager({required EventSubmissionStore store}) : _store = store;
 
   /// Durable submission boundary.
   final EventSubmissionStore _store;
@@ -57,9 +55,6 @@ final class EventManager {
     WorkflowCommandEvent event, {
     String? idempotency_key,
   }) {
-    return _store.accept(
-      event,
-      idempotency_key: idempotency_key,
-    );
+    return _store.accept(event, idempotency_key: idempotency_key);
   }
 }

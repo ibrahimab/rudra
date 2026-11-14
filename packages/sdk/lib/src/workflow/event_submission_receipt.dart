@@ -25,11 +25,8 @@ final class EventSubmissionReceipt {
   EventSubmissionReceipt({
     required String event_id,
     required String correlation_id,
-  })  : event_id = _require_id(event_id, 'event_id'),
-        correlation_id = _require_id(
-          correlation_id,
-          'correlation_id',
-        );
+  }) : event_id = _require_id(event_id, 'event_id'),
+       correlation_id = _require_id(correlation_id, 'correlation_id');
 
   /// Stable identity of the durably accepted submission.
   final String event_id;
@@ -40,11 +37,7 @@ final class EventSubmissionReceipt {
   /// Validates an identifier without modifying it.
   static String _require_id(String value, String name) {
     if (value.trim().isEmpty) {
-      throw ArgumentError.value(
-        value,
-        name,
-        'Identifier must not be blank.',
-      );
+      throw ArgumentError.value(value, name, 'Identifier must not be blank.');
     }
 
     return value;

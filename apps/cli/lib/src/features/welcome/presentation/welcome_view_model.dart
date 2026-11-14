@@ -59,9 +59,7 @@ final class WelcomeViewModel {
     this.filesystem,
   }) {
     if (commands.show_filesystem_commands != target.can_inspect) {
-      throw ArgumentError(
-        'Command hints must match target availability.',
-      );
+      throw ArgumentError('Command hints must match target availability.');
     }
 
     final observation = filesystem;
@@ -80,9 +78,7 @@ final class WelcomeViewModel {
     }
 
     if (observation.listing.layout != DirectoryListingLayout.detailed) {
-      throw ArgumentError(
-        'Welcome requires a detailed directory listing.',
-      );
+      throw ArgumentError('Welcome requires a detailed directory listing.');
     }
   }
 

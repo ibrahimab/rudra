@@ -17,7 +17,7 @@ import 'workflow_transition.dart';
 /// terminal outcome. It does not perform cleanup, restoration,
 /// or filesystem mutation.
 WorkflowTransition<WorkflowActiveState, WorkflowEndedEvent, WorkflowEndedState>
-    workflow_ended_transition() {
+workflow_ended_transition() {
   return WorkflowTransition(
     guard: (state, event) {
       if (event.workflow_id != state.identity.workflow_id) {

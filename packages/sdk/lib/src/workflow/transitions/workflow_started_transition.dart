@@ -18,8 +18,12 @@ import 'workflow_transition.dart';
 /// identifier and OS-user owner reference.
 ///
 /// Invalid bindings produce typed transition failures.
-WorkflowTransition<WorkflowStartRequestedState, WorkflowStartedEvent,
-    WorkflowActiveState> workflow_started_transition() {
+WorkflowTransition<
+  WorkflowStartRequestedState,
+  WorkflowStartedEvent,
+  WorkflowActiveState
+>
+workflow_started_transition() {
   return WorkflowTransition(
     guard: (state, event) {
       final identity = event.identity;
@@ -29,7 +33,8 @@ WorkflowTransition<WorkflowStartRequestedState, WorkflowStartedEvent,
           code: WorkflowTransitionErrorCode.target_mismatch,
           state: state,
           event: event,
-          message: 'The workflow target differs from the '
+          message:
+              'The workflow target differs from the '
               'original start request.',
         );
       }
@@ -39,7 +44,8 @@ WorkflowTransition<WorkflowStartRequestedState, WorkflowStartedEvent,
           code: WorkflowTransitionErrorCode.root_mismatch,
           state: state,
           event: event,
-          message: 'The workflow root differs from the '
+          message:
+              'The workflow root differs from the '
               'original start request.',
         );
       }

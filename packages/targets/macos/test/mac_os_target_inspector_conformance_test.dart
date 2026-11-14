@@ -1,5 +1,4 @@
 @TestOn('mac-os')
-
 import 'dart:io';
 
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
@@ -38,30 +37,22 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.logicalFileSize,
-        ),
+        capabilities.status_for(TargetInspectionFeature.logicalFileSize),
         TargetCapabilityStatus.supported,
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.creationTime,
-        ),
+        capabilities.status_for(TargetInspectionFeature.creationTime),
         TargetCapabilityStatus.unknown,
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.effectiveAccess,
-        ),
+        capabilities.status_for(TargetInspectionFeature.effectiveAccess),
         TargetCapabilityStatus.unsupported,
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.symbolicLinkTarget,
-        ),
+        capabilities.status_for(TargetInspectionFeature.symbolicLinkTarget),
         TargetCapabilityStatus.supported,
       );
     });
@@ -107,11 +98,7 @@ void main() {
 
       expect(
         paths,
-        unorderedEquals([
-          file.path,
-          directory.path,
-          dangling.path,
-        ]),
+        unorderedEquals([file.path, directory.path, dangling.path]),
       );
 
       expect(paths, isNot(contains(nested.path)));
@@ -134,10 +121,7 @@ void main() {
 
       // An exhausted single-subscription stream cannot be
       // subscribed to again.
-      expect(
-        () => stream.listen((_) {}),
-        throwsStateError,
-      );
+      expect(() => stream.listen((_) {}), throwsStateError);
     });
 
     test('refuses to enumerate a directory symbolic link', () async {
@@ -343,19 +327,7 @@ TypeMatcher<TargetInspectionException> _contract_error(
   TargetPath path,
 ) {
   return isA<TargetInspectionException>()
-      .having(
-        (error) => error.code,
-        'error code',
-        code,
-      )
-      .having(
-        (error) => error.operation,
-        'operation',
-        operation,
-      )
-      .having(
-        (error) => error.path,
-        'original path',
-        same(path),
-      );
+      .having((error) => error.code, 'error code', code)
+      .having((error) => error.operation, 'operation', operation)
+      .having((error) => error.path, 'original path', same(path));
 }

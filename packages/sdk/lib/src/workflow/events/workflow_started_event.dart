@@ -14,9 +14,7 @@ import 'workflow_start_event.dart';
 /// workflow or perform filesystem operations.
 final class WorkflowStartedEvent implements WorkflowEvent {
   /// Creates an established workflow-start outcome.
-  const WorkflowStartedEvent({
-    required this.identity,
-  });
+  const WorkflowStartedEvent({required this.identity});
 
   /// Stable semantic event type.
   static const String type_id = 'workflow.started';

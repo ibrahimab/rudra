@@ -18,9 +18,7 @@ void main() {
         kind: FilesystemEntryKind.regularFile,
         metadata: FilesystemMetadata(
           logical_size_bytes: 1024,
-          permissions: FilesystemPermissions(
-            posix_mode: 0x1A4,
-          ),
+          permissions: FilesystemPermissions(posix_mode: 0x1A4),
         ),
       );
 
@@ -30,10 +28,7 @@ void main() {
       );
 
       final composition = ProductSdkComposition(
-        sdk: RudraSdk(
-          target_id: 'fixture-target',
-          inspector: inspector,
-        ),
+        sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
         working_directory: directory,
       );
 
@@ -55,10 +50,7 @@ void main() {
       expect(status, RudraExitCode.success.value);
       expect(output.toString(), contains('RUDRA'));
       expect(output.toString(), contains('Target: fixture-target'));
-      expect(
-        output.toString(),
-        contains('Starting directory: /fixture'),
-      );
+      expect(output.toString(), contains('Starting directory: /fixture'));
       expect(output.toString(), contains('example.txt'));
       expect(output.toString(), contains('1.0 KiB'));
       expect(output.toString(), contains('-rw-r--r--'));
@@ -92,9 +84,7 @@ void main() {
       final file = FilesystemEntry(
         path: TargetPath('/fixture/good.txt'),
         kind: FilesystemEntryKind.regularFile,
-        metadata: FilesystemMetadata(
-          logical_size_bytes: 512,
-        ),
+        metadata: FilesystemMetadata(logical_size_bytes: 512),
       );
 
       final blocked_path = TargetPath('/fixture/blocked.txt');
@@ -123,10 +113,7 @@ void main() {
 
       final status = await controller.show();
 
-      expect(
-        status,
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(status, RudraExitCode.inspection_incomplete.value);
       expect(output.toString(), contains('good.txt'));
       expect(output.toString(), contains('WARNING'));
       expect(errors.toString(), contains('permissionDenied'));
@@ -155,10 +142,7 @@ void main() {
         error_output: errors,
       ).show();
 
-      expect(
-        status,
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(status, RudraExitCode.inspection_incomplete.value);
       expect(output.toString(), contains('WARNING'));
       expect(errors.toString(), contains('listDirectory'));
       expect(errors.toString(), contains('permissionDenied'));
@@ -196,18 +180,13 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      await expectLater(
-        controller.show(),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(controller.show(), throwsA(isA<StateError>()));
     });
 
     test('accepts an explicitly injected rendering backend', () async {
       final output = StringBuffer();
 
-      final renderer = BareWelcomeRenderer(
-        output: output,
-      );
+      final renderer = BareWelcomeRenderer(output: output);
 
       final controller = WelcomeController(
         sdk: null,
@@ -219,10 +198,7 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        output.toString(),
-        contains('RUDRA  |  READ ONLY'),
-      );
+      expect(output.toString(), contains('RUDRA  |  READ ONLY'));
 
       expect(
         output.toString(),
@@ -268,10 +244,7 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      expect(
-        await cli.run([]),
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(await cli.run([]), RudraExitCode.inspection_incomplete.value);
     });
 
     test('preserves explicit production commands', () {
@@ -283,10 +256,7 @@ void main() {
       expect(cli.command_names, containsAll(['about', 'ls']));
       expect(
         cli.module_ids,
-        containsAll([
-          'rudra.product.about',
-          'rudra.product.filesystem',
-        ]),
+        containsAll(['rudra.product.about', 'rudra.product.filesystem']),
       );
     });
 
@@ -299,10 +269,7 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      expect(
-        await cli.run([]),
-        RudraExitCode.success.value,
-      );
+      expect(await cli.run([]), RudraExitCode.success.value);
 
       await expectLater(cli.run([]), throwsStateError);
 
@@ -340,10 +307,7 @@ WelcomeController _create_welcome_controller({
 /// Creates an isolated SDK composition for welcome tests.
 ProductSdkComposition _composition(TargetInspector inspector) {
   return ProductSdkComposition(
-    sdk: RudraSdk(
-      target_id: 'fixture-target',
-      inspector: inspector,
-    ),
+    sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
     working_directory: TargetPath('/fixture'),
   );
 }
@@ -360,12 +324,12 @@ final class _StartupInspector implements TargetInspector {
     Map<String, TargetInspectionException> inspection_failures = const {},
     this.enumeration_failure,
     this.unexpected_failure,
-  })  : _children = List<TargetPath>.unmodifiable(children),
-        _entries = Map<String, FilesystemEntry>.unmodifiable(entries),
-        _inspection_failures =
-            Map<String, TargetInspectionException>.unmodifiable(
-          inspection_failures,
-        );
+  }) : _children = List<TargetPath>.unmodifiable(children),
+       _entries = Map<String, FilesystemEntry>.unmodifiable(entries),
+       _inspection_failures =
+           Map<String, TargetInspectionException>.unmodifiable(
+             inspection_failures,
+           );
 
   final List<TargetPath> _children;
   final Map<String, FilesystemEntry> _entries;
@@ -422,9 +386,7 @@ final class _StartupInspector implements TargetInspector {
     final entry = _entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'Unexpected inspection: ${path.value}',
-      );
+      throw StateError('Unexpected inspection: ${path.value}');
     }
 
     return entry;
@@ -432,23 +394,15 @@ final class _StartupInspector implements TargetInspector {
 
   /// Rejects unexpected capability discovery.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
-    throw StateError(
-      'Unexpected capability request: ${path.value}',
-    );
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
+    throw StateError('Unexpected capability request: ${path.value}');
   }
 
   /// Rejects symbolic-link resolution.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
     symbolic_link_calls++;
 
-    throw StateError(
-      'Unexpected symbolic-link access: ${path.value}',
-    );
+    throw StateError('Unexpected symbolic-link access: ${path.value}');
   }
 }

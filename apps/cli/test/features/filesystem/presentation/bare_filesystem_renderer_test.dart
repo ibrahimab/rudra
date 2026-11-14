@@ -20,9 +20,8 @@ void main() {
     test('preserves the original ls output exactly', () {
       final output = StringBuffer();
 
-      BareFilesystemRenderer(output: output).render(
-        _model(layout: DirectoryListingLayout.compact),
-      );
+      BareFilesystemRenderer(output: output)
+          .render(_model(layout: DirectoryListingLayout.compact));
 
       expect(
         output.toString(),
@@ -39,9 +38,7 @@ void main() {
         output: output,
         theme: TerminalTheme.ansi,
         ansi_text: const AnsiText(enabled: true),
-      ).render(
-        _model(layout: DirectoryListingLayout.compact),
-      );
+      ).render(_model(layout: DirectoryListingLayout.compact));
 
       expect(output.toString(), isNot(contains('\x1B')));
       expect(output.toString(), contains('LOGICAL_BYTES'));
@@ -50,17 +47,10 @@ void main() {
     test('renders an empty compact listing', () {
       final output = StringBuffer();
 
-      BareFilesystemRenderer(output: output).render(
-        _model(
-          layout: DirectoryListingLayout.compact,
-          rows: [],
-        ),
-      );
+      BareFilesystemRenderer(output: output)
+          .render(_model(layout: DirectoryListingLayout.compact, rows: []));
 
-      expect(
-        output.toString(),
-        'TYPE  LOGICAL_BYTES  PATH\n',
-      );
+      expect(output.toString(), 'TYPE  LOGICAL_BYTES  PATH\n');
     });
 
     test('sanitizes unsafe paths in compact output', () {
@@ -69,18 +59,11 @@ void main() {
       BareFilesystemRenderer(output: output).render(
         _model(
           layout: DirectoryListingLayout.compact,
-          rows: [
-            _row(
-              path: '/fixture/\x1B[2Jbad.txt',
-            ),
-          ],
+          rows: [_row(path: '/fixture/\x1B[2Jbad.txt')],
         ),
       );
 
-      expect(
-        output.toString(),
-        contains('/fixture/?[2Jbad.txt'),
-      );
+      expect(output.toString(), contains('/fixture/?[2Jbad.txt'));
 
       expect(output.toString(), isNot(contains('\x1B')));
     });
@@ -111,12 +94,8 @@ void main() {
     test('renders an empty detailed listing', () {
       final output = StringBuffer();
 
-      BareFilesystemRenderer(output: output).render(
-        _model(
-          layout: DirectoryListingLayout.detailed,
-          rows: [],
-        ),
-      );
+      BareFilesystemRenderer(output: output)
+          .render(_model(layout: DirectoryListingLayout.detailed, rows: []));
 
       expect(output.toString(), contains('NAME'));
       expect(output.toString(), contains('PERMISSIONS'));
@@ -130,10 +109,7 @@ void main() {
       final output = StringBuffer();
 
       BareFilesystemRenderer(output: output).render(
-        _model(
-          layout: DirectoryListingLayout.detailed,
-          is_complete: false,
-        ),
+        _model(layout: DirectoryListingLayout.detailed, is_complete: false),
       );
 
       expect(
@@ -148,9 +124,8 @@ void main() {
     test('does not display an incomplete warning for complete data', () {
       final output = StringBuffer();
 
-      BareFilesystemRenderer(output: output).render(
-        _model(layout: DirectoryListingLayout.detailed),
-      );
+      BareFilesystemRenderer(output: output)
+          .render(_model(layout: DirectoryListingLayout.detailed));
 
       expect(output.toString(), isNot(contains('WARNING')));
     });
@@ -186,11 +161,7 @@ void main() {
       BareFilesystemRenderer(output: output).render(
         _model(
           layout: DirectoryListingLayout.detailed,
-          rows: [
-            _row(
-              name: 'bad\x1B[2Jname',
-            ),
-          ],
+          rows: [_row(name: 'bad\x1B[2Jname')],
         ),
       );
 
@@ -204,10 +175,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      BareFilesystemRenderer(
-        output: output,
-        error_output: errors,
-      ).render(
+      BareFilesystemRenderer(output: output, error_output: errors).render(
         _model(
           layout: DirectoryListingLayout.compact,
           is_complete: false,
@@ -229,10 +197,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      BareFilesystemRenderer(
-        output: output,
-        error_output: errors,
-      ).render(
+      BareFilesystemRenderer(output: output, error_output: errors).render(
         _model(
           layout: DirectoryListingLayout.compact,
           is_complete: false,
@@ -240,10 +205,7 @@ void main() {
         ),
       );
 
-      expect(
-        errors.toString(),
-        'Filesystem inspection did not complete.\n',
-      );
+      expect(errors.toString(), 'Filesystem inspection did not complete.\n');
     });
 
     test('does not fabricate diagnostics for complete listings', () {
@@ -252,9 +214,7 @@ void main() {
       BareFilesystemRenderer(
         output: StringBuffer(),
         error_output: errors,
-      ).render(
-        _model(layout: DirectoryListingLayout.compact),
-      );
+      ).render(_model(layout: DirectoryListingLayout.compact));
 
       expect(errors.toString(), isEmpty);
     });
@@ -263,9 +223,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final renderer = BareFilesystemRenderer(
-        output: output,
-      );
+      final renderer = BareFilesystemRenderer(output: output);
 
       renderer.render_issues(
         _model(
@@ -305,9 +263,7 @@ void main() {
         _model(
           layout: DirectoryListingLayout.compact,
           is_complete: false,
-          issues: [
-            _issue(message: 'Failure\x1B[2Jdetected'),
-          ],
+          issues: [_issue(message: 'Failure\x1B[2Jdetected')],
         ),
       );
 
@@ -343,9 +299,7 @@ void main() {
         output: output,
         theme: TerminalTheme.plain,
         ansi_text: const AnsiText(enabled: true),
-      ).render(
-        _model(layout: DirectoryListingLayout.detailed),
-      );
+      ).render(_model(layout: DirectoryListingLayout.detailed));
 
       expect(output.toString(), isNot(contains('\x1B')));
     });
@@ -357,9 +311,7 @@ void main() {
         output: output,
         theme: TerminalTheme.ansi,
         ansi_text: const AnsiText(enabled: false),
-      ).render(
-        _model(layout: DirectoryListingLayout.detailed),
-      );
+      ).render(_model(layout: DirectoryListingLayout.detailed));
 
       expect(output.toString(), isNot(contains('\x1B')));
     });

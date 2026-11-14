@@ -57,17 +57,15 @@ final class WorkflowFlow {
     final event_types = <Type>{};
 
     for (final rule in rules) {
-      final key = (
-        rule.source_state_type,
-        rule.trigger_event_type,
-      );
+      final key = (rule.source_state_type, rule.trigger_event_type);
 
       if (registry.containsKey(key)) {
         throw WorkflowFlowException(
           code: WorkflowFlowErrorCode.duplicate_transition,
           source_state_type: rule.source_state_type,
           trigger_event_type: rule.trigger_event_type,
-          message: 'More than one transition is registered '
+          message:
+              'More than one transition is registered '
               'for the same state and event types.',
         );
       }
@@ -78,9 +76,7 @@ final class WorkflowFlow {
 
     return WorkflowFlow._(
       rules,
-      Map<(Type, Type), WorkflowTransitionDefinition>.unmodifiable(
-        registry,
-      ),
+      Map<(Type, Type), WorkflowTransitionDefinition>.unmodifiable(registry),
       Set<Type>.unmodifiable(event_types),
     );
   }
@@ -102,11 +98,7 @@ final class WorkflowFlow {
   }
 
   /// Stores already-validated immutable registry structures.
-  WorkflowFlow._(
-    this.transitions,
-    this._registry,
-    this._event_types,
-  );
+  WorkflowFlow._(this.transitions, this._registry, this._event_types);
 
   /// Immutable registered transition definitions.
   ///

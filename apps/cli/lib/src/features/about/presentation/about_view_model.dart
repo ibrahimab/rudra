@@ -27,9 +27,7 @@ import 'widgets/information/about_information_view_model.dart';
 /// ```
 final class AboutViewModel {
   /// Composes the independently prepared application information.
-  const AboutViewModel({
-    required this.information,
-  });
+  const AboutViewModel({required this.information});
 
   /// Application identity and descriptive information.
   final AboutInformationViewModel information;

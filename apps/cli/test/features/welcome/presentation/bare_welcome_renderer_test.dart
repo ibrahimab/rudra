@@ -33,12 +33,8 @@ void main() {
     test('preserves unsupported-target output exactly', () {
       final output = StringBuffer();
 
-      BareWelcomeRenderer(output: output).render(
-        _welcome(
-          target_id: null,
-          starting_directory: null,
-        ),
-      );
+      BareWelcomeRenderer(output: output)
+          .render(_welcome(target_id: null, starting_directory: null));
 
       expect(
         output.toString(),
@@ -63,9 +59,7 @@ void main() {
     test('preserves configured-target output exactly', () {
       final output = StringBuffer();
 
-      BareWelcomeRenderer(output: output).render(
-        _welcome(),
-      );
+      BareWelcomeRenderer(output: output).render(_welcome());
 
       expect(
         output.toString(),
@@ -94,13 +88,8 @@ void main() {
     test('delegates detailed directory rendering', () {
       final output = StringBuffer();
 
-      BareWelcomeRenderer(output: output).render(
-        _welcome(
-          listing: _directory_listing(
-            rows: [_file_row()],
-          ),
-        ),
-      );
+      BareWelcomeRenderer(output: output)
+          .render(_welcome(listing: _directory_listing(rows: [_file_row()])));
 
       final result = output.toString();
 
@@ -110,26 +99,17 @@ void main() {
       expect(result, contains('readme.txt'));
       expect(result, contains('1.0 KiB'));
       expect(result, contains('-rw-r--r--'));
-      expect(
-        result,
-        contains('1 observed entries · immediate children only'),
-      );
+      expect(result, contains('1 observed entries · immediate children only'));
 
       // The nested filesystem table is rendered exactly once.
-      expect(
-        '1 observed entries'.allMatches(result),
-        hasLength(1),
-      );
+      expect('1 observed entries'.allMatches(result), hasLength(1));
     });
 
     test('renders empty directory observations', () {
       final output = StringBuffer();
 
-      BareWelcomeRenderer(output: output).render(
-        _welcome(
-          listing: _directory_listing(),
-        ),
-      );
+      BareWelcomeRenderer(output: output)
+          .render(_welcome(listing: _directory_listing()));
 
       expect(
         output.toString(),
@@ -141,9 +121,7 @@ void main() {
     test('retains the read-only safety statement', () {
       final output = StringBuffer();
 
-      BareWelcomeRenderer(output: output).render(
-        _welcome(),
-      );
+      BareWelcomeRenderer(output: output).render(_welcome());
 
       expect(
         output.toString(),
@@ -157,8 +135,9 @@ void main() {
     test('works through the generic Renderer contract', () {
       final output = StringBuffer();
 
-      final Renderer<WelcomeViewModel> renderer =
-          BareWelcomeRenderer(output: output);
+      final Renderer<WelcomeViewModel> renderer = BareWelcomeRenderer(
+        output: output,
+      );
 
       renderer.render(_welcome());
 
@@ -167,11 +146,7 @@ void main() {
     });
 
     test('renders deterministically without shared state', () {
-      final model = _welcome(
-        listing: _directory_listing(
-          rows: [_file_row()],
-        ),
-      );
+      final model = _welcome(listing: _directory_listing(rows: [_file_row()]));
 
       final first = StringBuffer();
       final second = StringBuffer();
@@ -188,10 +163,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      BareWelcomeRenderer(
-        output: output,
-        error_output: errors,
-      ).render(
+      BareWelcomeRenderer(output: output, error_output: errors).render(
         _welcome(
           listing: _directory_listing(
             is_complete: false,
@@ -222,20 +194,11 @@ void main() {
       BareWelcomeRenderer(
         output: output,
         error_output: errors,
-      ).render(
-        _welcome(
-          listing: _directory_listing(
-            is_complete: false,
-          ),
-        ),
-      );
+      ).render(_welcome(listing: _directory_listing(is_complete: false)));
 
       expect(output.toString(), contains('WARNING'));
 
-      expect(
-        errors.toString(),
-        'Filesystem inspection did not complete.\n',
-      );
+      expect(errors.toString(), 'Filesystem inspection did not complete.\n');
     });
 
     test('does not fabricate errors for complete observations', () {
@@ -244,13 +207,7 @@ void main() {
       BareWelcomeRenderer(
         output: StringBuffer(),
         error_output: errors,
-      ).render(
-        _welcome(
-          listing: _directory_listing(
-            rows: [_file_row()],
-          ),
-        ),
-      );
+      ).render(_welcome(listing: _directory_listing(rows: [_file_row()])));
 
       expect(errors.toString(), isEmpty);
     });
@@ -260,10 +217,7 @@ void main() {
 
       BareWelcomeRenderer(output: output).render(
         _welcome(
-          listing: _directory_listing(
-            is_complete: false,
-            issues: [_issue()],
-          ),
+          listing: _directory_listing(is_complete: false, issues: [_issue()]),
         ),
       );
 
@@ -280,13 +234,7 @@ void main() {
         output: output,
         theme: TerminalTheme.ansi,
         ansi_text: const AnsiText(enabled: true),
-      ).render(
-        _welcome(
-          listing: _directory_listing(
-            rows: [_directory_row()],
-          ),
-        ),
-      );
+      ).render(_welcome(listing: _directory_listing(rows: [_directory_row()])));
 
       final result = output.toString();
 
@@ -319,13 +267,7 @@ void main() {
         output: output,
         theme: TerminalTheme.ansi,
         ansi_text: const AnsiText(enabled: false),
-      ).render(
-        _welcome(
-          listing: _directory_listing(
-            rows: [_directory_row()],
-          ),
-        ),
-      );
+      ).render(_welcome(listing: _directory_listing(rows: [_directory_row()])));
 
       expect(output.toString(), isNot(contains('\x1B')));
     });
@@ -341,10 +283,7 @@ void main() {
         ansi_text: const AnsiText(enabled: true),
       ).render(
         _welcome(
-          listing: _directory_listing(
-            is_complete: false,
-            issues: [_issue()],
-          ),
+          listing: _directory_listing(is_complete: false, issues: [_issue()]),
         ),
       );
 
@@ -365,10 +304,7 @@ void main() {
       final result = output.toString();
 
       expect(result, contains('Target: fixture?[2Jtarget'));
-      expect(
-        result,
-        contains('Starting directory: /fixture?unsafe'),
-      );
+      expect(result, contains('Starting directory: /fixture?unsafe'));
 
       expect(result, isNot(contains('\x1B')));
     });
@@ -379,9 +315,7 @@ void main() {
       BareWelcomeRenderer(output: output).render(
         _welcome(
           listing: _directory_listing(
-            rows: [
-              _file_row(name: 'bad\x1B[2Jfile.txt'),
-            ],
+            rows: [_file_row(name: 'bad\x1B[2Jfile.txt')],
           ),
         ),
       );
@@ -408,9 +342,7 @@ WelcomeViewModel _welcome({
   );
 
   return WelcomeViewModel(
-    header: WelcomeHeaderViewModel(
-      product_title: 'RUDRA',
-    ),
+    header: WelcomeHeaderViewModel(product_title: 'RUDRA'),
     target: target,
     commands: WelcomeCommandsViewModel(
       show_filesystem_commands: target.can_inspect,
@@ -450,9 +382,7 @@ FilesystemViewModel _directory_listing({
 ///
 /// The name can be overridden to verify safe rendering
 /// of untrusted filesystem names.
-DirectoryEntryViewModel _file_row({
-  String name = 'readme.txt',
-}) {
+DirectoryEntryViewModel _file_row({String name = 'readme.txt'}) {
   return DirectoryEntryViewModel(
     path: '/fixture/readme.txt',
     name: name,

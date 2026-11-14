@@ -35,9 +35,7 @@ final class AboutPresenter {
   ///
   /// The product name is validated by the component view model.
   /// This method does not perform filesystem or terminal I/O.
-  AboutViewModel present({
-    required String product_name,
-  }) {
+  AboutViewModel present({required String product_name}) {
     return AboutViewModel(
       information: AboutInformationViewModel(
         product_name: product_name,

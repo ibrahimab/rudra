@@ -24,10 +24,7 @@ final class WelcomeTargetViewModel {
   ///
   /// Throws [ArgumentError] for missing paired values or
   /// blank target identifiers and directory paths.
-  WelcomeTargetViewModel({
-    this.target_id,
-    this.starting_directory,
-  }) {
+  WelcomeTargetViewModel({this.target_id, this.starting_directory}) {
     if ((target_id == null) != (starting_directory == null)) {
       throw ArgumentError(
         'Target ID and starting directory must be '

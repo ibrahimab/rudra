@@ -61,9 +61,7 @@ final class TerminalConstraints {
     final width = columns;
 
     if (width == null) {
-      throw StateError(
-        'This widget requires bounded terminal columns.',
-      );
+      throw StateError('This widget requires bounded terminal columns.');
     }
 
     return width;
@@ -79,10 +77,7 @@ final class TerminalConstraints {
 /// the rendering backend.
 final class TerminalLine {
   /// Creates an immutable terminal presentation line.
-  const TerminalLine(
-    this.text, {
-    this.role = TerminalRole.text,
-  });
+  const TerminalLine(this.text, {this.role = TerminalRole.text});
 
   /// Unstyled display text.
   final String text;

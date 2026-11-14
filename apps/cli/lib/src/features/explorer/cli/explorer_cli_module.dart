@@ -50,8 +50,8 @@ final class ExplorerCliModule implements RudraCliModule {
   ExplorerCliModule({
     required TargetPath working_directory,
     required ExplorerRunner Function(TargetPath) create_runner,
-  })  : _working_directory = working_directory,
-        _create_runner = create_runner;
+  }) : _working_directory = working_directory,
+       _create_runner = create_runner;
 
   /// Configured default Explorer starting directory.
   final TargetPath _working_directory;

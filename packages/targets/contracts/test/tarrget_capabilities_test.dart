@@ -23,9 +23,7 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.allocatedSize,
-        ),
+        capabilities.status_for(TargetInspectionFeature.allocatedSize),
         TargetCapabilityStatus.supported,
       );
     });
@@ -38,9 +36,7 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.posixMode,
-        ),
+        capabilities.status_for(TargetInspectionFeature.posixMode),
         TargetCapabilityStatus.unsupported,
       );
     });
@@ -53,16 +49,12 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.accessTime,
-        ),
+        capabilities.status_for(TargetInspectionFeature.accessTime),
         TargetCapabilityStatus.unknown,
       );
 
       expect(
-        capabilities.statuses.containsKey(
-          TargetInspectionFeature.accessTime,
-        ),
+        capabilities.statuses.containsKey(TargetInspectionFeature.accessTime),
         isTrue,
       );
     });
@@ -76,9 +68,7 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.filesystemIdentity,
-        ),
+        capabilities.status_for(TargetInspectionFeature.filesystemIdentity),
         TargetCapabilityStatus.unknown,
       );
     });
@@ -94,23 +84,17 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.allocatedSize,
-        ),
+        capabilities.status_for(TargetInspectionFeature.allocatedSize),
         TargetCapabilityStatus.supported,
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.posixMode,
-        ),
+        capabilities.status_for(TargetInspectionFeature.posixMode),
         TargetCapabilityStatus.unsupported,
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.accessTime,
-        ),
+        capabilities.status_for(TargetInspectionFeature.accessTime),
         TargetCapabilityStatus.unknown,
       );
     });
@@ -120,17 +104,13 @@ void main() {
         TargetInspectionFeature.allocatedSize: TargetCapabilityStatus.supported,
       };
 
-      final capabilities = TargetCapabilities(
-        statuses: statuses,
-      );
+      final capabilities = TargetCapabilities(statuses: statuses);
 
       statuses[TargetInspectionFeature.allocatedSize] =
           TargetCapabilityStatus.unsupported;
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.allocatedSize,
-        ),
+        capabilities.status_for(TargetInspectionFeature.allocatedSize),
         TargetCapabilityStatus.supported,
       );
     });

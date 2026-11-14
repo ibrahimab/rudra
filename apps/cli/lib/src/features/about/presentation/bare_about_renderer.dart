@@ -43,10 +43,10 @@ final class BareAboutRenderer implements Renderer<AboutViewModel> {
     TerminalTheme? theme,
     AnsiText ansi_text = const AnsiText(),
   }) : _backend = BareWidgetRenderer(
-          output: output,
-          theme: theme,
-          ansi_text: ansi_text,
-        );
+         output: output,
+         theme: theme,
+         ansi_text: ansi_text,
+       );
 
   /// Shared backend responsible for final output encoding.
   final BareWidgetRenderer _backend;
@@ -58,8 +58,6 @@ final class BareAboutRenderer implements Renderer<AboutViewModel> {
   /// No filesystem or terminal lifecycle operations occur.
   @override
   void render(AboutViewModel view_model) {
-    _backend.render(
-      AboutScreen(view_model),
-    );
+    _backend.render(AboutScreen(view_model));
   }
 }

@@ -68,10 +68,7 @@ void main() {
         root: TargetPath(r'C:\Users\example\Downloads'),
       );
 
-      expect(
-        identity.root.value,
-        r'C:\Users\example\Downloads',
-      );
+      expect(identity.root.value, r'C:\Users\example\Downloads');
     });
   });
 
@@ -80,31 +77,22 @@ void main() {
       final identity = _create_identity();
 
       final events = <WorkflowEvent>[
-        WorkflowStartEvent(
-          target_id: 'local-macos',
-          root: TargetPath('/tmp'),
-        ),
+        WorkflowStartEvent(target_id: 'local-macos', root: TargetPath('/tmp')),
         WorkflowStartedEvent(identity: identity),
         WorkflowEndedEvent(workflow_id: identity.workflow_id),
       ];
 
-      expect(
-        events.map((event) => event.event_type).toList(),
-        [
-          'workflow.start',
-          'workflow.started',
-          'workflow.ended',
-        ],
-      );
+      expect(events.map((event) => event.event_type).toList(), [
+        'workflow.start',
+        'workflow.started',
+        'workflow.ended',
+      ]);
     });
 
     test('start request does not establish workflow identity', () {
       final root = TargetPath('/tmp');
 
-      final event = WorkflowStartEvent(
-        target_id: 'local-macos',
-        root: root,
-      );
+      final event = WorkflowStartEvent(target_id: 'local-macos', root: root);
 
       expect(event.target_id, 'local-macos');
       expect(event.root, same(root));
@@ -121,9 +109,7 @@ void main() {
     });
 
     test('ended event identifies its workflow', () {
-      final event = WorkflowEndedEvent(
-        workflow_id: 'workflow-1',
-      );
+      final event = WorkflowEndedEvent(workflow_id: 'workflow-1');
 
       expect(event.workflow_id, 'workflow-1');
       expect(event.event_type, WorkflowEndedEvent.type_id);
@@ -131,17 +117,11 @@ void main() {
 
     test('rejects invalid event identifiers', () {
       expect(
-        () => WorkflowStartEvent(
-          target_id: ' ',
-          root: TargetPath('/tmp'),
-        ),
+        () => WorkflowStartEvent(target_id: ' ', root: TargetPath('/tmp')),
         throwsArgumentError,
       );
 
-      expect(
-        () => WorkflowEndedEvent(workflow_id: ' '),
-        throwsArgumentError,
-      );
+      expect(() => WorkflowEndedEvent(workflow_id: ' '), throwsArgumentError);
     });
   });
 
@@ -170,15 +150,9 @@ void main() {
     test('active and ended states retain original identity', () {
       final identity = _create_identity();
 
-      final active = WorkflowActiveState(
-        identity: identity,
-        version: 2,
-      );
+      final active = WorkflowActiveState(identity: identity, version: 2);
 
-      final ended = WorkflowEndedState(
-        identity: identity,
-        version: 3,
-      );
+      final ended = WorkflowEndedState(identity: identity, version: 3);
 
       expect(active.identity, same(identity));
       expect(ended.identity, same(identity));
@@ -201,18 +175,12 @@ void main() {
         );
 
         expect(
-          () => WorkflowActiveState(
-            identity: identity,
-            version: version,
-          ),
+          () => WorkflowActiveState(identity: identity, version: version),
           throwsArgumentError,
         );
 
         expect(
-          () => WorkflowEndedState(
-            identity: identity,
-            version: version,
-          ),
+          () => WorkflowEndedState(identity: identity, version: version),
           throwsArgumentError,
         );
       }

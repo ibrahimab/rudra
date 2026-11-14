@@ -60,15 +60,13 @@ final class RudraCli {
   ///
   /// Construction registers no commands and performs no
   /// filesystem operations.
-  RudraCli({
-    StringSink? error_output,
-    WelcomeController? welcome_controller,
-  })  : _runner = CommandRunner<int>(
-          'rudra',
-          'Rudra - Interactive filesystem exploration and cleanup.',
-        ),
-        _error_output = error_output ?? stderr,
-        _welcome_controller = welcome_controller;
+  RudraCli({StringSink? error_output, WelcomeController? welcome_controller})
+    : _runner = CommandRunner<int>(
+        'rudra',
+        'Rudra - Interactive filesystem exploration and cleanup.',
+      ),
+      _error_output = error_output ?? stderr,
+      _welcome_controller = welcome_controller;
 
   /// Creates a production CLI with supported application modules.
   ///
@@ -144,15 +142,10 @@ final class RudraCli {
     //
     // The command receives only the rendering contract.
     // It never writes directly to stdout.
-    final about_renderer = BareAboutRenderer(
-      output: presentation_output,
-    );
+    final about_renderer = BareAboutRenderer(output: presentation_output);
 
     cli.register_module(
-      AboutCliModule(
-        product_name: application_name,
-        renderer: about_renderer,
-      ),
+      AboutCliModule(product_name: application_name, renderer: about_renderer),
     );
 
     if (composition != null) {
@@ -264,9 +257,7 @@ final class RudraCli {
   /// Registration must not perform destructive operations.
   void register_module(RudraCliModule module) {
     if (_has_started) {
-      throw StateError(
-        'Cannot register modules after execution has started.',
-      );
+      throw StateError('Cannot register modules after execution has started.');
     }
 
     final module_id = module.module_id;
@@ -287,10 +278,7 @@ final class RudraCli {
     }
 
     // Command names and aliases share one namespace.
-    final occupied_names = <String>{
-      'help',
-      ..._runner.commands.keys,
-    };
+    final occupied_names = <String>{'help', ..._runner.commands.keys};
 
     for (final command in _runner.commands.values) {
       occupied_names.addAll(command.aliases);
@@ -298,10 +286,7 @@ final class RudraCli {
 
     // Validate the entire contribution before registering any command.
     for (final command in commands) {
-      final names = <String>[
-        command.name,
-        ...command.aliases,
-      ];
+      final names = <String>[command.name, ...command.aliases];
 
       for (final name in names) {
         if (name.trim().isEmpty) {
@@ -309,9 +294,7 @@ final class RudraCli {
         }
 
         if (!occupied_names.add(name)) {
-          throw StateError(
-            'Duplicate command name or alias: $name',
-          );
+          throw StateError('Duplicate command name or alias: $name');
         }
       }
     }

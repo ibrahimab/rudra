@@ -49,14 +49,14 @@ final class BareFilesystemRenderer implements Renderer<FilesystemViewModel> {
     StringSink? error_output,
     TerminalTheme? theme,
     AnsiText ansi_text = const AnsiText(),
-  })  : _listing_renderer = BareWidgetRenderer(
-          output: output,
-          theme: theme,
-          ansi_text: ansi_text,
-        ),
-        _error_output = error_output,
-        _theme = theme ?? TerminalTheme.plain,
-        _ansi_text = ansi_text;
+  }) : _listing_renderer = BareWidgetRenderer(
+         output: output,
+         theme: theme,
+         ansi_text: ansi_text,
+       ),
+       _error_output = error_output,
+       _theme = theme ?? TerminalTheme.plain,
+       _ansi_text = ansi_text;
 
   /// Generic rendering backend used for listing content.
   final BareWidgetRenderer _listing_renderer;
@@ -78,17 +78,12 @@ final class BareFilesystemRenderer implements Renderer<FilesystemViewModel> {
   /// No SDK calls or filesystem mutations occur.
   @override
   void render(FilesystemViewModel view_model) {
-    _listing_renderer.render(
-      DirectoryListingWidget(view_model.listing),
-    );
+    _listing_renderer.render(DirectoryListingWidget(view_model.listing));
 
     final error_output = _error_output;
 
     if (error_output != null) {
-      render_issues(
-        view_model,
-        output: error_output,
-      );
+      render_issues(view_model, output: error_output);
     }
   }
 
@@ -114,9 +109,7 @@ final class BareFilesystemRenderer implements Renderer<FilesystemViewModel> {
     );
 
     renderer.render(
-      DirectoryInspectionIssuesWidget(
-        view_model.inspection_issues,
-      ),
+      DirectoryInspectionIssuesWidget(view_model.inspection_issues),
     );
   }
 }

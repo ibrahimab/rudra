@@ -64,8 +64,8 @@ final class FilesystemService {
   FilesystemService({
     required String target_id,
     required TargetInspector inspector,
-  })  : target_id = _validate_target_id(target_id),
-        _inspector = inspector;
+  }) : target_id = _validate_target_id(target_id),
+       _inspector = inspector;
 
   /// Identifies the filesystem target served by this instance.
   ///
@@ -153,18 +153,14 @@ final class FilesystemService {
   ///   print('The directory listing is incomplete.');
   /// }
   /// ```
-  Future<DirectoryListing> list({
-    required TargetPath directory,
-  }) async {
+  Future<DirectoryListing> list({required TargetPath directory}) async {
     final entries = <FilesystemEntry>[];
     final issues = <InspectionIssue>[];
 
     try {
       // Enumerate only immediate children. Recursive traversal
       // is a separate SDK responsibility.
-      await for (final child_path in _inspector.list_directory(
-        directory,
-      )) {
+      await for (final child_path in _inspector.list_directory(directory)) {
         try {
           // Inspect each child without implicitly following its
           // final symbolic-link component.
@@ -177,9 +173,7 @@ final class FilesystemService {
           //
           // A failed entry must never be represented using
           // fabricated metadata or silently omitted.
-          issues.add(
-            InspectionIssue.from_target_exception(error),
-          );
+          issues.add(InspectionIssue.from_target_exception(error));
         }
       }
     } on TargetInspectionException catch (error) {
@@ -187,9 +181,7 @@ final class FilesystemService {
       //
       // Previously inspected entries remain useful observations,
       // but the directory inventory is now incomplete.
-      issues.add(
-        InspectionIssue.from_target_exception(error),
-      );
+      issues.add(InspectionIssue.from_target_exception(error));
     }
 
     // Completion depends on successful enumeration and inspection.

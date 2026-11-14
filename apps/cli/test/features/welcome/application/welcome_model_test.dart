@@ -30,9 +30,7 @@ void main() {
     });
 
     test('represents an unavailable inspection target', () {
-      final model = WelcomeModel(
-        product_name: 'Rudra',
-      );
+      final model = WelcomeModel(product_name: 'Rudra');
 
       expect(model.can_inspect, isFalse);
       expect(model.target_id, isNull);
@@ -42,19 +40,13 @@ void main() {
 
     test('rejects blank product names', () {
       for (final name in ['', ' ', '\t', '\n']) {
-        expect(
-          () => WelcomeModel(product_name: name),
-          throwsArgumentError,
-        );
+        expect(() => WelcomeModel(product_name: name), throwsArgumentError);
       }
     });
 
     test('requires target and starting directory together', () {
       expect(
-        () => WelcomeModel(
-          product_name: 'Rudra',
-          target_id: 'local-macos',
-        ),
+        () => WelcomeModel(product_name: 'Rudra', target_id: 'local-macos'),
         throwsArgumentError,
       );
 
@@ -79,9 +71,7 @@ void main() {
     });
 
     test('preserves target-native Windows paths', () {
-      final directory = TargetPath(
-        r'C:\Users\example',
-      );
+      final directory = TargetPath(r'C:\Users\example');
 
       final model = WelcomeModel(
         product_name: 'Rudra',
@@ -91,10 +81,7 @@ void main() {
 
       expect(model.starting_directory, same(directory));
 
-      expect(
-        model.starting_directory!.value,
-        r'C:\Users\example',
-      );
+      expect(model.starting_directory!.value, r'C:\Users\example');
 
       expect(model.can_inspect, isTrue);
     });
@@ -122,9 +109,7 @@ void main() {
     });
 
     test('rejects an observation for another target', () {
-      final listing = _listing(
-        target_id: 'different-target',
-      );
+      final listing = _listing(target_id: 'different-target');
 
       expect(
         () => WelcomeModel(
@@ -138,9 +123,7 @@ void main() {
     });
 
     test('rejects an observation for another directory', () {
-      final listing = _listing(
-        directory: '/different-directory',
-      );
+      final listing = _listing(directory: '/different-directory');
 
       expect(
         () => WelcomeModel(
@@ -155,18 +138,13 @@ void main() {
 
     test('rejects a listing without a configured target', () {
       expect(
-        () => WelcomeModel(
-          product_name: 'Rudra',
-          listing: _listing(),
-        ),
+        () => WelcomeModel(product_name: 'Rudra', listing: _listing()),
         throwsArgumentError,
       );
     });
 
     test('preserves incomplete observations', () {
-      final listing = _listing(
-        is_complete: false,
-      );
+      final listing = _listing(is_complete: false);
 
       final model = WelcomeModel(
         product_name: 'Rudra',

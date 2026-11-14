@@ -14,9 +14,7 @@ final class WorkflowEndedEvent implements WorkflowEvent {
   /// Creates a confirmed workflow-ended outcome.
   ///
   /// Throws [ArgumentError] if [workflow_id] is blank.
-  WorkflowEndedEvent({
-    required this.workflow_id,
-  }) {
+  WorkflowEndedEvent({required this.workflow_id}) {
     if (workflow_id.trim().isEmpty) {
       throw ArgumentError.value(
         workflow_id,

@@ -15,10 +15,7 @@ import 'terminal_widget.dart';
 /// ```
 final class TerminalLabel implements TerminalWidget {
   /// Creates an immutable single-line text widget.
-  const TerminalLabel(
-    this.text, {
-    this.role = TerminalRole.text,
-  });
+  const TerminalLabel(this.text, {this.role = TerminalRole.text});
 
   /// Text to display.
   final String text;
@@ -30,9 +27,7 @@ final class TerminalLabel implements TerminalWidget {
   int get height => 1;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield TerminalLine(text, role: role);
   }
 }

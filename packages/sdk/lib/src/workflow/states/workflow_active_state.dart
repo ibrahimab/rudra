@@ -13,10 +13,8 @@ final class WorkflowActiveState extends WorkflowState {
   /// Creates an immutable active workflow state.
   ///
   /// Throws [ArgumentError] if [version] is nonpositive.
-  WorkflowActiveState({
-    required this.identity,
-    required int version,
-  }) : version = WorkflowState.require_positive_version(version);
+  WorkflowActiveState({required this.identity, required int version})
+    : version = WorkflowState.require_positive_version(version);
 
   /// Authoritative workflow identity and original bindings.
   final WorkflowIdentity identity;

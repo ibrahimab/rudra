@@ -56,18 +56,18 @@ final class BareWelcomeRenderer implements Renderer<WelcomeViewModel> {
     StringSink? error_output,
     TerminalTheme? theme,
     AnsiText ansi_text = const AnsiText(),
-  })  : _screen_renderer = BareWidgetRenderer(
-          output: output,
-          theme: theme,
-          ansi_text: ansi_text,
-        ),
-        _diagnostic_renderer = error_output == null
-            ? null
-            : BareWidgetRenderer(
-                output: error_output,
-                theme: theme,
-                ansi_text: ansi_text,
-              );
+  }) : _screen_renderer = BareWidgetRenderer(
+         output: output,
+         theme: theme,
+         ansi_text: ansi_text,
+       ),
+       _diagnostic_renderer = error_output == null
+           ? null
+           : BareWidgetRenderer(
+               output: error_output,
+               theme: theme,
+               ansi_text: ansi_text,
+             );
 
   /// Shared backend for the composed Welcome screen.
   final BareWidgetRenderer _screen_renderer;
@@ -88,17 +88,13 @@ final class BareWelcomeRenderer implements Renderer<WelcomeViewModel> {
   /// Rendering exceptions propagate to the caller.
   @override
   void render(WelcomeViewModel view_model) {
-    _screen_renderer.render(
-      WelcomeScreen(view_model),
-    );
+    _screen_renderer.render(WelcomeScreen(view_model));
 
     final diagnostics = view_model.filesystem?.inspection_issues;
     final renderer = _diagnostic_renderer;
 
     if (diagnostics != null && renderer != null) {
-      renderer.render(
-        DirectoryInspectionIssuesWidget(diagnostics),
-      );
+      renderer.render(DirectoryInspectionIssuesWidget(diagnostics));
     }
   }
 }

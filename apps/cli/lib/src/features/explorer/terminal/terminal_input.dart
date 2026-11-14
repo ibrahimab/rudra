@@ -76,9 +76,7 @@ final class TerminalInput {
   ///
   /// Construction does not subscribe to the stream or change
   /// terminal settings.
-  const TerminalInput({
-    required Stream<List<int>> source,
-  }) : _source = source;
+  const TerminalInput({required Stream<List<int>> source}) : _source = source;
 
   /// Raw terminal input supplied by the caller.
   final Stream<List<int>> _source;

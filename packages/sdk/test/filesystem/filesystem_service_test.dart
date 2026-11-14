@@ -27,10 +27,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [file.path, folder.path],
-        entries: {
-          file.path.value: file,
-          folder.path.value: folder,
-        },
+        entries: {file.path.value: file, folder.path.value: folder},
       );
 
       final service = FilesystemService(
@@ -47,15 +44,9 @@ void main() {
       expect(listing.entries, [same(file), same(folder)]);
 
       expect(inspector.listed_directories, [same(directory)]);
-      expect(inspector.inspected_paths, [
-        same(file.path),
-        same(folder.path),
-      ]);
+      expect(inspector.inspected_paths, [same(file.path), same(folder.path)]);
 
-      expect(
-        listing.entries.first.metadata.logical_size_bytes,
-        1024,
-      );
+      expect(listing.entries.first.metadata.logical_size_bytes, 1024);
     });
 
     test('returns a complete result for an empty directory', () async {
@@ -66,9 +57,7 @@ void main() {
         inspector: inspector,
       );
 
-      final listing = await service.list(
-        directory: TargetPath('/tmp/empty'),
-      );
+      final listing = await service.list(directory: TargetPath('/tmp/empty'));
 
       expect(listing.entries, isEmpty);
       expect(listing.issues, isEmpty);
@@ -96,12 +85,8 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [failed_path, successful_entry.path],
-        entries: {
-          successful_entry.path.value: successful_entry,
-        },
-        inspection_failures: {
-          failed_path.value: failure,
-        },
+        entries: {successful_entry.path.value: successful_entry},
+        inspection_failures: {failed_path.value: failure},
       );
 
       final service = FilesystemService(
@@ -109,9 +94,7 @@ void main() {
         inspector: inspector,
       );
 
-      final listing = await service.list(
-        directory: TargetPath('/tmp'),
-      );
+      final listing = await service.list(directory: TargetPath('/tmp'));
 
       expect(listing.is_complete, isFalse);
       expect(listing.entries, [same(successful_entry)]);
@@ -119,15 +102,9 @@ void main() {
 
       final issue = listing.issues.single;
 
-      expect(
-        issue.code,
-        TargetInspectionErrorCode.permissionDenied,
-      );
+      expect(issue.code, TargetInspectionErrorCode.permissionDenied);
 
-      expect(
-        issue.operation,
-        TargetInspectionOperation.inspect,
-      );
+      expect(issue.operation, TargetInspectionOperation.inspect);
 
       expect(issue.path, same(failed_path));
       expect(issue.message, 'Permission denied.');
@@ -153,9 +130,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
         listing_failure: failure,
         fail_after_children: 1,
       );
@@ -176,10 +151,7 @@ void main() {
         TargetInspectionOperation.listDirectory,
       );
 
-      expect(
-        listing.issues.single.code,
-        TargetInspectionErrorCode.ioFailure,
-      );
+      expect(listing.issues.single.code, TargetInspectionErrorCode.ioFailure);
     });
 
     test('reports failure when enumeration cannot begin', () async {
@@ -226,9 +198,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
       );
 
       final service = FilesystemService(
@@ -241,10 +211,7 @@ void main() {
       expect(listing.target_id, 'local-windows');
       expect(listing.directory, same(directory));
 
-      expect(
-        listing.entries.single.path.value,
-        r'C:\Users\example\file.txt',
-      );
+      expect(listing.entries.single.path.value, r'C:\Users\example\file.txt');
 
       expect(listing.is_complete, isTrue);
     });
@@ -266,9 +233,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [path],
-        inspection_failures: {
-          path.value: StateError('Unexpected failure'),
-        },
+        inspection_failures: {path.value: StateError('Unexpected failure')},
       );
 
       final service = FilesystemService(
@@ -307,9 +272,7 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [entry.path],
-        entries: {
-          entry.path.value: entry,
-        },
+        entries: {entry.path.value: entry},
       );
 
       final service = FilesystemService(
@@ -341,9 +304,7 @@ FilesystemEntry _create_entry(
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,
-    metadata: FilesystemMetadata(
-      logical_size_bytes: logical_size_bytes,
-    ),
+    metadata: FilesystemMetadata(logical_size_bytes: logical_size_bytes),
   );
 }
 
@@ -376,10 +337,11 @@ final class _FakeTargetInspector implements TargetInspector {
     Map<String, Object> inspection_failures = const {},
     this.listing_failure,
     this.fail_after_children,
-  })  : children = List<TargetPath>.unmodifiable(children),
-        entries = Map<String, FilesystemEntry>.unmodifiable(entries),
-        inspection_failures =
-            Map<String, Object>.unmodifiable(inspection_failures);
+  }) : children = List<TargetPath>.unmodifiable(children),
+       entries = Map<String, FilesystemEntry>.unmodifiable(entries),
+       inspection_failures = Map<String, Object>.unmodifiable(
+         inspection_failures,
+       );
 
   /// Configured directory children.
   final List<TargetPath> children;
@@ -444,9 +406,7 @@ final class _FakeTargetInspector implements TargetInspector {
     final entry = entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'No fake filesystem entry configured for ${path.value}',
-      );
+      throw StateError('No fake filesystem entry configured for ${path.value}');
     }
 
     return entry;
@@ -459,9 +419,7 @@ final class _FakeTargetInspector implements TargetInspector {
   Future<TargetCapabilities> capabilities_for(TargetPath path) async {
     capability_calls++;
 
-    throw StateError(
-      'Unexpected capabilities_for call: ${path.value}',
-    );
+    throw StateError('Unexpected capabilities_for call: ${path.value}');
   }
 
   /// Records unexpected symbolic-link destination reads.
@@ -471,8 +429,6 @@ final class _FakeTargetInspector implements TargetInspector {
   Future<TargetPath> read_symbolic_link(TargetPath path) async {
     symbolic_link_calls++;
 
-    throw StateError(
-      'Unexpected read_symbolic_link call: ${path.value}',
-    );
+    throw StateError('Unexpected read_symbolic_link call: ${path.value}');
   }
 }

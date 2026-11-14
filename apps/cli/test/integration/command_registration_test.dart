@@ -20,13 +20,7 @@ void main() {
     test('excludes development commands', () {
       final cli = RudraCli.product();
 
-      for (final name in [
-        'test',
-        'check',
-        'analyze',
-        'format',
-        'build',
-      ]) {
+      for (final name in ['test', 'check', 'analyze', 'format', 'build']) {
         expect(
           cli.command_names.contains(name),
           isFalse,
@@ -39,10 +33,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final cli = RudraCli.product(
-        output: output,
-        error_output: errors,
-      );
+      final cli = RudraCli.product(output: output, error_output: errors);
 
       // Application composition must not render eagerly.
       expect(output.toString(), isEmpty);
@@ -62,9 +53,7 @@ void main() {
     test('maps invalid arguments to a typed exit code', () async {
       final diagnostics = StringBuffer();
 
-      final cli = RudraCli.product(
-        error_output: diagnostics,
-      );
+      final cli = RudraCli.product(error_output: diagnostics);
 
       final status = await cli.run(['--invalid-option']);
 
@@ -77,9 +66,7 @@ void main() {
     test('supports registering independent modules', () {
       final cli = RudraCli();
 
-      cli.register_module(
-        const _StubModule('module.one', 'example'),
-      );
+      cli.register_module(const _StubModule('module.one', 'example'));
 
       expect(cli.command_names, contains('example'));
       expect(cli.module_ids, contains('module.one'));
@@ -88,14 +75,10 @@ void main() {
     test('rejects duplicate module identifiers', () {
       final cli = RudraCli();
 
-      cli.register_module(
-        const _StubModule('duplicate', 'first'),
-      );
+      cli.register_module(const _StubModule('duplicate', 'first'));
 
       expect(
-        () => cli.register_module(
-          const _StubModule('duplicate', 'second'),
-        ),
+        () => cli.register_module(const _StubModule('duplicate', 'second')),
         throwsStateError,
       );
     });
@@ -103,14 +86,10 @@ void main() {
     test('rejects conflicting command names', () {
       final cli = RudraCli();
 
-      cli.register_module(
-        const _StubModule('module.one', 'example'),
-      );
+      cli.register_module(const _StubModule('module.one', 'example'));
 
       expect(
-        () => cli.register_module(
-          const _StubModule('module.two', 'example'),
-        ),
+        () => cli.register_module(const _StubModule('module.two', 'example')),
         throwsStateError,
       );
 
@@ -122,9 +101,7 @@ void main() {
       final cli = RudraCli();
 
       expect(
-        () => cli.register_module(
-          const _StubModule('reserved', 'help'),
-        ),
+        () => cli.register_module(const _StubModule('reserved', 'help')),
         throwsStateError,
       );
     });
@@ -132,10 +109,7 @@ void main() {
     test('rejects modules without commands', () {
       final cli = RudraCli();
 
-      expect(
-        () => cli.register_module(const _EmptyModule()),
-        throwsStateError,
-      );
+      expect(() => cli.register_module(const _EmptyModule()), throwsStateError);
     });
 
     test('prevents registration after execution', () async {
@@ -144,9 +118,7 @@ void main() {
       await cli.run(['about']);
 
       expect(
-        () => cli.register_module(
-          const _StubModule('late', 'late-command'),
-        ),
+        () => cli.register_module(const _StubModule('late', 'late-command')),
         throwsStateError,
       );
     });
@@ -156,10 +128,7 @@ void main() {
 
       await cli.run(['about']);
 
-      await expectLater(
-        cli.run(['about']),
-        throwsStateError,
-      );
+      await expectLater(cli.run(['about']), throwsStateError);
     });
   });
 
@@ -167,28 +136,14 @@ void main() {
     test('extends the product registry', () {
       final cli = RudraCli.product();
 
-      cli.register_module(
-        DevToolsCliModule(
-          DevTasks(Directory.current),
-        ),
-      );
+      cli.register_module(DevToolsCliModule(DevTasks(Directory.current)));
 
       expect(
         cli.command_names,
-        containsAll([
-          'about',
-          'test',
-          'check',
-          'analyze',
-          'format',
-          'build',
-        ]),
+        containsAll(['about', 'test', 'check', 'analyze', 'format', 'build']),
       );
 
-      expect(
-        cli.module_ids,
-        contains('rudra.development.tools'),
-      );
+      expect(cli.module_ids, contains('rudra.development.tools'));
     });
   });
 }

@@ -58,8 +58,6 @@ final class CheckCommand extends Command<int> {
       );
     }
 
-    return _tasks.check(
-      package_name: results['package'] as String?,
-    );
+    return _tasks.check(package_name: results['package'] as String?);
   }
 }

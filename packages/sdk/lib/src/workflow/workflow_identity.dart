@@ -43,9 +43,9 @@ final class WorkflowIdentity {
     required String os_user_id,
     required String target_id,
     required this.root,
-  })  : workflow_id = _require_identifier(workflow_id, 'workflow_id'),
-        os_user_id = _require_identifier(os_user_id, 'os_user_id'),
-        target_id = _require_identifier(target_id, 'target_id');
+  }) : workflow_id = _require_identifier(workflow_id, 'workflow_id'),
+       os_user_id = _require_identifier(os_user_id, 'os_user_id'),
+       target_id = _require_identifier(target_id, 'target_id');
 
   /// Stable identifier of this workflow.
   final String workflow_id;

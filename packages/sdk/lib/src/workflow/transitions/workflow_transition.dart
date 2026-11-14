@@ -73,15 +73,16 @@ sealed class WorkflowTransitionDefinition {
 ///   },
 /// );
 /// ```
-final class WorkflowTransition<S extends WorkflowState, E extends WorkflowEvent,
-    N extends WorkflowState> extends WorkflowTransitionDefinition {
+final class WorkflowTransition<
+  S extends WorkflowState,
+  E extends WorkflowEvent,
+  N extends WorkflowState
+>
+    extends WorkflowTransitionDefinition {
   /// Creates an immutable typed transition definition.
   ///
   /// Neither [guard] nor [apply] executes during construction.
-  const WorkflowTransition({
-    required this.apply,
-    this.guard,
-  });
+  const WorkflowTransition({required this.apply, this.guard});
 
   /// Optional domain-invariant validation callback.
   final void Function(S state, E event)? guard;
@@ -112,10 +113,6 @@ final class WorkflowTransition<S extends WorkflowState, E extends WorkflowEvent,
 
     guard?.call(typed_state, typed_event);
 
-    return apply(
-      typed_state,
-      typed_event,
-      next_version,
-    );
+    return apply(typed_state, typed_event, next_version);
   }
 }

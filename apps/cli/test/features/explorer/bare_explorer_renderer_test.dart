@@ -20,20 +20,14 @@ import 'package:test/test.dart';
 void main() {
   group('BareExplorerRenderer', () {
     test('renders directory context and observed entries', () {
-      final view_model = _view_model(
-        [
-          _entry(
-            '/fixture/readme.md',
-            FilesystemEntryKind.regularFile,
-            logical_bytes: 2048,
-          ),
-          _entry(
-            '/fixture/docs',
-            FilesystemEntryKind.directory,
-          ),
-        ],
-        visible_row_limit: 3,
-      );
+      final view_model = _view_model([
+        _entry(
+          '/fixture/readme.md',
+          FilesystemEntryKind.regularFile,
+          logical_bytes: 2048,
+        ),
+        _entry('/fixture/docs', FilesystemEntryKind.directory),
+      ], visible_row_limit: 3);
 
       final output = _render(view_model, columns: 80);
 
@@ -53,9 +47,7 @@ void main() {
       // The initially selected directory is identifiable
       // without requiring ANSI colors.
       expect(
-        output.split('\n').any(
-              (line) => line.startsWith('> docs/'),
-            ),
+        output.split('\n').any((line) => line.startsWith('> docs/')),
         isTrue,
       );
 
@@ -63,19 +55,10 @@ void main() {
     });
 
     test('highlights the selected row using ANSI styles', () {
-      final view_model = _view_model(
-        [
-          _entry(
-            '/fixture/a.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-          _entry(
-            '/fixture/b.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
-        selected_index: 1,
-      );
+      final view_model = _view_model([
+        _entry('/fixture/a.txt', FilesystemEntryKind.regularFile),
+        _entry('/fixture/b.txt', FilesystemEntryKind.regularFile),
+      ], selected_index: 1);
 
       final output = _render(
         view_model,
@@ -92,10 +75,7 @@ void main() {
     test('renders only the requested Explorer viewport', () {
       final entries = [
         for (final name in ['a', 'b', 'c', 'd', 'e'])
-          _entry(
-            '/fixture/$name.txt',
-            FilesystemEntryKind.regularFile,
-          ),
+          _entry('/fixture/$name.txt', FilesystemEntryKind.regularFile),
       ];
 
       final view_model = _view_model(
@@ -106,10 +86,7 @@ void main() {
 
       expect(view_model.directory.first_visible_index, 3);
 
-      final output = _render(
-        view_model,
-        columns: 70,
-      );
+      final output = _render(view_model, columns: 70);
 
       expect(output, contains('d.txt'));
       expect(output, contains('> e.txt'));
@@ -120,15 +97,9 @@ void main() {
     });
 
     test('keeps frame height stable with unused entry rows', () {
-      final view_model = _view_model(
-        [
-          _entry(
-            '/fixture/only.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
-        visible_row_limit: 5,
-      );
+      final view_model = _view_model([
+        _entry('/fixture/only.txt', FilesystemEntryKind.regularFile),
+      ], visible_row_limit: 5);
 
       final output = _render(view_model, columns: 70);
 
@@ -146,20 +117,13 @@ void main() {
     });
 
     test('distinguishes empty and incomplete observations', () {
-      final empty = _render(
-        _view_model([], visible_row_limit: 2),
-        columns: 90,
-      );
+      final empty = _render(_view_model([], visible_row_limit: 2), columns: 90);
 
       expect(empty, contains('(empty directory)'));
       expect(empty, isNot(contains('WARNING')));
 
       final incomplete = _render(
-        _view_model(
-          [],
-          visible_row_limit: 2,
-          is_complete: false,
-        ),
+        _view_model([], visible_row_limit: 2, is_complete: false),
         columns: 90,
       );
 
@@ -181,20 +145,12 @@ void main() {
       );
 
       final view_model = _view_model(
-        [
-          _entry(
-            '/fixture/visible.txt',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
+        [_entry('/fixture/visible.txt', FilesystemEntryKind.regularFile)],
         is_complete: false,
         issues: [issue],
       );
 
-      final output = _render(
-        view_model,
-        columns: 180,
-      );
+      final output = _render(view_model, columns: 180);
 
       expect(output, contains('WARNING'));
       expect(output, contains('permissionDenied'));
@@ -213,12 +169,7 @@ void main() {
       );
 
       final view_model = _view_model(
-        [
-          _entry(
-            '/fixture/unsafe\x1B[2J',
-            FilesystemEntryKind.regularFile,
-          ),
-        ],
+        [_entry('/fixture/unsafe\x1B[2J', FilesystemEntryKind.regularFile)],
         is_complete: false,
         issues: [issue],
       );
@@ -253,10 +204,7 @@ void main() {
 
       expect(output, startsWith('\x1B[H\x1B[2J'));
 
-      expect(
-        '\x1B[2J'.allMatches(output).length,
-        1,
-      );
+      expect('\x1B[2J'.allMatches(output).length, 1);
     });
 
     test('rejects redrawing without ANSI support', () {
@@ -271,25 +219,17 @@ void main() {
     });
 
     test('truncates output to narrow terminal widths', () {
-      final view_model = _view_model(
-        [
-          _entry(
-            '/fixture/very-long-directory-name',
-            FilesystemEntryKind.directory,
-          ),
-        ],
-      );
+      final view_model = _view_model([
+        _entry(
+          '/fixture/very-long-directory-name',
+          FilesystemEntryKind.directory,
+        ),
+      ]);
 
-      final output = _render(
-        view_model,
-        columns: 18,
-      );
+      final output = _render(view_model, columns: 18);
 
       for (final line in output.split('\n')) {
-        expect(
-          TerminalText.estimated_columns(line),
-          lessThanOrEqualTo(18),
-        );
+        expect(TerminalText.estimated_columns(line), lessThanOrEqualTo(18));
       }
 
       expect(output, contains('> '));
@@ -329,10 +269,7 @@ void main() {
         terminal_columns: () => -1,
       );
 
-      expect(
-        () => renderer.render(_view_model([])),
-        throwsRangeError,
-      );
+      expect(() => renderer.render(_view_model([])), throwsRangeError);
     });
 
     test('propagates output sink failures', () {
@@ -341,22 +278,13 @@ void main() {
         terminal_columns: () => 80,
       );
 
-      expect(
-        () => renderer.render(_view_model([])),
-        throwsStateError,
-      );
+      expect(() => renderer.render(_view_model([])), throwsStateError);
     });
 
     test('renders a closed Explorer without active key hints', () {
-      final view_model = _view_model(
-        [],
-        is_closed: true,
-      );
+      final view_model = _view_model([], is_closed: true);
 
-      final output = _render(
-        view_model,
-        columns: 80,
-      );
+      final output = _render(view_model, columns: 80);
 
       expect(output, contains('Explorer closed.'));
       expect(output, isNot(contains('Q Quit')));
@@ -411,9 +339,7 @@ FilesystemEntry _entry(
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,
-    metadata: FilesystemMetadata(
-      logical_size_bytes: logical_bytes,
-    ),
+    metadata: FilesystemMetadata(logical_size_bytes: logical_bytes),
   );
 }
 

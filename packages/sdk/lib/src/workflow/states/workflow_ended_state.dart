@@ -14,10 +14,8 @@ final class WorkflowEndedState extends WorkflowState {
   /// Creates an immutable terminal workflow state.
   ///
   /// Throws [ArgumentError] for nonpositive versions.
-  WorkflowEndedState({
-    required this.identity,
-    required int version,
-  }) : version = WorkflowState.require_positive_version(version);
+  WorkflowEndedState({required this.identity, required int version})
+    : version = WorkflowState.require_positive_version(version);
 
   /// Original workflow identity and immutable bindings.
   final WorkflowIdentity identity;

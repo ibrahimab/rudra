@@ -11,10 +11,7 @@ import 'package:test/test.dart';
 void main() {
   group('ExplorerController', () {
     test('starts at the configured root and sorts entries', () async {
-      final apps = _entry(
-        '/fixture/apps',
-        FilesystemEntryKind.directory,
-      );
+      final apps = _entry('/fixture/apps', FilesystemEntryKind.directory);
       final packages = _entry(
         '/fixture/packages',
         FilesystemEntryKind.directory,
@@ -31,9 +28,7 @@ void main() {
       final entries = [file, packages, link, apps];
 
       final inspector = _ExplorerInspector(
-        children: {
-          '/fixture': entries.map((entry) => entry.path).toList(),
-        },
+        children: {'/fixture': entries.map((entry) => entry.path).toList()},
         entries: _entry_map(entries),
       );
 
@@ -66,10 +61,7 @@ void main() {
       expect(inspector.symbolic_link_calls, 0);
 
       // Presentation state cannot be modified externally.
-      expect(
-        () => model.entries.clear(),
-        throwsUnsupportedError,
-      );
+      expect(() => model.entries.clear(), throwsUnsupportedError);
       expect(
         () => model.history.add(TargetPath('/outside')),
         throwsUnsupportedError,
@@ -77,14 +69,8 @@ void main() {
     });
 
     test('moves selection and clamps at the boundaries', () async {
-      final first = _entry(
-        '/fixture/a.txt',
-        FilesystemEntryKind.regularFile,
-      );
-      final second = _entry(
-        '/fixture/b.txt',
-        FilesystemEntryKind.regularFile,
-      );
+      final first = _entry('/fixture/a.txt', FilesystemEntryKind.regularFile);
+      final second = _entry('/fixture/b.txt', FilesystemEntryKind.regularFile);
 
       final inspector = _ExplorerInspector(
         children: {
@@ -107,10 +93,7 @@ void main() {
     });
 
     test('opens a directory and returns through history', () async {
-      final apps = _entry(
-        '/fixture/apps',
-        FilesystemEntryKind.directory,
-      );
+      final apps = _entry('/fixture/apps', FilesystemEntryKind.directory);
       final main_file = _entry(
         '/fixture/apps/main.dart',
         FilesystemEntryKind.regularFile,
@@ -146,11 +129,7 @@ void main() {
 
       expect(
         inspector.listed_directories,
-        orderedEquals([
-          '/fixture',
-          '/fixture/apps',
-          '/fixture',
-        ]),
+        orderedEquals(['/fixture', '/fixture/apps', '/fixture']),
       );
 
       // Back at the root cannot escape to its parent.
@@ -161,14 +140,8 @@ void main() {
     });
 
     test('does not open regular files or symbolic links', () async {
-      final file = _entry(
-        '/fixture/a.txt',
-        FilesystemEntryKind.regularFile,
-      );
-      final link = _entry(
-        '/fixture/z-link',
-        FilesystemEntryKind.symbolicLink,
-      );
+      final file = _entry('/fixture/a.txt', FilesystemEntryKind.regularFile);
+      final link = _entry('/fixture/z-link', FilesystemEntryKind.symbolicLink);
 
       final inspector = _ExplorerInspector(
         children: {
@@ -189,8 +162,10 @@ void main() {
 
       controller.move_selection(1);
 
-      expect(controller.model?.selected_entry?.kind,
-          FilesystemEntryKind.symbolicLink);
+      expect(
+        controller.model?.selected_entry?.kind,
+        FilesystemEntryKind.symbolicLink,
+      );
 
       final after_link = await controller.open_selected();
 
@@ -210,10 +185,7 @@ void main() {
       expect(model.selected_index, isNull);
       expect(model.selected_entry, isNull);
 
-      expect(
-        controller.move_selection(1).selected_index,
-        isNull,
-      );
+      expect(controller.move_selection(1).selected_index, isNull);
 
       final unchanged = await controller.open_selected();
 
@@ -222,10 +194,7 @@ void main() {
     });
 
     test('preserves incomplete SDK observations', () async {
-      final apps = _entry(
-        '/fixture/apps',
-        FilesystemEntryKind.directory,
-      );
+      final apps = _entry('/fixture/apps', FilesystemEntryKind.directory);
       final blocked = TargetPath('/fixture/blocked');
 
       final inspector = _ExplorerInspector(
@@ -267,10 +236,7 @@ void main() {
     });
 
     test('does not commit navigation after unexpected SDK errors', () async {
-      final apps = _entry(
-        '/fixture/apps',
-        FilesystemEntryKind.directory,
-      );
+      final apps = _entry('/fixture/apps', FilesystemEntryKind.directory);
 
       final inspector = _ExplorerInspector(
         children: {
@@ -285,10 +251,7 @@ void main() {
 
       inspector.unexpected_directory = '/fixture/apps';
 
-      await expectLater(
-        controller.open_selected(),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(controller.open_selected(), throwsA(isA<StateError>()));
 
       expect(identical(controller.model, before), isTrue);
       expect(controller.model?.history, isEmpty);
@@ -296,10 +259,7 @@ void main() {
     });
 
     test('preserves navigation state when back inspection fails', () async {
-      final apps = _entry(
-        '/fixture/apps',
-        FilesystemEntryKind.directory,
-      );
+      final apps = _entry('/fixture/apps', FilesystemEntryKind.directory);
 
       final inspector = _ExplorerInspector(
         children: {
@@ -315,10 +275,7 @@ void main() {
 
       inspector.unexpected_directory = '/fixture';
 
-      await expectLater(
-        controller.back(),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(controller.back(), throwsA(isA<StateError>()));
 
       expect(identical(controller.model, child), isTrue);
       expect(controller.model?.history, hasLength(1));
@@ -335,10 +292,7 @@ void main() {
       const root = r'C:\workspace';
       const child_path = r'C:\workspace\src';
 
-      final directory = _entry(
-        child_path,
-        FilesystemEntryKind.directory,
-      );
+      final directory = _entry(child_path, FilesystemEntryKind.directory);
 
       final inspector = _ExplorerInspector(
         children: {
@@ -347,19 +301,13 @@ void main() {
         entries: _entry_map([directory]),
       );
 
-      final controller = _controller(
-        inspector,
-        root: root,
-      );
+      final controller = _controller(inspector, root: root);
 
       await controller.start();
       final child = await controller.open_selected();
 
       expect(child.current_directory.value, child_path);
-      expect(
-        inspector.listed_directories,
-        orderedEquals([root, child_path]),
-      );
+      expect(inspector.listed_directories, orderedEquals([root, child_path]));
 
       await controller.back();
 
@@ -369,9 +317,7 @@ void main() {
     test('rejects overlapping inspection requests', () async {
       final gate = Completer<void>();
 
-      final inspector = _ExplorerInspector(
-        inspection_gate: gate,
-      );
+      final inspector = _ExplorerInspector(inspection_gate: gate);
 
       final controller = _controller(inspector);
 
@@ -379,20 +325,11 @@ void main() {
 
       expect(controller.is_loading, isTrue);
 
-      await expectLater(
-        controller.start(),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(controller.start(), throwsA(isA<StateError>()));
 
-      expect(
-        () => controller.move_selection(1),
-        throwsStateError,
-      );
+      expect(() => controller.move_selection(1), throwsStateError);
 
-      expect(
-        () => controller.quit(),
-        throwsStateError,
-      );
+      expect(() => controller.quit(), throwsStateError);
 
       gate.complete();
 
@@ -406,10 +343,7 @@ void main() {
       final inspector = _ExplorerInspector();
       final controller = _controller(inspector);
 
-      expect(
-        () => controller.move_selection(1),
-        throwsStateError,
-      );
+      expect(() => controller.move_selection(1), throwsStateError);
 
       await controller.start();
 
@@ -418,34 +352,19 @@ void main() {
       expect(closed.is_closed, isTrue);
       expect(inspector.listed_directories, ['/fixture']);
 
-      expect(
-        () => controller.move_selection(1),
-        throwsStateError,
-      );
+      expect(() => controller.move_selection(1), throwsStateError);
 
-      await expectLater(
-        controller.open_selected(),
-        throwsStateError,
-      );
+      await expectLater(controller.open_selected(), throwsStateError);
 
-      await expectLater(
-        controller.back(),
-        throwsStateError,
-      );
+      await expectLater(controller.back(), throwsStateError);
 
-      await expectLater(
-        controller.start(),
-        throwsStateError,
-      );
+      await expectLater(controller.start(), throwsStateError);
     });
   });
 }
 
 /// Creates a filesystem entry without native inspection.
-FilesystemEntry _entry(
-  String path,
-  FilesystemEntryKind kind,
-) {
+FilesystemEntry _entry(String path, FilesystemEntryKind kind) {
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,
@@ -454,12 +373,8 @@ FilesystemEntry _entry(
 }
 
 /// Indexes test observations by their unchanged target paths.
-Map<String, FilesystemEntry> _entry_map(
-  List<FilesystemEntry> entries,
-) {
-  return {
-    for (final entry in entries) entry.path.value: entry,
-  };
+Map<String, FilesystemEntry> _entry_map(List<FilesystemEntry> entries) {
+  return {for (final entry in entries) entry.path.value: entry};
 }
 
 /// Creates an explorer with an isolated SDK instance.
@@ -468,10 +383,7 @@ ExplorerController _controller(
   String root = '/fixture',
 }) {
   return ExplorerController(
-    sdk: RudraSdk(
-      target_id: 'fixture-target',
-      inspector: inspector,
-    ),
+    sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
     starting_directory: TargetPath(root),
   );
 }
@@ -489,9 +401,9 @@ final class _ExplorerInspector implements TargetInspector {
     Map<String, FilesystemEntry> entries = const {},
     Map<String, TargetInspectionException> inspection_failures = const {},
     this.inspection_gate,
-  })  : _children = children,
-        _entries = entries,
-        _inspection_failures = inspection_failures;
+  }) : _children = children,
+       _entries = entries,
+       _inspection_failures = inspection_failures;
 
   /// Child paths indexed by their parent directory.
   final Map<String, List<TargetPath>> _children;
@@ -527,9 +439,7 @@ final class _ExplorerInspector implements TargetInspector {
     }
 
     if (unexpected_directory == path.value) {
-      throw StateError(
-        'Injected inspection failure: ${path.value}',
-      );
+      throw StateError('Injected inspection failure: ${path.value}');
     }
 
     for (final child in _children[path.value] ?? const <TargetPath>[]) {
@@ -551,9 +461,7 @@ final class _ExplorerInspector implements TargetInspector {
     final entry = _entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'Unconfigured entry inspection: ${path.value}',
-      );
+      throw StateError('Unconfigured entry inspection: ${path.value}');
     }
 
     return entry;
@@ -561,23 +469,15 @@ final class _ExplorerInspector implements TargetInspector {
 
   /// Rejects unexpected capability discovery.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
-    throw StateError(
-      'Unexpected capability request: ${path.value}',
-    );
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
+    throw StateError('Unexpected capability request: ${path.value}');
   }
 
   /// Rejects symbolic-link destination resolution.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
     symbolic_link_calls++;
 
-    throw StateError(
-      'Unexpected link resolution: ${path.value}',
-    );
+    throw StateError('Unexpected link resolution: ${path.value}');
   }
 }

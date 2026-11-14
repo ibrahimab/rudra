@@ -37,22 +37,14 @@ final class ExplorerFooter implements TerminalWidget {
   int get height => fixed_rows;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
-    yield TerminalLine(
-      view_model.summary,
-      role: TerminalRole.muted,
-    );
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
+    yield TerminalLine(view_model.summary, role: TerminalRole.muted);
 
     yield TerminalLine(
       view_model.inspection_status,
       role: view_model.is_warning ? TerminalRole.warning : TerminalRole.muted,
     );
 
-    yield TerminalLine(
-      view_model.navigation_hints,
-      role: TerminalRole.muted,
-    );
+    yield TerminalLine(view_model.navigation_hints, role: TerminalRole.muted);
   }
 }

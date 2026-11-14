@@ -46,10 +46,7 @@ final class FilesystemIdentity {
   ///   entry_id: '42',
   /// );
   /// ```
-  FilesystemIdentity({
-    required this.filesystem_id,
-    required this.entry_id,
-  }) {
+  FilesystemIdentity({required this.filesystem_id, required this.entry_id}) {
     if (filesystem_id.trim().isEmpty) {
       throw ArgumentError.value(
         filesystem_id,

@@ -24,43 +24,26 @@ void main() {
 
       final screen = WelcomeScreen(presentation);
 
-      final lines = screen
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints()).toList();
 
       expect(screen.height, 11);
       expect(lines, hasLength(screen.height));
 
-      expect(
-        lines.any((line) => line.text.contains('RUDRA')),
-        isTrue,
-      );
+      expect(lines.any((line) => line.text.contains('RUDRA')), isTrue);
 
       expect(
         lines.any(
-          (line) => line.text.contains(
-            'Filesystem inspection is not available',
-          ),
+          (line) =>
+              line.text.contains('Filesystem inspection is not available'),
         ),
         isTrue,
       );
 
-      expect(
-        lines.any((line) => line.text.contains('rudra ls')),
-        isFalse,
-      );
+      expect(lines.any((line) => line.text.contains('rudra ls')), isFalse);
 
-      expect(
-        lines.any((line) => line.text.contains('rudra about')),
-        isTrue,
-      );
+      expect(lines.any((line) => line.text.contains('rudra about')), isTrue);
 
-      expect(
-        lines.any((line) => line.role == TerminalRole.warning),
-        isTrue,
-      );
+      expect(lines.any((line) => line.role == TerminalRole.warning), isTrue);
     });
 
     test('composes configured target without a listing', () {
@@ -74,11 +57,7 @@ void main() {
 
       final screen = WelcomeScreen(presentation);
 
-      final lines = screen
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints()).toList();
 
       expect(screen.height, 14);
       expect(lines, hasLength(screen.height));
@@ -89,21 +68,13 @@ void main() {
       );
 
       expect(
-        lines.any(
-          (line) => line.text == 'Starting directory: /fixture',
-        ),
+        lines.any((line) => line.text == 'Starting directory: /fixture'),
         isTrue,
       );
 
-      expect(
-        lines.any((line) => line.text.contains('rudra ls')),
-        isTrue,
-      );
+      expect(lines.any((line) => line.text.contains('rudra ls')), isTrue);
 
-      expect(
-        lines.any((line) => line.text.contains('NAME')),
-        isFalse,
-      );
+      expect(lines.any((line) => line.text.contains('NAME')), isFalse);
     });
 
     test('composes a detailed SDK listing once', () {
@@ -127,33 +98,20 @@ void main() {
 
       final screen = WelcomeScreen(presentation);
 
-      final lines = screen
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints()).toList();
 
       expect(screen.height, 19);
       expect(lines, hasLength(screen.height));
 
       expect(
-        lines.where(
-          (line) => line.text.contains(
-            '0 observed entries',
-          ),
-        ),
+        lines.where((line) => line.text.contains('0 observed entries')),
         hasLength(1),
       );
 
-      expect(
-        lines.any((line) => line.text.contains('MODIFIED (UTC)')),
-        isTrue,
-      );
+      expect(lines.any((line) => line.text.contains('MODIFIED (UTC)')), isTrue);
 
       expect(
-        lines.any(
-          (line) => line.text.contains('Available commands:'),
-        ),
+        lines.any((line) => line.text.contains('Available commands:')),
         isTrue,
       );
 

@@ -42,10 +42,7 @@ final class DarwinTimestamp {
   ///
   /// Values are retained unchanged. Invalid or unrepresentable
   /// values are handled by [to_utc_datetime].
-  const DarwinTimestamp({
-    required this.seconds,
-    required this.nanoseconds,
-  });
+  const DarwinTimestamp({required this.seconds, required this.nanoseconds});
 
   /// Whole seconds since the Unix epoch.
   final int seconds;
@@ -86,7 +83,8 @@ final class DarwinTimestamp {
       return null;
     }
 
-    final microseconds = seconds * _microseconds_per_second +
+    final microseconds =
+        seconds * _microseconds_per_second +
         nanoseconds ~/ _nanoseconds_per_microsecond;
 
     if (microseconds < -_maximum_date_microseconds ||
@@ -95,10 +93,7 @@ final class DarwinTimestamp {
     }
 
     try {
-      return DateTime.fromMicrosecondsSinceEpoch(
-        microseconds,
-        isUtc: true,
-      );
+      return DateTime.fromMicrosecondsSinceEpoch(microseconds, isUtc: true);
     } on ArgumentError {
       return null;
     }
@@ -227,15 +222,9 @@ final class _DarwinStat extends Struct {
   external Array<Int64> st_qspare;
 }
 
-typedef _LstatNative = Int32 Function(
-  Pointer<Utf8>,
-  Pointer<_DarwinStat>,
-);
+typedef _LstatNative = Int32 Function(Pointer<Utf8>, Pointer<_DarwinStat>);
 
-typedef _LstatDart = int Function(
-  Pointer<Utf8>,
-  Pointer<_DarwinStat>,
-);
+typedef _LstatDart = int Function(Pointer<Utf8>, Pointer<_DarwinStat>);
 
 typedef _ErrnoNative = Pointer<Int32> Function();
 typedef _ErrnoDart = Pointer<Int32> Function();
@@ -278,9 +267,7 @@ final class DarwinLStat {
   /// incomplete filesystem observations.
   DarwinLStat() {
     if (!Platform.isMacOS) {
-      throw UnsupportedError(
-        'DarwinLStat requires macOS.',
-      );
+      throw UnsupportedError('DarwinLStat requires macOS.');
     }
 
     final library = DynamicLibrary.process();
@@ -325,9 +312,7 @@ final class DarwinLStat {
     final native_stat = calloc<_DarwinStat>();
 
     try {
-      final native_path = path.toNativeUtf8(
-        allocator: calloc,
-      );
+      final native_path = path.toNativeUtf8(allocator: calloc);
 
       try {
         final result = _lstat(native_path, native_stat);
@@ -375,9 +360,7 @@ final class DarwinLStat {
   ///
   /// Both variants must be validated against the expected 64-bit
   /// struct layout by the native integration tests.
-  static _LstatDart _lookup_lstat(
-    DynamicLibrary library,
-  ) {
+  static _LstatDart _lookup_lstat(DynamicLibrary library) {
     try {
       return library.lookupFunction<_LstatNative, _LstatDart>('lstat\$INODE64');
     } on ArgumentError {

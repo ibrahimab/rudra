@@ -58,15 +58,13 @@ final class BareWidgetRenderer {
     TerminalTheme? theme,
     AnsiText ansi_text = const AnsiText(),
     bool redraw_screen = false,
-  })  : _output = output,
-        _terminal_columns = terminal_columns,
-        _theme = theme ?? TerminalTheme.plain,
-        _ansi_text = ansi_text,
-        _redraw_screen = redraw_screen {
+  }) : _output = output,
+       _terminal_columns = terminal_columns,
+       _theme = theme ?? TerminalTheme.plain,
+       _ansi_text = ansi_text,
+       _redraw_screen = redraw_screen {
     if (redraw_screen && !ansi_text.enabled) {
-      throw ArgumentError(
-        'Screen redrawing requires ANSI-enabled output.',
-      );
+      throw ArgumentError('Screen redrawing requires ANSI-enabled output.');
     }
   }
 
@@ -100,16 +98,12 @@ final class BareWidgetRenderer {
   /// Errors propagate to the caller. Terminal restoration
   /// remains the hosting application's responsibility.
   void render(TerminalWidget widget) {
-    final constraints = TerminalConstraints(
-      columns: _terminal_columns?.call(),
-    );
+    final constraints = TerminalConstraints(columns: _terminal_columns?.call());
 
     final expected_height = widget.height;
 
     if (expected_height < 0) {
-      throw StateError(
-        'A widget cannot declare negative height.',
-      );
+      throw StateError('A widget cannot declare negative height.');
     }
 
     final frame = StringBuffer();
@@ -125,32 +119,22 @@ final class BareWidgetRenderer {
       actual_height++;
 
       if (actual_height > expected_height) {
-        throw StateError(
-          'The widget tree produced more rows than declared.',
-        );
+        throw StateError('The widget tree produced more rows than declared.');
       }
 
       final columns = constraints.columns;
 
       final safe_text = columns == null
           ? TerminalText.sanitize(line.text)
-          : TerminalText.truncate(
-              line.text,
-              max_columns: columns,
-            );
+          : TerminalText.truncate(line.text, max_columns: columns);
 
       frame.writeln(
-        _ansi_text.format(
-          safe_text,
-          style: _theme.style_for(line.role),
-        ),
+        _ansi_text.format(safe_text, style: _theme.style_for(line.role)),
       );
     }
 
     if (actual_height != expected_height) {
-      throw StateError(
-        'The widget tree produced fewer rows than declared.',
-      );
+      throw StateError('The widget tree produced fewer rows than declared.');
     }
 
     // Layout and encoding finish before output begins.

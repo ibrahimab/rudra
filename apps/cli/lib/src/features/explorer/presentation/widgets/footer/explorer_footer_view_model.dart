@@ -36,9 +36,7 @@ final class ExplorerFooterViewModel {
     if (summary.isEmpty ||
         inspection_status.isEmpty ||
         navigation_hints.isEmpty) {
-      throw ArgumentError(
-        'Explorer footer display lines must not be empty.',
-      );
+      throw ArgumentError('Explorer footer display lines must not be empty.');
     }
   }
 

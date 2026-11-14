@@ -1,5 +1,4 @@
 @TestOn('mac-os')
-
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -22,9 +21,7 @@ void main() {
     late DarwinReadLink reader;
 
     setUp(() async {
-      fixture = await Directory.systemTemp.createTemp(
-        'rudra_readlink_test_',
-      );
+      fixture = await Directory.systemTemp.createTemp('rudra_readlink_test_');
 
       reader = DarwinReadLink();
     });
@@ -61,15 +58,9 @@ void main() {
 
       // readlink must return the stored destination without
       // requiring the destination to exist.
-      expect(
-        reader.read_target(link.path),
-        target,
-      );
+      expect(reader.read_target(link.path), target);
 
-      expect(
-        await File('${fixture.path}/$target').exists(),
-        isFalse,
-      );
+      expect(await File('${fixture.path}/$target').exists(), isFalse);
     });
 
     test('reads self-referencing links without following them', () async {
@@ -78,10 +69,7 @@ void main() {
 
       // A path-resolution API would encounter a loop here.
       // Native readlink must simply return the stored bytes.
-      expect(
-        reader.read_target(link.path),
-        'self-reference',
-      );
+      expect(reader.read_target(link.path), 'self-reference');
     });
 
     test('preserves Unicode link targets', () async {
@@ -170,26 +158,17 @@ void main() {
     });
 
     test('rejects relative input paths', () {
-      expect(
-        () => reader.read_target('relative/link'),
-        throwsArgumentError,
-      );
+      expect(() => reader.read_target('relative/link'), throwsArgumentError);
     });
 
     test('rejects trailing path separators', () {
-      expect(
-        () => reader.read_target('${fixture.path}/'),
-        throwsArgumentError,
-      );
+      expect(() => reader.read_target('${fixture.path}/'), throwsArgumentError);
     });
 
     test('rejects embedded NUL characters', () {
       final invalid = '${fixture.path}/link\u0000other';
 
-      expect(
-        () => reader.read_target(invalid),
-        throwsArgumentError,
-      );
+      expect(() => reader.read_target(invalid), throwsArgumentError);
     });
   });
 }

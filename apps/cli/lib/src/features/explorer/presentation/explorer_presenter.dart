@@ -101,8 +101,9 @@ final class ExplorerPresenter {
         ? total_entries - visible_row_limit
         : 0;
 
-    var visible_start =
-        first_visible_index.clamp(0, max_first_visible_index).toInt();
+    var visible_start = first_visible_index
+        .clamp(0, max_first_visible_index)
+        .toInt();
 
     if (selected_index != null && visible_row_limit > 0) {
       if (selected_index < visible_start) {
@@ -112,10 +113,12 @@ final class ExplorerPresenter {
       }
     }
 
-    final visible_end =
-        (visible_start + visible_row_limit).clamp(0, total_entries).toInt();
+    final visible_end = (visible_start + visible_row_limit)
+        .clamp(0, total_entries)
+        .toInt();
 
-    final int? selected_visible_index = selected_index != null &&
+    final int? selected_visible_index =
+        selected_index != null &&
             selected_index >= visible_start &&
             selected_index < visible_end
         ? selected_index - visible_start
@@ -139,8 +142,10 @@ final class ExplorerPresenter {
         ? 'none'
         : '${directory.selected_index! + 1}/${directory.total_entries}';
 
-    final scroll_label =
-        switch ((directory.has_hidden_above, directory.has_hidden_below)) {
+    final scroll_label = switch ((
+      directory.has_hidden_above,
+      directory.has_hidden_below,
+    )) {
       (true, true) => 'more above and below',
       (true, false) => 'more above',
       (false, true) => 'more below',
@@ -148,7 +153,8 @@ final class ExplorerPresenter {
     };
 
     final footer = ExplorerFooterViewModel(
-      summary: '${directory.observed_count} observed entries'
+      summary:
+          '${directory.observed_count} observed entries'
           '  |  Selected: $selected_label'
           '  |  $scroll_label',
       inspection_status: _inspection_status(

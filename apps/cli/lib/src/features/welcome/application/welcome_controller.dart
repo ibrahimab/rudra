@@ -87,10 +87,10 @@ final class WelcomeController {
     required TargetPath? starting_directory,
     required Renderer<WelcomeViewModel> renderer,
     WelcomePresenter presenter = const WelcomePresenter(),
-  })  : _sdk = sdk,
-        _starting_directory = starting_directory,
-        _renderer = renderer,
-        _presenter = presenter {
+  }) : _sdk = sdk,
+       _starting_directory = starting_directory,
+       _renderer = renderer,
+       _presenter = presenter {
     if ((sdk == null) != (starting_directory == null)) {
       throw ArgumentError(
         'SDK and starting directory must be provided together.',
@@ -144,9 +144,7 @@ final class WelcomeController {
 
     final DirectoryListing? listing = sdk == null
         ? null
-        : await sdk.filesystem.list(
-            directory: starting_directory!,
-          );
+        : await sdk.filesystem.list(directory: starting_directory!);
 
     final model = WelcomeModel(
       product_name: application_name,

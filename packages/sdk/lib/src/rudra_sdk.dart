@@ -69,13 +69,11 @@ final class RudraSdk {
   /// print(sdk.target_id);
   /// // local-macos
   /// ```
-  RudraSdk({
-    required String target_id,
-    required TargetInspector inspector,
-  }) : filesystem = FilesystemService(
-          target_id: target_id,
-          inspector: inspector,
-        );
+  RudraSdk({required String target_id, required TargetInspector inspector})
+    : filesystem = FilesystemService(
+        target_id: target_id,
+        inspector: inspector,
+      );
 
   /// Provides platform-independent filesystem operations.
   ///

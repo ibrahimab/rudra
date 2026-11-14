@@ -41,9 +41,7 @@ final class AboutInformation implements TerminalWidget {
   int get height => fixed_rows;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield TerminalLine(
       '${view_model.product_name} - ${view_model.description}',
       role: TerminalRole.title,

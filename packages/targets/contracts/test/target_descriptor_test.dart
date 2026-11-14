@@ -22,20 +22,12 @@ void main() {
         target_id: 'readonly',
         display_name: 'Read-only target',
         platform: TargetPlatform.linux,
-        capabilities: {
-          TargetCapability.list_directory,
-        },
+        capabilities: {TargetCapability.list_directory},
       );
 
-      expect(
-        target.supports(TargetCapability.list_directory),
-        isTrue,
-      );
+      expect(target.supports(TargetCapability.list_directory), isTrue);
 
-      expect(
-        target.supports(TargetCapability.measure_usage),
-        isFalse,
-      );
+      expect(target.supports(TargetCapability.measure_usage), isFalse);
     });
 
     test('defensively copies the supplied capability set', () {
@@ -53,10 +45,7 @@ void main() {
       // Changing the original set must not change the descriptor.
       supplied_capabilities.add(TargetCapability.measure_usage);
 
-      expect(
-        target.supports(TargetCapability.measure_usage),
-        isFalse,
-      );
+      expect(target.supports(TargetCapability.measure_usage), isFalse);
 
       // Consumers must not be able to mutate the descriptor's set.
       expect(

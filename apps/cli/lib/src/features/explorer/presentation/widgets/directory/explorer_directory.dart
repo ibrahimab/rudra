@@ -60,7 +60,8 @@ final class ExplorerDirectory implements TerminalWidget {
   static const int _minimum_name_columns = 8;
 
   /// Minimum terminal width permitting detailed columns.
-  static const int _detailed_minimum_columns = _selection_columns +
+  static const int _detailed_minimum_columns =
+      _selection_columns +
       _type_columns +
       _size_columns +
       (_column_spacing * 2) +
@@ -70,15 +71,10 @@ final class ExplorerDirectory implements TerminalWidget {
   int get height => heading_rows + view_model.visible_row_limit;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     final columns = constraints.require_bounded_columns();
 
-    yield TerminalLine(
-      _column_header(columns),
-      role: TerminalRole.heading,
-    );
+    yield TerminalLine(_column_header(columns), role: TerminalRole.heading);
 
     for (var index = 0; index < view_model.visible_row_limit; index++) {
       if (index < view_model.visible_rows.length) {
@@ -87,11 +83,7 @@ final class ExplorerDirectory implements TerminalWidget {
         final is_selected = view_model.selected_visible_index == index;
 
         yield TerminalLine(
-          _entry_line(
-            row,
-            columns: columns,
-            is_selected: is_selected,
-          ),
+          _entry_line(row, columns: columns, is_selected: is_selected),
           role: is_selected ? TerminalRole.selected : row.role,
         );
       } else if (index == 0 && view_model.total_entries == 0) {
@@ -136,8 +128,9 @@ final class ExplorerDirectory implements TerminalWidget {
     final marker = is_selected ? '>' : ' ';
 
     if (columns < _detailed_minimum_columns) {
-      final available_name_columns =
-          columns > _selection_columns ? columns - _selection_columns : 0;
+      final available_name_columns = columns > _selection_columns
+          ? columns - _selection_columns
+          : 0;
 
       final name = TerminalText.truncate(
         row.name,
@@ -150,26 +143,17 @@ final class ExplorerDirectory implements TerminalWidget {
     final name_columns = _name_columns(columns);
 
     final name = TerminalText.pad_right(
-      TerminalText.truncate(
-        row.name,
-        max_columns: name_columns,
-      ),
+      TerminalText.truncate(row.name, max_columns: name_columns),
       min_columns: name_columns,
     );
 
     final type = TerminalText.pad_right(
-      TerminalText.truncate(
-        row.type_label,
-        max_columns: _type_columns,
-      ),
+      TerminalText.truncate(row.type_label, max_columns: _type_columns),
       min_columns: _type_columns,
     );
 
     final size = TerminalText.pad_left(
-      TerminalText.truncate(
-        row.size_label,
-        max_columns: _size_columns,
-      ),
+      TerminalText.truncate(row.size_label, max_columns: _size_columns),
       min_columns: _size_columns,
     );
 

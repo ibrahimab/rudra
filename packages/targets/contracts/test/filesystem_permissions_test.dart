@@ -4,33 +4,23 @@ import 'package:test/test.dart';
 void main() {
   group('FilesystemPermissions', () {
     test('preserves POSIX permission bits', () {
-      final permissions = FilesystemPermissions(
-        posix_mode: 0x1A4,
-      );
+      final permissions = FilesystemPermissions(posix_mode: 0x1A4);
 
       expect(permissions.posix_mode, 420);
     });
 
     test('accepts the full valid POSIX bit range', () {
-      final permissions = FilesystemPermissions(
-        posix_mode: 0x0FFF,
-      );
+      final permissions = FilesystemPermissions(posix_mode: 0x0FFF);
 
       expect(permissions.posix_mode, 0x0FFF);
     });
 
     test('rejects negative permission bits', () {
-      expect(
-        () => FilesystemPermissions(posix_mode: -1),
-        throwsRangeError,
-      );
+      expect(() => FilesystemPermissions(posix_mode: -1), throwsRangeError);
     });
 
     test('rejects POSIX file-type bits', () {
-      expect(
-        () => FilesystemPermissions(posix_mode: 0x1000),
-        throwsRangeError,
-      );
+      expect(() => FilesystemPermissions(posix_mode: 0x1000), throwsRangeError);
     });
 
     test('preserves unknown effective access', () {

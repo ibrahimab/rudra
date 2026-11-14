@@ -79,10 +79,11 @@ final class DirectoryListingWidget implements TerminalWidget {
     return switch (view_model.layout) {
       DirectoryListingLayout.compact =>
         _compact_heading_rows + view_model.rows.length,
-      DirectoryListingLayout.detailed => _detailed_heading_rows +
-          view_model.rows.length +
-          _detailed_summary_rows +
-          (view_model.is_incomplete ? 1 : 0),
+      DirectoryListingLayout.detailed =>
+        _detailed_heading_rows +
+            view_model.rows.length +
+            _detailed_summary_rows +
+            (view_model.is_incomplete ? 1 : 0),
     };
   }
 
@@ -94,9 +95,7 @@ final class DirectoryListingWidget implements TerminalWidget {
   ///
   /// The widget itself never writes to an output stream.
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return switch (view_model.layout) {
       DirectoryListingLayout.compact => _compact_lines(),
       DirectoryListingLayout.detailed => _detailed_lines(),
@@ -115,27 +114,23 @@ final class DirectoryListingWidget implements TerminalWidget {
     const size_header = 'LOGICAL_BYTES';
     const path_header = 'PATH';
 
-    final type_width = view_model.rows.fold<int>(
-      type_header.length,
-      (width, row) {
-        final value_width = TerminalText.estimated_columns(
-          row.compact_type,
-        );
+    final type_width = view_model.rows.fold<int>(type_header.length, (
+      width,
+      row,
+    ) {
+      final value_width = TerminalText.estimated_columns(row.compact_type);
 
-        return value_width > width ? value_width : width;
-      },
-    );
+      return value_width > width ? value_width : width;
+    });
 
-    final size_width = view_model.rows.fold<int>(
-      size_header.length,
-      (width, row) {
-        final value_width = TerminalText.estimated_columns(
-          row.logical_bytes,
-        );
+    final size_width = view_model.rows.fold<int>(size_header.length, (
+      width,
+      row,
+    ) {
+      final value_width = TerminalText.estimated_columns(row.logical_bytes);
 
-        return value_width > width ? value_width : width;
-      },
-    );
+      return value_width > width ? value_width : width;
+    });
 
     yield TerminalLine(
       '${TerminalText.pad_right(type_header, min_columns: type_width)}'
@@ -171,16 +166,14 @@ final class DirectoryListingWidget implements TerminalWidget {
     const permission_header = 'PERMISSIONS';
     const modified_header = 'MODIFIED (UTC)';
 
-    final name_width = view_model.rows.fold<int>(
-      name_header.length,
-      (width, row) {
-        final value_width = TerminalText.estimated_columns(
-          row.name,
-        );
+    final name_width = view_model.rows.fold<int>(name_header.length, (
+      width,
+      row,
+    ) {
+      final value_width = TerminalText.estimated_columns(row.name);
 
-        return value_width > width ? value_width : width;
-      },
-    );
+      return value_width > width ? value_width : width;
+    });
 
     yield TerminalLine(
       '  ${TerminalText.pad_right(name_header, min_columns: name_width)}'

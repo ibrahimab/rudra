@@ -13,15 +13,9 @@ void main() {
         message: 'Directory access denied.',
       );
 
-      expect(
-        error.code,
-        TargetInspectionErrorCode.permissionDenied,
-      );
+      expect(error.code, TargetInspectionErrorCode.permissionDenied);
 
-      expect(
-        error.operation,
-        TargetInspectionOperation.listDirectory,
-      );
+      expect(error.operation, TargetInspectionOperation.listDirectory);
 
       expect(error.path, same(path));
       expect(error.message, 'Directory access denied.');
@@ -112,10 +106,7 @@ void main() {
         cause: StateError('Sensitive native details'),
       );
 
-      expect(
-        error.toString(),
-        isNot(contains('Sensitive native details')),
-      );
+      expect(error.toString(), isNot(contains('Sensitive native details')));
     });
 
     test('distinguishes different failure categories', () {

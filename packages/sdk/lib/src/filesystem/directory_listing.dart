@@ -90,9 +90,9 @@ final class DirectoryListing {
     required List<FilesystemEntry> entries,
     required this.is_complete,
     List<InspectionIssue> issues = const [],
-  })  : target_id = _require_target_id(target_id),
-        entries = List<FilesystemEntry>.unmodifiable(entries),
-        issues = List<InspectionIssue>.unmodifiable(issues) {
+  }) : target_id = _require_target_id(target_id),
+       entries = List<FilesystemEntry>.unmodifiable(entries),
+       issues = List<InspectionIssue>.unmodifiable(issues) {
     if (is_complete && this.issues.isNotEmpty) {
       throw ArgumentError.value(
         is_complete,

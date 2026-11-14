@@ -18,9 +18,7 @@ import 'package:test/test.dart';
 void main() {
   group('AboutPresenter', () {
     test('prepares immutable application information', () {
-      final model = const AboutPresenter().present(
-        product_name: 'Rudra',
-      );
+      final model = const AboutPresenter().present(product_name: 'Rudra');
 
       expect(model.information.product_name, 'Rudra');
       expect(
@@ -32,9 +30,7 @@ void main() {
     test('rejects blank product names', () {
       for (final name in ['', ' ', '\t', '\n']) {
         expect(
-          () => const AboutPresenter().present(
-            product_name: name,
-          ),
+          () => const AboutPresenter().present(product_name: name),
           throwsArgumentError,
         );
       }
@@ -42,10 +38,8 @@ void main() {
 
     test('rejects blank descriptions', () {
       expect(
-        () => AboutInformationViewModel(
-          product_name: 'Rudra',
-          description: ' ',
-        ),
+        () =>
+            AboutInformationViewModel(product_name: 'Rudra', description: ' '),
         throwsArgumentError,
       );
     });
@@ -56,11 +50,7 @@ void main() {
       final model = _model();
       final widget = AboutInformation(model.information);
 
-      final lines = widget
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = widget.build(TerminalConstraints()).toList();
 
       expect(widget.height, 1);
       expect(lines, hasLength(widget.height));
@@ -78,11 +68,7 @@ void main() {
     test('derives its height from the child widget', () {
       final screen = AboutScreen(_model());
 
-      final lines = screen
-          .build(
-            TerminalConstraints(),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints()).toList();
 
       expect(screen.height, AboutInformation.fixed_rows);
       expect(lines, hasLength(screen.height));
@@ -94,9 +80,7 @@ void main() {
     test('renders application information to the injected sink', () {
       final output = StringBuffer();
 
-      BareAboutRenderer(
-        output: output,
-      ).render(_model());
+      BareAboutRenderer(output: output).render(_model());
 
       expect(
         output.toString(),
@@ -114,9 +98,7 @@ void main() {
         ),
       );
 
-      BareAboutRenderer(
-        output: output,
-      ).render(model);
+      BareAboutRenderer(output: output).render(model);
 
       expect(output.toString(), contains('Rudra?[2J'));
       expect(output.toString(), isNot(contains('\x1B')));
@@ -138,9 +120,7 @@ void main() {
     test('keeps plain output free of ANSI sequences', () {
       final output = StringBuffer();
 
-      BareAboutRenderer(
-        output: output,
-      ).render(_model());
+      BareAboutRenderer(output: output).render(_model());
 
       expect(output.toString(), isNot(contains('\x1B')));
     });
@@ -151,7 +131,5 @@ void main() {
 ///
 /// No application state or filesystem services are required.
 AboutViewModel _model() {
-  return const AboutPresenter().present(
-    product_name: 'Rudra',
-  );
+  return const AboutPresenter().present(product_name: 'Rudra');
 }

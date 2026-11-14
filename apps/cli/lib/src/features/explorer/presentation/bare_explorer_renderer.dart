@@ -48,12 +48,12 @@ final class BareExplorerRenderer
     AnsiText ansi_text = const AnsiText(),
     bool redraw_screen = false,
   }) : _backend = BareWidgetRenderer(
-          output: output,
-          terminal_columns: terminal_columns,
-          theme: theme,
-          ansi_text: ansi_text,
-          redraw_screen: redraw_screen,
-        );
+         output: output,
+         terminal_columns: terminal_columns,
+         theme: theme,
+         ansi_text: ansi_text,
+         redraw_screen: redraw_screen,
+       );
 
   /// Shared backend responsible for terminal output encoding.
   final BareWidgetRenderer _backend;
@@ -70,8 +70,6 @@ final class BareExplorerRenderer
   /// whose terminal host owns restoration.
   @override
   void render(ExplorerViewModel view_model) {
-    _backend.render(
-      ExplorerScreen(view_model),
-    );
+    _backend.render(ExplorerScreen(view_model));
   }
 }

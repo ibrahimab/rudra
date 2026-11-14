@@ -1,5 +1,4 @@
 @TestOn('mac-os')
-
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -15,22 +14,13 @@ const int _no_such_file_errno = 2;
 void main() {
   group('DarwinTimestamp', () {
     test('converts the Unix epoch to UTC', () {
-      const timestamp = DarwinTimestamp(
-        seconds: 0,
-        nanoseconds: 0,
-      );
+      const timestamp = DarwinTimestamp(seconds: 0, nanoseconds: 0);
 
-      expect(
-        timestamp.to_utc_datetime(),
-        DateTime.utc(1970),
-      );
+      expect(timestamp.to_utc_datetime(), DateTime.utc(1970));
     });
 
     test('preserves microseconds before the epoch', () {
-      const timestamp = DarwinTimestamp(
-        seconds: -1,
-        nanoseconds: 123456789,
-      );
+      const timestamp = DarwinTimestamp(seconds: -1, nanoseconds: 123456789);
 
       final converted = timestamp.to_utc_datetime();
 
@@ -39,37 +29,22 @@ void main() {
 
       // -1 second + 123456789 nanoseconds.
       // Remaining sub-microsecond precision is discarded.
-      expect(
-        converted.microsecondsSinceEpoch,
-        -876544,
-      );
+      expect(converted.microsecondsSinceEpoch, -876544);
     });
 
     test('rejects invalid nanosecond components', () {
-      const negative = DarwinTimestamp(
-        seconds: 0,
-        nanoseconds: -1,
-      );
+      const negative = DarwinTimestamp(seconds: 0, nanoseconds: -1);
 
-      const overflow = DarwinTimestamp(
-        seconds: 0,
-        nanoseconds: 1000000000,
-      );
+      const overflow = DarwinTimestamp(seconds: 0, nanoseconds: 1000000000);
 
       expect(negative.to_utc_datetime(), isNull);
       expect(overflow.to_utc_datetime(), isNull);
     });
 
     test('rejects out-of-range timestamps', () {
-      const future = DarwinTimestamp(
-        seconds: 8640000000001,
-        nanoseconds: 0,
-      );
+      const future = DarwinTimestamp(seconds: 8640000000001, nanoseconds: 0);
 
-      const past = DarwinTimestamp(
-        seconds: -8640000000001,
-        nanoseconds: 0,
-      );
+      const past = DarwinTimestamp(seconds: -8640000000001, nanoseconds: 0);
 
       expect(future.to_utc_datetime(), isNull);
       expect(past.to_utc_datetime(), isNull);
@@ -81,9 +56,7 @@ void main() {
     late DarwinLStat native;
 
     setUp(() async {
-      fixture = await Directory.systemTemp.createTemp(
-        'rudra_lstat_test_',
-      );
+      fixture = await Directory.systemTemp.createTemp('rudra_lstat_test_');
 
       native = DarwinLStat();
     });
@@ -98,15 +71,9 @@ void main() {
 
       final result = native.inspect(file.path);
 
-      expect(
-        result.mode & _file_type_mask,
-        _regular_file_type,
-      );
+      expect(result.mode & _file_type_mask, _regular_file_type);
 
-      expect(
-        result.logical_size_bytes,
-        await file.length(),
-      );
+      expect(result.logical_size_bytes, await file.length());
 
       expect(result.inode, greaterThan(0));
       expect(result.allocated_blocks, greaterThanOrEqualTo(0));
@@ -115,10 +82,7 @@ void main() {
     test('identifies directories', () {
       final result = native.inspect(fixture.path);
 
-      expect(
-        result.mode & _file_type_mask,
-        _directory_type,
-      );
+      expect(result.mode & _file_type_mask, _directory_type);
     });
 
     test('does not follow a symbolic link', () async {
@@ -131,10 +95,7 @@ void main() {
       final file_stat = native.inspect(file.path);
       final link_stat = native.inspect(link.path);
 
-      expect(
-        link_stat.mode & _file_type_mask,
-        _symbolic_link_type,
-      );
+      expect(link_stat.mode & _file_type_mask, _symbolic_link_type);
 
       expect(link_stat.inode, isNot(file_stat.inode));
       expect(link_stat.device_id, file_stat.device_id);
@@ -146,10 +107,7 @@ void main() {
 
       final result = native.inspect(link.path);
 
-      expect(
-        result.mode & _file_type_mask,
-        _symbolic_link_type,
-      );
+      expect(result.mode & _file_type_mask, _symbolic_link_type);
 
       expect(result.inode, greaterThan(0));
     });
@@ -170,17 +128,11 @@ void main() {
     });
 
     test('rejects relative paths', () {
-      expect(
-        () => native.inspect('relative/path'),
-        throwsArgumentError,
-      );
+      expect(() => native.inspect('relative/path'), throwsArgumentError);
     });
 
     test('rejects trailing path separators', () {
-      expect(
-        () => native.inspect('${fixture.path}/'),
-        throwsArgumentError,
-      );
+      expect(() => native.inspect('${fixture.path}/'), throwsArgumentError);
     });
 
     test('rejects embedded NUL characters', () {
@@ -196,19 +148,19 @@ void main() {
 
       final observed = native.inspect(file.path);
 
-      final command = await Process.run(
-        '/usr/bin/stat',
-        [
-          '-f',
-          '%d:%i:%z:%b',
-          file.path,
-        ],
-      );
+      final command = await Process.run('/usr/bin/stat', [
+        '-f',
+        '%d:%i:%z:%b',
+        file.path,
+      ]);
 
       expect(command.exitCode, 0);
 
-      final fields =
-          (command.stdout as String).trim().split(':').map(int.parse).toList();
+      final fields = (command.stdout as String)
+          .trim()
+          .split(':')
+          .map(int.parse)
+          .toList();
 
       expect(fields, hasLength(4));
 
@@ -224,19 +176,19 @@ void main() {
 
       final observed = native.inspect(file.path);
 
-      final command = await Process.run(
-        '/usr/bin/stat',
-        ['-f', '%a:%m', file.path],
-      );
+      final command = await Process.run('/usr/bin/stat', [
+        '-f',
+        '%a:%m',
+        file.path,
+      ]);
 
-      expect(
-        command.exitCode,
-        0,
-        reason: '${command.stderr}',
-      );
+      expect(command.exitCode, 0, reason: '${command.stderr}');
 
-      final fields =
-          (command.stdout as String).trim().split(':').map(int.parse).toList();
+      final fields = (command.stdout as String)
+          .trim()
+          .split(':')
+          .map(int.parse)
+          .toList();
 
       expect(fields, hasLength(2));
 
@@ -247,10 +199,7 @@ void main() {
         observed.access_time,
         observed.modification_time,
       ]) {
-        expect(
-          timestamp.nanoseconds,
-          inInclusiveRange(0, 999999999),
-        );
+        expect(timestamp.nanoseconds, inInclusiveRange(0, 999999999));
       }
     });
   });

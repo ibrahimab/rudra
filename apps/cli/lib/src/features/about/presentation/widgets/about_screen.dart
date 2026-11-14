@@ -28,11 +28,9 @@ import 'information/about_information.dart';
 final class AboutScreen implements TerminalWidget {
   /// Builds the current About screen composition.
   AboutScreen(AboutViewModel view_model)
-      : _layout = TerminalColumn(
-          children: [
-            AboutInformation(view_model.information),
-          ],
-        );
+    : _layout = TerminalColumn(
+        children: [AboutInformation(view_model.information)],
+      );
 
   /// Root vertical composition of About widgets.
   final TerminalColumn _layout;
@@ -41,9 +39,7 @@ final class AboutScreen implements TerminalWidget {
   int get height => _layout.height;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return _layout.build(constraints);
   }
 }

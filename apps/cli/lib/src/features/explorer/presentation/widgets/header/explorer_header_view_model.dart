@@ -19,9 +19,7 @@ final class ExplorerHeaderViewModel {
   /// Creates a header model from an observed directory path.
   ///
   /// Throws [ArgumentError] when the directory is empty.
-  ExplorerHeaderViewModel({
-    required this.current_directory,
-  }) {
+  ExplorerHeaderViewModel({required this.current_directory}) {
     if (current_directory.isEmpty) {
       throw ArgumentError.value(
         current_directory,

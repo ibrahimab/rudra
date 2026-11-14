@@ -168,13 +168,13 @@ final class DartExplorerTerminalDevice implements ExplorerTerminalDevice {
     controller = StreamController<ExplorerTerminalSignal>(
       onListen: () {
         interrupt_subscription = ProcessSignal.sigint.watch().listen(
-              (_) => controller.add(ExplorerTerminalSignal.interrupt),
-            );
+          (_) => controller.add(ExplorerTerminalSignal.interrupt),
+        );
 
         if (!Platform.isWindows) {
           terminate_subscription = ProcessSignal.sigterm.watch().listen(
-                (_) => controller.add(ExplorerTerminalSignal.terminate),
-              );
+            (_) => controller.add(ExplorerTerminalSignal.terminate),
+          );
         }
       },
       onCancel: () async {

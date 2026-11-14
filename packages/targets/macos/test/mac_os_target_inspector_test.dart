@@ -1,5 +1,4 @@
 @TestOn('mac-os')
-
 import 'dart:io';
 import 'dart:async';
 
@@ -19,9 +18,7 @@ void main() {
     late MacOsTargetInspector inspector;
 
     setUp(() async {
-      fixture = await Directory.systemTemp.createTemp(
-        'rudra_inspector_test_',
-      );
+      fixture = await Directory.systemTemp.createTemp('rudra_inspector_test_');
 
       inspector = MacOsTargetInspector();
     });
@@ -41,22 +38,15 @@ void main() {
 
       expect(entry.path, same(path));
       expect(entry.kind, FilesystemEntryKind.regularFile);
-      expect(
-        entry.metadata.logical_size_bytes,
-        await file.length(),
-      );
+      expect(entry.metadata.logical_size_bytes, await file.length());
     });
 
     test('inspects an empty directory', () async {
-      final directory = Directory(
-        '${fixture.path}/empty',
-      );
+      final directory = Directory('${fixture.path}/empty');
 
       await directory.create();
 
-      final entry = await inspector.inspect(
-        TargetPath(directory.path),
-      );
+      final entry = await inspector.inspect(TargetPath(directory.path));
 
       expect(entry.kind, FilesystemEntryKind.directory);
     });
@@ -68,27 +58,21 @@ void main() {
       final link = Link('${fixture.path}/shortcut');
       await link.create('original.txt');
 
-      final entry = await inspector.inspect(
-        TargetPath(link.path),
-      );
+      final entry = await inspector.inspect(TargetPath(link.path));
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
       expect(await link.target(), 'original.txt');
     });
 
     test('does not follow a directory symbolic link', () async {
-      final directory = Directory(
-        '${fixture.path}/directory',
-      );
+      final directory = Directory('${fixture.path}/directory');
 
       await directory.create();
 
       final link = Link('${fixture.path}/directory-link');
       await link.create('directory');
 
-      final entry = await inspector.inspect(
-        TargetPath(link.path),
-      );
+      final entry = await inspector.inspect(TargetPath(link.path));
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
     });
@@ -97,9 +81,7 @@ void main() {
       final link = Link('${fixture.path}/dangling');
       await link.create('missing-target');
 
-      final entry = await inspector.inspect(
-        TargetPath(link.path),
-      );
+      final entry = await inspector.inspect(TargetPath(link.path));
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
     });
@@ -108,44 +90,26 @@ void main() {
       final pipe_path = '${fixture.path}/named-pipe';
 
       // Create the FIFO only inside the owned disposable fixture.
-      final result = await Process.run(
-        '/usr/bin/mkfifo',
-        [pipe_path],
-      );
+      final result = await Process.run('/usr/bin/mkfifo', [pipe_path]);
 
-      expect(
-        result.exitCode,
-        0,
-        reason: '${result.stderr}',
-      );
+      expect(result.exitCode, 0, reason: '${result.stderr}');
 
-      final entry = await inspector.inspect(
-        TargetPath(pipe_path),
-      );
+      final entry = await inspector.inspect(TargetPath(pipe_path));
 
       expect(entry.kind, FilesystemEntryKind.other);
     });
 
     test('reports missing entries with typed errors', () async {
-      final path = TargetPath(
-        '${fixture.path}/missing',
-      );
+      final path = TargetPath('${fixture.path}/missing');
 
       await expectLater(
         inspector.inspect(path),
-        throwsA(
-          _inspection_error(
-            TargetInspectionErrorCode.notFound,
-            path,
-          ),
-        ),
+        throwsA(_inspection_error(TargetInspectionErrorCode.notFound, path)),
       );
     });
 
     test('preserves the native failure as cause', () async {
-      final path = TargetPath(
-        '${fixture.path}/missing',
-      );
+      final path = TargetPath('${fixture.path}/missing');
 
       await expectLater(
         inspector.inspect(path),
@@ -164,12 +128,7 @@ void main() {
 
       await expectLater(
         inspector.inspect(path),
-        throwsA(
-          _inspection_error(
-            TargetInspectionErrorCode.invalidPath,
-            path,
-          ),
-        ),
+        throwsA(_inspection_error(TargetInspectionErrorCode.invalidPath, path)),
       );
     });
 
@@ -178,12 +137,7 @@ void main() {
 
       await expectLater(
         inspector.inspect(path),
-        throwsA(
-          _inspection_error(
-            TargetInspectionErrorCode.invalidPath,
-            path,
-          ),
-        ),
+        throwsA(_inspection_error(TargetInspectionErrorCode.invalidPath, path)),
       );
     });
 
@@ -191,17 +145,12 @@ void main() {
       final file = File('${fixture.path}/regular.txt');
       await file.writeAsString('Data');
 
-      final path = TargetPath(
-        '${file.path}/child',
-      );
+      final path = TargetPath('${file.path}/child');
 
       await expectLater(
         inspector.inspect(path),
         throwsA(
-          _inspection_error(
-            TargetInspectionErrorCode.notDirectory,
-            path,
-          ),
+          _inspection_error(TargetInspectionErrorCode.notDirectory, path),
         ),
       );
     });
@@ -215,10 +164,7 @@ void main() {
       await expectLater(
         inspector.inspect(path),
         throwsA(
-          _inspection_error(
-            TargetInspectionErrorCode.symbolicLinkLoop,
-            path,
-          ),
+          _inspection_error(TargetInspectionErrorCode.symbolicLinkLoop, path),
         ),
       );
     });
@@ -227,9 +173,7 @@ void main() {
       final file = File('${fixture.path}/example.txt');
       await file.writeAsString('Data');
 
-      final path = TargetPath(
-        '${fixture.path}/./example.txt',
-      );
+      final path = TargetPath('${fixture.path}/./example.txt');
 
       final entry = await inspector.inspect(path);
 
@@ -242,49 +186,31 @@ void main() {
       final file = File('${fixture.path}/example.txt');
       await file.writeAsString('Data');
 
-      final entry = await inspector.inspect(
-        TargetPath(file.path),
-      );
+      final entry = await inspector.inspect(TargetPath(file.path));
 
       // No effective-access probe has been implemented.
-      expect(
-        entry.metadata.permissions?.effective_readable,
-        isNull,
-      );
+      expect(entry.metadata.permissions?.effective_readable, isNull);
 
-      expect(
-        entry.metadata.permissions?.effective_writable,
-        isNull,
-      );
+      expect(entry.metadata.permissions?.effective_writable, isNull);
 
-      expect(
-        entry.metadata.permissions?.effective_executable,
-        isNull,
-      );
+      expect(entry.metadata.permissions?.effective_executable, isNull);
     });
 
     test('reports filesystem-allocated bytes', () async {
       final file = File('${fixture.path}/allocated.txt');
       await file.writeAsString('Rudra allocation test');
 
-      final command = await Process.run(
-        '/usr/bin/stat',
-        ['-f', '%b', file.path],
-      );
+      final command = await Process.run('/usr/bin/stat', [
+        '-f',
+        '%b',
+        file.path,
+      ]);
 
-      expect(
-        command.exitCode,
-        0,
-        reason: '${command.stderr}',
-      );
+      expect(command.exitCode, 0, reason: '${command.stderr}');
 
-      final allocated_blocks = int.parse(
-        (command.stdout as String).trim(),
-      );
+      final allocated_blocks = int.parse((command.stdout as String).trim());
 
-      final entry = await inspector.inspect(
-        TargetPath(file.path),
-      );
+      final entry = await inspector.inspect(TargetPath(file.path));
 
       // Compare against the operating system's independent
       // report, not against an assumed APFS allocation size.
@@ -293,10 +219,7 @@ void main() {
         allocated_blocks * _darwin_allocation_block_bytes,
       );
 
-      expect(
-        entry.metadata.logical_size_bytes,
-        await file.length(),
-      );
+      expect(entry.metadata.logical_size_bytes, await file.length());
     });
 
     test('identifies hard links as the same object', () async {
@@ -305,20 +228,14 @@ void main() {
 
       final hard_link_path = '${fixture.path}/hard-link.txt';
 
-      final command = await Process.run(
-        '/bin/ln',
-        [original.path, hard_link_path],
-      );
+      final command = await Process.run('/bin/ln', [
+        original.path,
+        hard_link_path,
+      ]);
 
-      expect(
-        command.exitCode,
-        0,
-        reason: '${command.stderr}',
-      );
+      expect(command.exitCode, 0, reason: '${command.stderr}');
 
-      final original_entry = await inspector.inspect(
-        TargetPath(original.path),
-      );
+      final original_entry = await inspector.inspect(TargetPath(original.path));
 
       final hard_link_entry = await inspector.inspect(
         TargetPath(hard_link_path),
@@ -341,13 +258,9 @@ void main() {
       final link = Link('${fixture.path}/symbolic-link');
       await link.create('original.txt');
 
-      final original_entry = await inspector.inspect(
-        TargetPath(original.path),
-      );
+      final original_entry = await inspector.inspect(TargetPath(original.path));
 
-      final link_entry = await inspector.inspect(
-        TargetPath(link.path),
-      );
+      final link_entry = await inspector.inspect(TargetPath(link.path));
 
       final original_identity = original_entry.metadata.identity;
       final link_identity = link_entry.metadata.identity;
@@ -355,20 +268,11 @@ void main() {
       expect(original_identity, isNotNull);
       expect(link_identity, isNotNull);
 
-      expect(
-        link_identity,
-        isNot(original_identity),
-      );
+      expect(link_identity, isNot(original_identity));
 
-      expect(
-        link_identity!.filesystem_id,
-        original_identity!.filesystem_id,
-      );
+      expect(link_identity!.filesystem_id, original_identity!.filesystem_id);
 
-      expect(
-        link_entry.kind,
-        FilesystemEntryKind.symbolicLink,
-      );
+      expect(link_entry.kind, FilesystemEntryKind.symbolicLink);
     });
 
     test('reports POSIX mode without inferring access', () async {
@@ -376,29 +280,17 @@ void main() {
       await file.writeAsString('Permission test');
 
       // Restrict only this disposable test fixture.
-      final command = await Process.run(
-        '/bin/chmod',
-        ['640', file.path],
-      );
+      final command = await Process.run('/bin/chmod', ['640', file.path]);
 
-      expect(
-        command.exitCode,
-        0,
-        reason: '${command.stderr}',
-      );
+      expect(command.exitCode, 0, reason: '${command.stderr}');
 
-      final entry = await inspector.inspect(
-        TargetPath(file.path),
-      );
+      final entry = await inspector.inspect(TargetPath(file.path));
 
       final permissions = entry.metadata.permissions;
 
       expect(permissions, isNotNull);
 
-      expect(
-        permissions!.posix_mode,
-        _fixture_posix_mode,
-      );
+      expect(permissions!.posix_mode, _fixture_posix_mode);
 
       // Mode bits alone do not establish effective access.
       expect(permissions.effective_readable, isNull);
@@ -410,19 +302,21 @@ void main() {
       final file = File('${fixture.path}/timestamps.txt');
       await file.writeAsString('Timestamp inspection');
 
-      final entry = await inspector.inspect(
-        TargetPath(file.path),
-      );
+      final entry = await inspector.inspect(TargetPath(file.path));
 
-      final command = await Process.run(
-        '/usr/bin/stat',
-        ['-f', '%a:%m', file.path],
-      );
+      final command = await Process.run('/usr/bin/stat', [
+        '-f',
+        '%a:%m',
+        file.path,
+      ]);
 
       expect(command.exitCode, 0);
 
-      final seconds =
-          (command.stdout as String).trim().split(':').map(int.parse).toList();
+      final seconds = (command.stdout as String)
+          .trim()
+          .split(':')
+          .map(int.parse)
+          .toList();
 
       expect(seconds, hasLength(2));
 
@@ -455,20 +349,22 @@ void main() {
       final link = Link('${fixture.path}/dangling-timestamp');
       await link.create('missing-destination');
 
-      final entry = await inspector.inspect(
-        TargetPath(link.path),
-      );
+      final entry = await inspector.inspect(TargetPath(link.path));
 
       // macOS stat defaults to lstat without -L.
-      final command = await Process.run(
-        '/usr/bin/stat',
-        ['-f', '%a:%m', link.path],
-      );
+      final command = await Process.run('/usr/bin/stat', [
+        '-f',
+        '%a:%m',
+        link.path,
+      ]);
 
       expect(command.exitCode, 0);
 
-      final seconds =
-          (command.stdout as String).trim().split(':').map(int.parse).toList();
+      final seconds = (command.stdout as String)
+          .trim()
+          .split(':')
+          .map(int.parse)
+          .toList();
 
       expect(seconds, hasLength(2));
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
@@ -530,12 +426,7 @@ void main() {
 
       expect(
         paths,
-        unorderedEquals([
-          file.path,
-          directory.path,
-          link.path,
-          dangling.path,
-        ]),
+        unorderedEquals([file.path, directory.path, link.path, dangling.path]),
       );
 
       // The nested child must not be discovered.
@@ -546,8 +437,9 @@ void main() {
       final empty = Directory('${fixture.path}/empty');
       await empty.create();
 
-      final paths =
-          await inspector.list_directory(TargetPath(empty.path)).toList();
+      final paths = await inspector
+          .list_directory(TargetPath(empty.path))
+          .toList();
 
       expect(paths, isEmpty);
     });
@@ -582,10 +474,7 @@ void main() {
         stream,
         emitsInOrder([
           emitsError(
-            _directory_error(
-              TargetInspectionErrorCode.notFound,
-              path,
-            ),
+            _directory_error(TargetInspectionErrorCode.notFound, path),
           ),
           emitsDone,
         ]),
@@ -602,10 +491,7 @@ void main() {
         inspector.list_directory(path),
         emitsInOrder([
           emitsError(
-            _directory_error(
-              TargetInspectionErrorCode.notDirectory,
-              path,
-            ),
+            _directory_error(TargetInspectionErrorCode.notDirectory, path),
           ),
           emitsDone,
         ]),
@@ -625,10 +511,7 @@ void main() {
         inspector.list_directory(path),
         emitsInOrder([
           emitsError(
-            _directory_error(
-              TargetInspectionErrorCode.notDirectory,
-              path,
-            ),
+            _directory_error(TargetInspectionErrorCode.notDirectory, path),
           ),
           emitsDone,
         ]),
@@ -645,10 +528,7 @@ void main() {
         inspector.list_directory(path),
         emitsInOrder([
           emitsError(
-            _directory_error(
-              TargetInspectionErrorCode.notDirectory,
-              path,
-            ),
+            _directory_error(TargetInspectionErrorCode.notDirectory, path),
           ),
           emitsDone,
         ]),
@@ -662,10 +542,7 @@ void main() {
         inspector.list_directory(path),
         emitsInOrder([
           emitsError(
-            _directory_error(
-              TargetInspectionErrorCode.notFound,
-              path,
-            ),
+            _directory_error(TargetInspectionErrorCode.notFound, path),
           ),
           emitsDone,
         ]),
@@ -681,10 +558,7 @@ void main() {
           inspector.list_directory(path),
           emitsInOrder([
             emitsError(
-              _directory_error(
-                TargetInspectionErrorCode.invalidPath,
-                path,
-              ),
+              _directory_error(TargetInspectionErrorCode.invalidPath, path),
             ),
             emitsDone,
           ]),
@@ -693,18 +567,13 @@ void main() {
     });
 
     test('creates a single-subscription stream', () async {
-      final stream = inspector.list_directory(
-        TargetPath(fixture.path),
-      );
+      final stream = inspector.list_directory(TargetPath(fixture.path));
 
       await stream.toList();
 
       // Reusing the same stream must not silently reopen
       // the directory and create another subscription.
-      expect(
-        () => stream.listen((_) {}),
-        throwsStateError,
-      );
+      expect(() => stream.listen((_) {}), throwsStateError);
     });
 
     test('preserves the original parent path spelling', () async {
@@ -720,10 +589,7 @@ void main() {
       final paths = await inspector.list_directory(path).toList();
 
       expect(paths, hasLength(1));
-      expect(
-        paths.single.value,
-        '${path.value}/example.txt',
-      );
+      expect(paths.single.value, '${path.value}/example.txt');
     });
 
     test('supports cancellation after the first child', () async {
@@ -738,42 +604,43 @@ void main() {
 
       late final StreamSubscription<TargetPath> subscription;
 
-      subscription = inspector.list_directory(TargetPath(fixture.path)).listen(
-        (path) async {
-          received++;
+      subscription = inspector
+          .list_directory(TargetPath(fixture.path))
+          .listen(
+            (path) async {
+              received++;
 
-          try {
-            // Cancel immediately after the first observation.
-            // The native cursor must be released by finally.
-            await subscription.cancel();
+              try {
+                // Cancel immediately after the first observation.
+                // The native cursor must be released by finally.
+                await subscription.cancel();
 
-            if (!canceled.isCompleted) {
-              canceled.complete();
-            }
-          } catch (error, stack) {
-            if (!canceled.isCompleted) {
-              canceled.completeError(error, stack);
-            }
-          }
-        },
-        onError: (Object error, StackTrace stack) {
-          if (!canceled.isCompleted) {
-            canceled.completeError(error, stack);
-          }
-        },
-      );
+                if (!canceled.isCompleted) {
+                  canceled.complete();
+                }
+              } catch (error, stack) {
+                if (!canceled.isCompleted) {
+                  canceled.completeError(error, stack);
+                }
+              }
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!canceled.isCompleted) {
+                canceled.completeError(error, stack);
+              }
+            },
+          );
 
-      await canceled.future.timeout(
-        const Duration(seconds: 5),
-      );
+      await canceled.future.timeout(const Duration(seconds: 5));
 
       expect(received, 1);
 
       // A new enumeration remains possible after cancellation.
       // This is a functional check, not a direct descriptor-leak
       // measurement.
-      final remaining =
-          await inspector.list_directory(TargetPath(fixture.path)).toList();
+      final remaining = await inspector
+          .list_directory(TargetPath(fixture.path))
+          .toList();
 
       expect(remaining, hasLength(16));
     });
@@ -834,10 +701,7 @@ void main() {
       expect(destination.value, target);
 
       // The destination does not have to exist.
-      expect(
-        await File('${fixture.path}/$target').exists(),
-        isFalse,
-      );
+      expect(await File('${fixture.path}/$target').exists(), isFalse);
     });
 
     test('does not follow self-referencing links', () async {
@@ -875,10 +739,7 @@ void main() {
       await expectLater(
         inspector.read_symbolic_link(path),
         throwsA(
-          _symbolic_link_error(
-            TargetInspectionErrorCode.notSymbolicLink,
-            path,
-          ),
+          _symbolic_link_error(TargetInspectionErrorCode.notSymbolicLink, path),
         ),
       );
     });
@@ -889,10 +750,7 @@ void main() {
       await expectLater(
         inspector.read_symbolic_link(path),
         throwsA(
-          _symbolic_link_error(
-            TargetInspectionErrorCode.notSymbolicLink,
-            path,
-          ),
+          _symbolic_link_error(TargetInspectionErrorCode.notSymbolicLink, path),
         ),
       );
     });
@@ -903,10 +761,7 @@ void main() {
       await expectLater(
         inspector.read_symbolic_link(path),
         throwsA(
-          _symbolic_link_error(
-            TargetInspectionErrorCode.notFound,
-            path,
-          ).having(
+          _symbolic_link_error(TargetInspectionErrorCode.notFound, path).having(
             (error) => error.cause,
             'native cause',
             isA<FileSystemException>(),
@@ -923,10 +778,7 @@ void main() {
         await expectLater(
           inspector.read_symbolic_link(path),
           throwsA(
-            _symbolic_link_error(
-              TargetInspectionErrorCode.invalidPath,
-              path,
-            ),
+            _symbolic_link_error(TargetInspectionErrorCode.invalidPath, path),
           ),
         );
       }
@@ -957,9 +809,7 @@ void main() {
       final link = Link('${fixture.path}/shortcut');
       await link.create(target);
 
-      final path = TargetPath(
-        '${fixture.path}/./shortcut',
-      );
+      final path = TargetPath('${fixture.path}/./shortcut');
 
       final destination = await inspector.read_symbolic_link(path);
 
@@ -1010,10 +860,7 @@ void main() {
       // Require coverage of every feature defined by the
       // target contracts. New features must be classified
       // deliberately rather than silently assumed supported.
-      expect(
-        expected.keys.toSet(),
-        TargetInspectionFeature.values.toSet(),
-      );
+      expect(expected.keys.toSet(), TargetInspectionFeature.values.toSet());
 
       for (final feature in TargetInspectionFeature.values) {
         expect(
@@ -1038,9 +885,7 @@ void main() {
       // A caller must not be able to promote unsupported
       // functionality to supported by changing the result.
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.effectiveAccess,
-        ),
+        capabilities.status_for(TargetInspectionFeature.effectiveAccess),
         TargetCapabilityStatus.unsupported,
       );
     });
@@ -1054,16 +899,12 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.logicalFileSize,
-        ),
+        capabilities.status_for(TargetInspectionFeature.logicalFileSize),
         TargetCapabilityStatus.supported,
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.filesystemIdentity,
-        ),
+        capabilities.status_for(TargetInspectionFeature.filesystemIdentity),
         TargetCapabilityStatus.supported,
       );
     });
@@ -1079,9 +920,7 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.symbolicLinkTarget,
-        ),
+        capabilities.status_for(TargetInspectionFeature.symbolicLinkTarget),
         TargetCapabilityStatus.supported,
       );
 
@@ -1106,9 +945,7 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.symbolicLinkTarget,
-        ),
+        capabilities.status_for(TargetInspectionFeature.symbolicLinkTarget),
         TargetCapabilityStatus.supported,
       );
     });
@@ -1119,10 +956,7 @@ void main() {
       await expectLater(
         inspector.capabilities_for(path),
         throwsA(
-          _capability_error(
-            TargetInspectionErrorCode.notFound,
-            path,
-          ).having(
+          _capability_error(TargetInspectionErrorCode.notFound, path).having(
             (error) => error.cause,
             'native cause',
             isA<FileSystemException>(),
@@ -1139,10 +973,7 @@ void main() {
         await expectLater(
           inspector.capabilities_for(path),
           throwsA(
-            _capability_error(
-              TargetInspectionErrorCode.invalidPath,
-              path,
-            ),
+            _capability_error(TargetInspectionErrorCode.invalidPath, path),
           ),
         );
       }
@@ -1157,10 +988,7 @@ void main() {
       await expectLater(
         inspector.capabilities_for(path),
         throwsA(
-          _capability_error(
-            TargetInspectionErrorCode.notDirectory,
-            path,
-          ),
+          _capability_error(TargetInspectionErrorCode.notDirectory, path),
         ),
       );
     });
@@ -1176,10 +1004,7 @@ void main() {
       await expectLater(
         inspector.capabilities_for(path),
         throwsA(
-          _capability_error(
-            TargetInspectionErrorCode.symbolicLinkLoop,
-            path,
-          ),
+          _capability_error(TargetInspectionErrorCode.symbolicLinkLoop, path),
         ),
       );
     });
@@ -1190,26 +1015,15 @@ void main() {
 ///
 /// The diagnostic message and platform-specific cause are
 /// deliberately excluded from classification assertions.
-Matcher _inspection_error(
-  TargetInspectionErrorCode code,
-  TargetPath path,
-) {
+Matcher _inspection_error(TargetInspectionErrorCode code, TargetPath path) {
   return isA<TargetInspectionException>()
-      .having(
-        (error) => error.code,
-        'error code',
-        code,
-      )
+      .having((error) => error.code, 'error code', code)
       .having(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.inspect,
       )
-      .having(
-        (error) => error.path,
-        'original path',
-        same(path),
-      );
+      .having((error) => error.path, 'original path', same(path));
 }
 
 /// Matches a directory enumeration failure by its public contract.
@@ -1227,26 +1041,15 @@ Matcher _inspection_error(
 ///   TargetPath('/tmp/missing'),
 /// );
 /// ```
-Matcher _directory_error(
-  TargetInspectionErrorCode code,
-  TargetPath path,
-) {
+Matcher _directory_error(TargetInspectionErrorCode code, TargetPath path) {
   return isA<TargetInspectionException>()
-      .having(
-        (error) => error.code,
-        'error code',
-        code,
-      )
+      .having((error) => error.code, 'error code', code)
       .having(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.listDirectory,
       )
-      .having(
-        (error) => error.path,
-        'original path',
-        same(path),
-      );
+      .having((error) => error.path, 'original path', same(path));
 }
 
 /// Matches a symbolic-link reading failure by its public contract.
@@ -1270,21 +1073,13 @@ TypeMatcher<TargetInspectionException> _symbolic_link_error(
   TargetPath path,
 ) {
   return isA<TargetInspectionException>()
-      .having(
-        (error) => error.code,
-        'error code',
-        code,
-      )
+      .having((error) => error.code, 'error code', code)
       .having(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.readSymbolicLink,
       )
-      .having(
-        (error) => error.path,
-        'original path',
-        same(path),
-      );
+      .having((error) => error.path, 'original path', same(path));
 }
 
 /// Matches a capability-discovery failure by its public contract.
@@ -1308,19 +1103,11 @@ TypeMatcher<TargetInspectionException> _capability_error(
   TargetPath path,
 ) {
   return isA<TargetInspectionException>()
-      .having(
-        (error) => error.code,
-        'error code',
-        code,
-      )
+      .having((error) => error.code, 'error code', code)
       .having(
         (error) => error.operation,
         'operation',
         TargetInspectionOperation.capabilitiesFor,
       )
-      .having(
-        (error) => error.path,
-        'original path',
-        same(path),
-      );
+      .having((error) => error.path, 'original path', same(path));
 }

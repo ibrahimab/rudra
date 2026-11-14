@@ -61,9 +61,8 @@ final class WorkflowStateMachine {
   /// If [flow] is omitted, the standard Rudra lifecycle is used.
   ///
   /// Construction performs no I/O or workflow processing.
-  WorkflowStateMachine({
-    WorkflowFlow? flow,
-  }) : flow = flow ?? WorkflowFlow.standard();
+  WorkflowStateMachine({WorkflowFlow? flow})
+    : flow = flow ?? WorkflowFlow.standard();
 
   /// Transition graph used by this state-machine instance.
   ///
@@ -142,7 +141,8 @@ final class WorkflowStateMachine {
         code: WorkflowTransitionErrorCode.invalid_transition,
         state: state,
         event: event,
-        message: 'No transition is registered for this '
+        message:
+            'No transition is registered for this '
             'state and event combination.',
       );
     }
@@ -151,11 +151,7 @@ final class WorkflowStateMachine {
 
     // The rule performs domain validation and constructs the
     // proposed immutable next state.
-    final next_state = rule.execute(
-      state,
-      event,
-      next_version,
-    );
+    final next_state = rule.execute(state, event, next_version);
 
     // Even a incorrectly implemented rule must not produce a
     // different lifecycle state than its registration declares.
@@ -164,7 +160,8 @@ final class WorkflowStateMachine {
         code: WorkflowTransitionErrorCode.result_state_mismatch,
         state: state,
         event: event,
-        message: 'The transition produced a state type '
+        message:
+            'The transition produced a state type '
             'different from its declared destination.',
       );
     }
@@ -176,7 +173,8 @@ final class WorkflowStateMachine {
         code: WorkflowTransitionErrorCode.result_version_mismatch,
         state: state,
         event: event,
-        message: 'The transition did not advance the '
+        message:
+            'The transition did not advance the '
             'workflow version by exactly one.',
       );
     }
@@ -217,15 +215,9 @@ final class WorkflowStateMachine {
 
     for (final event in events) {
       try {
-        state = transition(
-          state: state,
-          event: event,
-        );
+        state = transition(state: state, event: event);
       } on WorkflowTransitionException catch (error) {
-        throw WorkflowReplayException(
-          event_index: event_index,
-          cause: error,
-        );
+        throw WorkflowReplayException(event_index: event_index, cause: error);
       }
 
       event_index++;

@@ -39,16 +39,14 @@ final class ExplorerModel {
     required this.root_directory,
     required this.listing,
     List<TargetPath> history = const [],
-  })  : history = List<TargetPath>.unmodifiable(history),
-        entries = List<FilesystemEntry>.unmodifiable(
-          _sorted_entries(listing.entries),
-        ),
-        selected_index = listing.entries.isEmpty ? null : 0,
-        is_closed = false {
+  }) : history = List<TargetPath>.unmodifiable(history),
+       entries = List<FilesystemEntry>.unmodifiable(
+         _sorted_entries(listing.entries),
+       ),
+       selected_index = listing.entries.isEmpty ? null : 0,
+       is_closed = false {
     if (history.isEmpty && listing.directory.value != root_directory.value) {
-      throw ArgumentError(
-        'An explorer without history must display its root.',
-      );
+      throw ArgumentError('An explorer without history must display its root.');
     }
 
     if (history.isNotEmpty && history.first.value != root_directory.value) {
@@ -155,9 +153,7 @@ final class ExplorerModel {
   ///
   /// Sorting is a presentation concern. It does not establish
   /// filesystem identity, containment, or cleanup authorization.
-  static List<FilesystemEntry> _sorted_entries(
-    List<FilesystemEntry> source,
-  ) {
+  static List<FilesystemEntry> _sorted_entries(List<FilesystemEntry> source) {
     final sorted = List<FilesystemEntry>.of(source);
 
     sorted.sort((left, right) {
@@ -171,8 +167,9 @@ final class ExplorerModel {
       final left_path = left.path.value;
       final right_path = right.path.value;
 
-      final comparison =
-          left_path.toLowerCase().compareTo(right_path.toLowerCase());
+      final comparison = left_path.toLowerCase().compareTo(
+        right_path.toLowerCase(),
+      );
 
       return comparison != 0 ? comparison : left_path.compareTo(right_path);
     });

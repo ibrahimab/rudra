@@ -42,10 +42,7 @@ void main() {
     test('returns ordinary text unchanged', () {
       const encoder = AnsiText();
 
-      final result = encoder.format(
-        'README.md',
-        style: const TerminalStyle(),
-      );
+      final result = encoder.format('README.md', style: const TerminalStyle());
 
       expect(result, 'README.md');
     });
@@ -82,10 +79,7 @@ void main() {
 
       final result = encoder.format(
         '',
-        style: const TerminalStyle(
-          foreground: TerminalColor.red,
-          bold: true,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.red, bold: true),
       );
 
       expect(result, isEmpty);
@@ -96,9 +90,7 @@ void main() {
 
       final result = encoder.format(
         'café 文件 🙂',
-        style: const TerminalStyle(
-          foreground: TerminalColor.cyan,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.cyan),
       );
 
       expect(result, 'café 文件 🙂');
@@ -121,15 +113,10 @@ void main() {
 
         final result = encoder.format(
           'example',
-          style: TerminalStyle(
-            foreground: entry.key,
-          ),
+          style: TerminalStyle(foreground: entry.key),
         );
 
-        expect(
-          result,
-          '\x1B[${entry.value}mexample\x1B[0m',
-        );
+        expect(result, '\x1B[${entry.value}mexample\x1B[0m');
       });
     }
 
@@ -138,9 +125,7 @@ void main() {
 
       final result = encoder.format(
         'example',
-        style: const TerminalStyle(
-          bold: true,
-        ),
+        style: const TerminalStyle(bold: true),
       );
 
       expect(result, '\x1B[1mexample\x1B[0m');
@@ -153,9 +138,7 @@ void main() {
 
       final result = encoder.format(
         'Important',
-        style: const TerminalStyle(
-          bold: true,
-        ),
+        style: const TerminalStyle(bold: true),
       );
 
       expect(result, '\x1B[1mImportant\x1B[0m');
@@ -166,9 +149,7 @@ void main() {
 
       final result = encoder.format(
         'Selected',
-        style: const TerminalStyle(
-          reverse: true,
-        ),
+        style: const TerminalStyle(reverse: true),
       );
 
       expect(result, '\x1B[7mSelected\x1B[0m');
@@ -179,10 +160,7 @@ void main() {
 
       final result = encoder.format(
         'Selected',
-        style: const TerminalStyle(
-          bold: true,
-          reverse: true,
-        ),
+        style: const TerminalStyle(bold: true, reverse: true),
       );
 
       expect(result, '\x1B[1;7mSelected\x1B[0m');
@@ -202,10 +180,7 @@ void main() {
 
       // Attribute ordering is deterministic:
       // bold, reverse video, foreground color.
-      expect(
-        result,
-        '\x1B[1;7;36mHighlighted\x1B[0m',
-      );
+      expect(result, '\x1B[1;7;36mHighlighted\x1B[0m');
     });
   });
 
@@ -215,9 +190,7 @@ void main() {
 
       final result = encoder.format(
         'Error',
-        style: const TerminalStyle(
-          foreground: TerminalColor.red,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.red),
       );
 
       expect(result.startsWith('\x1B[31m'), isTrue);
@@ -229,23 +202,14 @@ void main() {
 
       final first = encoder.format(
         'Directory',
-        style: const TerminalStyle(
-          foreground: TerminalColor.blue,
-          bold: true,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.blue, bold: true),
       );
 
-      final second = encoder.format(
-        'File',
-        style: const TerminalStyle(),
-      );
+      final second = encoder.format('File', style: const TerminalStyle());
 
       final combined = '$first $second';
 
-      expect(
-        combined,
-        '\x1B[1;34mDirectory\x1B[0m File',
-      );
+      expect(combined, '\x1B[1;34mDirectory\x1B[0m File');
 
       expect(second.contains('\x1B'), isFalse);
     });
@@ -255,16 +219,12 @@ void main() {
 
       final warning = encoder.format(
         'Warning',
-        style: const TerminalStyle(
-          foreground: TerminalColor.yellow,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.yellow),
       );
 
       final error = encoder.format(
         'Error',
-        style: const TerminalStyle(
-          foreground: TerminalColor.red,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.red),
       );
 
       expect(
@@ -283,22 +243,14 @@ void main() {
 
       final result = encoder.format(
         malicious,
-        style: const TerminalStyle(
-          foreground: TerminalColor.blue,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.blue),
       );
 
-      expect(
-        result,
-        '\x1B[34mfile?[31m.txt\x1B[0m',
-      );
+      expect(result, '\x1B[34mfile?[31m.txt\x1B[0m');
 
       // Only the renderer-generated escape sequences
       // may appear in the resulting output.
-      expect(
-        RegExp(r'\x1B').allMatches(result).length,
-        2,
-      );
+      expect(RegExp(r'\x1B').allMatches(result).length, 2);
     });
 
     test('neutralizes terminal clearing sequences', () {
@@ -308,15 +260,10 @@ void main() {
 
       final result = encoder.format(
         malicious,
-        style: const TerminalStyle(
-          bold: true,
-        ),
+        style: const TerminalStyle(bold: true),
       );
 
-      expect(
-        result,
-        '\x1B[1mbefore?[2Jafter\x1B[0m',
-      );
+      expect(result, '\x1B[1mbefore?[2Jafter\x1B[0m');
 
       expect(result.contains('\x1B[2J'), isFalse);
     });
@@ -348,15 +295,10 @@ void main() {
 
       final result = encoder.format(
         'safe\u202Emalicious\u202C',
-        style: const TerminalStyle(
-          foreground: TerminalColor.red,
-        ),
+        style: const TerminalStyle(foreground: TerminalColor.red),
       );
 
-      expect(
-        result,
-        '\x1B[31msafe?malicious?\x1B[0m',
-      );
+      expect(result, '\x1B[31msafe?malicious?\x1B[0m');
     });
 
     test('sanitizes text even when styling is disabled', () {
@@ -364,10 +306,7 @@ void main() {
 
       final result = encoder.format(
         'name\x1B[0m.txt',
-        style: const TerminalStyle(
-          bold: true,
-          reverse: true,
-        ),
+        style: const TerminalStyle(bold: true, reverse: true),
       );
 
       expect(result, 'name?[0m.txt');
@@ -379,37 +318,21 @@ void main() {
     test('renders directory styling from the ANSI theme', () {
       const encoder = AnsiText(enabled: true);
 
-      final style = TerminalTheme.ansi.style_for(
-        TerminalRole.directory,
-      );
+      final style = TerminalTheme.ansi.style_for(TerminalRole.directory);
 
-      final result = encoder.format(
-        'Documents/',
-        style: style,
-      );
+      final result = encoder.format('Documents/', style: style);
 
-      expect(
-        result,
-        '\x1B[1;34mDocuments/\x1B[0m',
-      );
+      expect(result, '\x1B[1;34mDocuments/\x1B[0m');
     });
 
     test('renders selected-entry styling', () {
       const encoder = AnsiText(enabled: true);
 
-      final style = TerminalTheme.ansi.style_for(
-        TerminalRole.selected,
-      );
+      final style = TerminalTheme.ansi.style_for(TerminalRole.selected);
 
-      final result = encoder.format(
-        'Selected entry',
-        style: style,
-      );
+      final result = encoder.format('Selected entry', style: style);
 
-      expect(
-        result,
-        '\x1B[1;7mSelected entry\x1B[0m',
-      );
+      expect(result, '\x1B[1;7mSelected entry\x1B[0m');
     });
 
     test('renders warning and error roles differently', () {
@@ -417,16 +340,12 @@ void main() {
 
       final warning = encoder.format(
         'Warning',
-        style: TerminalTheme.ansi.style_for(
-          TerminalRole.warning,
-        ),
+        style: TerminalTheme.ansi.style_for(TerminalRole.warning),
       );
 
       final error = encoder.format(
         'Error',
-        style: TerminalTheme.ansi.style_for(
-          TerminalRole.error,
-        ),
+        style: TerminalTheme.ansi.style_for(TerminalRole.error),
       );
 
       expect(warning, '\x1B[1;33mWarning\x1B[0m');
@@ -437,14 +356,9 @@ void main() {
       const encoder = AnsiText(enabled: true);
 
       for (final role in TerminalRole.values) {
-        final style = TerminalTheme.plain.style_for(
-          role,
-        );
+        final style = TerminalTheme.plain.style_for(role);
 
-        final result = encoder.format(
-          'example',
-          style: style,
-        );
+        final result = encoder.format('example', style: style);
 
         expect(
           result,
@@ -458,14 +372,9 @@ void main() {
       const encoder = AnsiText(enabled: false);
 
       for (final role in TerminalRole.values) {
-        final style = TerminalTheme.ansi.style_for(
-          role,
-        );
+        final style = TerminalTheme.ansi.style_for(role);
 
-        final result = encoder.format(
-          'example',
-          style: style,
-        );
+        final result = encoder.format('example', style: style);
 
         expect(
           result,

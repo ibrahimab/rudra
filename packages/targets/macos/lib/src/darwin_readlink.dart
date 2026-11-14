@@ -61,15 +61,14 @@ final class DarwinReadLink {
   /// Construction performs no filesystem operations.
   DarwinReadLink() {
     if (!Platform.isMacOS) {
-      throw UnsupportedError(
-        'DarwinReadLink requires macOS.',
-      );
+      throw UnsupportedError('DarwinReadLink requires macOS.');
     }
 
     final library = DynamicLibrary.process();
 
-    _native_readlink =
-        library.lookupFunction<_ReadlinkNative, _ReadlinkDart>('readlink');
+    _native_readlink = library.lookupFunction<_ReadlinkNative, _ReadlinkDart>(
+      'readlink',
+    );
 
     _native_errno = library.lookupFunction<_ErrnoNative, _ErrnoDart>('__error');
   }
@@ -122,17 +121,13 @@ final class DarwinReadLink {
       );
     }
 
-    final native_path = path.toNativeUtf8(
-      allocator: calloc,
-    );
+    final native_path = path.toNativeUtf8(allocator: calloc);
 
     try {
       var buffer_capacity = _initial_target_capacity_bytes;
 
       while (true) {
-        final native_buffer = calloc<Uint8>(
-          buffer_capacity,
-        );
+        final native_buffer = calloc<Uint8>(buffer_capacity);
 
         try {
           final bytes_read = _native_readlink(
@@ -202,10 +197,7 @@ final class DarwinReadLink {
             // Do not replace malformed bytes: that could
             // fabricate a destination identifying another
             // filesystem object.
-            return utf8.decode(
-              target_bytes,
-              allowMalformed: false,
-            );
+            return utf8.decode(target_bytes, allowMalformed: false);
           } on FormatException {
             throw FileSystemException(
               'Symbolic-link destination is not valid UTF-8.',
@@ -226,18 +218,10 @@ final class DarwinReadLink {
 ///
 /// ssize_t is represented by IntPtr and size_t by Size,
 /// matching their pointer-width representations.
-typedef _ReadlinkNative = IntPtr Function(
-  Pointer<Utf8>,
-  Pointer<Uint8>,
-  Size,
-);
+typedef _ReadlinkNative = IntPtr Function(Pointer<Utf8>, Pointer<Uint8>, Size);
 
 /// Dart-callable signature of the native readlink function.
-typedef _ReadlinkDart = int Function(
-  Pointer<Utf8>,
-  Pointer<Uint8>,
-  int,
-);
+typedef _ReadlinkDart = int Function(Pointer<Utf8>, Pointer<Uint8>, int);
 
 /// Native signature of Darwin's thread-local errno accessor.
 typedef _ErrnoNative = Pointer<Int32> Function();

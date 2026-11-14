@@ -11,33 +11,27 @@ void main() {
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.symbolicLinkTarget,
-        ),
+        capabilities.status_for(TargetInspectionFeature.symbolicLinkTarget),
         TargetCapabilityStatus.supported,
       );
     });
 
     test('returns a typed filesystem entry', () async {
-      final entry = await inspector.inspect(
-        TargetPath('/fixture/link'),
-      );
+      final entry = await inspector.inspect(TargetPath('/fixture/link'));
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
       expect(entry.path.value, '/fixture/link');
     });
 
     test('streams immediate child paths', () async {
-      final paths =
-          await inspector.list_directory(TargetPath('/fixture')).toList();
+      final paths = await inspector
+          .list_directory(TargetPath('/fixture'))
+          .toList();
 
-      expect(
-        paths.map((path) => path.value).toList(),
-        [
-          '/fixture/file.bin',
-          '/fixture/link',
-        ],
-      );
+      expect(paths.map((path) => path.value).toList(), [
+        '/fixture/file.bin',
+        '/fixture/link',
+      ]);
     });
 
     test('returns an unresolved relative link target', () async {
@@ -49,9 +43,7 @@ void main() {
     });
 
     test('reports enumeration failures as stream errors', () async {
-      final stream = inspector.list_directory(
-        TargetPath('/fixture/file.bin'),
-      );
+      final stream = inspector.list_directory(TargetPath('/fixture/file.bin'));
 
       await expectLater(
         stream,
@@ -99,9 +91,7 @@ void main() {
 final class _FixtureTargetInspector implements TargetInspector {
   /// Reports the capabilities available in the fixture.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
     if (path.value != '/fixture') {
       throw TargetInspectionException(
         code: TargetInspectionErrorCode.notFound,
@@ -147,9 +137,7 @@ final class _FixtureTargetInspector implements TargetInspector {
 
   /// Streams the predefined children of the fixture directory.
   @override
-  Stream<TargetPath> list_directory(
-    TargetPath path,
-  ) async* {
+  Stream<TargetPath> list_directory(TargetPath path) async* {
     if (path.value != '/fixture') {
       throw TargetInspectionException(
         code: TargetInspectionErrorCode.notDirectory,
@@ -165,9 +153,7 @@ final class _FixtureTargetInspector implements TargetInspector {
 
   /// Returns the fixture symbolic link's raw stored destination.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
     if (path.value != '/fixture/link') {
       throw TargetInspectionException(
         code: TargetInspectionErrorCode.notSymbolicLink,

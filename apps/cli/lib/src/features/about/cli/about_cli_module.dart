@@ -44,9 +44,9 @@ final class AboutCliModule implements RudraCliModule {
     required String product_name,
     required Renderer<AboutViewModel> renderer,
     AboutPresenter presenter = const AboutPresenter(),
-  })  : _product_name = product_name,
-        _renderer = renderer,
-        _presenter = presenter;
+  }) : _product_name = product_name,
+       _renderer = renderer,
+       _presenter = presenter;
 
   /// Application identity shared by registered commands.
   final String _product_name;

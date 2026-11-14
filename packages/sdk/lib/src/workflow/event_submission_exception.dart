@@ -26,10 +26,7 @@ enum EventSubmissionErrorCode {
 /// ```
 final class EventSubmissionException implements Exception {
   /// Creates a typed submission failure.
-  const EventSubmissionException({
-    required this.code,
-    required this.message,
-  });
+  const EventSubmissionException({required this.code, required this.message});
 
   /// Stable failure classification.
   final EventSubmissionErrorCode code;

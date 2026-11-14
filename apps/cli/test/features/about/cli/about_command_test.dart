@@ -56,10 +56,7 @@ void main() {
     test('passes one prepared view model to its renderer', () {
       final renderer = _RecordingAboutRenderer();
 
-      final command = AboutCommand(
-        product_name: 'Rudra',
-        renderer: renderer,
-      );
+      final command = AboutCommand(product_name: 'Rudra', renderer: renderer);
 
       expect(renderer.models, isEmpty);
 
@@ -83,10 +80,7 @@ void main() {
         renderer: _FailingAboutRenderer(),
       );
 
-      expect(
-        () => command.run(),
-        throwsStateError,
-      );
+      expect(() => command.run(), throwsStateError);
     });
   });
 }

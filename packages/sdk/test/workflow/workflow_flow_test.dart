@@ -15,21 +15,13 @@ void main() {
       expect(flow.transitions, hasLength(3));
 
       final cases = <(Type, Type, Type)>[
-        (
-          WorkflowInitialState,
-          WorkflowStartEvent,
-          WorkflowStartRequestedState,
-        ),
+        (WorkflowInitialState, WorkflowStartEvent, WorkflowStartRequestedState),
         (
           WorkflowStartRequestedState,
           WorkflowStartedEvent,
           WorkflowActiveState,
         ),
-        (
-          WorkflowActiveState,
-          WorkflowEndedEvent,
-          WorkflowEndedState,
-        ),
+        (WorkflowActiveState, WorkflowEndedEvent, WorkflowEndedState),
       ];
 
       for (final (from_state, event_type, to_state) in cases) {
@@ -45,26 +37,34 @@ void main() {
     });
 
     test('rejects duplicate state and event registrations', () {
-      final first = WorkflowTransition<WorkflowInitialState, WorkflowStartEvent,
-          WorkflowStartRequestedState>(
-        apply: (state, event, version) {
-          return WorkflowStartRequestedState(
-            target_id: event.target_id,
-            root: event.root,
-            version: version,
+      final first =
+          WorkflowTransition<
+            WorkflowInitialState,
+            WorkflowStartEvent,
+            WorkflowStartRequestedState
+          >(
+            apply: (state, event, version) {
+              return WorkflowStartRequestedState(
+                target_id: event.target_id,
+                root: event.root,
+                version: version,
+              );
+            },
           );
-        },
-      );
 
-      final second = WorkflowTransition<WorkflowInitialState,
-          WorkflowStartEvent, WorkflowActiveState>(
-        apply: (state, event, version) {
-          return WorkflowActiveState(
-            identity: _identity(),
-            version: version,
+      final second =
+          WorkflowTransition<
+            WorkflowInitialState,
+            WorkflowStartEvent,
+            WorkflowActiveState
+          >(
+            apply: (state, event, version) {
+              return WorkflowActiveState(
+                identity: _identity(),
+                version: version,
+              );
+            },
           );
-        },
-      );
 
       expect(
         () => WorkflowFlow(transitions: [first, second]),
@@ -94,18 +94,13 @@ void main() {
         ...WorkflowFlow.standard().transitions,
       ];
 
-      final flow = WorkflowFlow(
-        transitions: original,
-      );
+      final flow = WorkflowFlow(transitions: original);
 
       original.clear();
 
       expect(flow.transitions, hasLength(3));
 
-      expect(
-        () => flow.transitions.clear(),
-        throwsUnsupportedError,
-      );
+      expect(() => flow.transitions.clear(), throwsUnsupportedError);
 
       expect(
         flow.transition_for(
@@ -129,13 +124,9 @@ void main() {
         WorkflowEndedEvent(workflow_id: 'workflow-1'),
       ];
 
-      final first = WorkflowStateMachine(
-        flow: standard,
-      ).replay(events);
+      final first = WorkflowStateMachine(flow: standard).replay(events);
 
-      final second = WorkflowStateMachine(
-        flow: reversed,
-      ).replay(events);
+      final second = WorkflowStateMachine(flow: reversed).replay(events);
 
       expect(first, isA<WorkflowEndedState>());
       expect(second, isA<WorkflowEndedState>());
@@ -154,10 +145,7 @@ void main() {
 
       // The identifier is deliberately equal to a registered
       // event's identifier, but the concrete Dart type differs.
-      expect(
-        spoofed_event.event_type,
-        WorkflowStartEvent.type_id,
-      );
+      expect(spoofed_event.event_type, WorkflowStartEvent.type_id);
 
       expect(
         () => machine.transition(
@@ -178,8 +166,11 @@ void main() {
       final extended_flow = WorkflowFlow(
         transitions: [
           ...WorkflowFlow.standard().transitions,
-          WorkflowTransition<WorkflowActiveState, _ReviewRequestedEvent,
-              _ReviewState>(
+          WorkflowTransition<
+            WorkflowActiveState,
+            _ReviewRequestedEvent,
+            _ReviewState
+          >(
             apply: (state, event, next_version) {
               return _ReviewState(
                 identity: state.identity,
@@ -190,9 +181,7 @@ void main() {
         ],
       );
 
-      final machine = WorkflowStateMachine(
-        flow: extended_flow,
-      );
+      final machine = WorkflowStateMachine(flow: extended_flow);
 
       final result = machine.replay([
         _start_event(),
@@ -209,25 +198,26 @@ void main() {
       expect(review_state.identity.os_user_id, 'user-1');
       expect(review_state.identity.root.value, '/tmp');
 
-      expect(
-        extended_flow.supports_event_type(_ReviewRequestedEvent),
-        isTrue,
-      );
+      expect(extended_flow.supports_event_type(_ReviewRequestedEvent), isTrue);
     });
 
     test('rejects a rule returning an undeclared state type', () {
-      final rule = WorkflowTransition<WorkflowInitialState, WorkflowStartEvent,
-          WorkflowState>(
-        apply: (state, event, next_version) {
-          // Deliberately declares WorkflowState as its destination
-          // while returning a different concrete state type.
-          return WorkflowStartRequestedState(
-            target_id: event.target_id,
-            root: event.root,
-            version: next_version,
+      final rule =
+          WorkflowTransition<
+            WorkflowInitialState,
+            WorkflowStartEvent,
+            WorkflowState
+          >(
+            apply: (state, event, next_version) {
+              // Deliberately declares WorkflowState as its destination
+              // while returning a different concrete state type.
+              return WorkflowStartRequestedState(
+                target_id: event.target_id,
+                root: event.root,
+                version: next_version,
+              );
+            },
           );
-        },
-      );
 
       final machine = WorkflowStateMachine(
         flow: WorkflowFlow(transitions: [rule]),
@@ -249,16 +239,20 @@ void main() {
     });
 
     test('rejects a rule producing the wrong version', () {
-      final rule = WorkflowTransition<WorkflowInitialState, WorkflowStartEvent,
-          WorkflowStartRequestedState>(
-        apply: (state, event, next_version) {
-          return WorkflowStartRequestedState(
-            target_id: event.target_id,
-            root: event.root,
-            version: next_version + 1,
+      final rule =
+          WorkflowTransition<
+            WorkflowInitialState,
+            WorkflowStartEvent,
+            WorkflowStartRequestedState
+          >(
+            apply: (state, event, next_version) {
+              return WorkflowStartRequestedState(
+                target_id: event.target_id,
+                root: event.root,
+                version: next_version + 1,
+              );
+            },
           );
-        },
-      );
 
       final machine = WorkflowStateMachine(
         flow: WorkflowFlow(transitions: [rule]),
@@ -280,33 +274,31 @@ void main() {
     });
 
     test('does not reopen terminal states with a custom rule', () {
-      final rule = WorkflowTransition<WorkflowEndedState, WorkflowStartEvent,
-          WorkflowStartRequestedState>(
-        apply: (state, event, next_version) {
-          return WorkflowStartRequestedState(
-            target_id: event.target_id,
-            root: event.root,
-            version: next_version,
+      final rule =
+          WorkflowTransition<
+            WorkflowEndedState,
+            WorkflowStartEvent,
+            WorkflowStartRequestedState
+          >(
+            apply: (state, event, next_version) {
+              return WorkflowStartRequestedState(
+                target_id: event.target_id,
+                root: event.root,
+                version: next_version,
+              );
+            },
           );
-        },
-      );
 
       final machine = WorkflowStateMachine(
         flow: WorkflowFlow(transitions: [rule]),
       );
 
-      final ended = WorkflowEndedState(
-        identity: _identity(),
-        version: 3,
-      );
+      final ended = WorkflowEndedState(identity: _identity(), version: 3);
 
       expect(ended.is_terminal, isTrue);
 
       expect(
-        () => machine.transition(
-          state: ended,
-          event: _start_event(),
-        ),
+        () => machine.transition(state: ended, event: _start_event()),
         throwsA(
           isA<WorkflowTransitionException>().having(
             (error) => error.code,
@@ -320,16 +312,20 @@ void main() {
     });
 
     test('wraps malformed transition results during replay', () {
-      final rule = WorkflowTransition<WorkflowInitialState, WorkflowStartEvent,
-          WorkflowStartRequestedState>(
-        apply: (state, event, next_version) {
-          return WorkflowStartRequestedState(
-            target_id: event.target_id,
-            root: event.root,
-            version: next_version + 1,
+      final rule =
+          WorkflowTransition<
+            WorkflowInitialState,
+            WorkflowStartEvent,
+            WorkflowStartRequestedState
+          >(
+            apply: (state, event, next_version) {
+              return WorkflowStartRequestedState(
+                target_id: event.target_id,
+                root: event.root,
+                version: next_version + 1,
+              );
+            },
           );
-        },
-      );
 
       final machine = WorkflowStateMachine(
         flow: WorkflowFlow(transitions: [rule]),
@@ -339,11 +335,7 @@ void main() {
         () => machine.replay([_start_event()]),
         throwsA(
           isA<WorkflowReplayException>()
-              .having(
-                (error) => error.event_index,
-                'event_index',
-                0,
-              )
+              .having((error) => error.event_index, 'event_index', 0)
               .having(
                 (error) => error.cause.code,
                 'cause.code',
@@ -357,10 +349,7 @@ void main() {
 
 /// Creates the standard workflow-start test event.
 WorkflowStartEvent _start_event() {
-  return WorkflowStartEvent(
-    target_id: 'local-macos',
-    root: TargetPath('/tmp'),
-  );
+  return WorkflowStartEvent(target_id: 'local-macos', root: TargetPath('/tmp'));
 }
 
 /// Creates authoritative workflow identity for tests.
@@ -382,10 +371,8 @@ final class _ReviewRequestedEvent implements WorkflowEvent {
 /// An illustrative state added without changing the engine.
 final class _ReviewState extends WorkflowState {
   /// Creates an immutable additional lifecycle state.
-  _ReviewState({
-    required this.identity,
-    required int version,
-  }) : version = WorkflowState.require_positive_version(version);
+  _ReviewState({required this.identity, required int version})
+    : version = WorkflowState.require_positive_version(version);
 
   /// Original established workflow identity.
   final WorkflowIdentity identity;

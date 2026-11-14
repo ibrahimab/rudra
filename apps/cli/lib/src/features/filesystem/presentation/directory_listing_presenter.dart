@@ -78,11 +78,7 @@ final class DirectoryListingPresenter {
 
     if (layout == DirectoryListingLayout.detailed) {
       entries.sort(
-        (left, right) => _compare_entries(
-          left,
-          right,
-          listing.directory,
-        ),
+        (left, right) => _compare_entries(left, right, listing.directory),
       );
     }
 
@@ -96,9 +92,7 @@ final class DirectoryListingPresenter {
           logical_bytes: entry.metadata.logical_size_bytes?.toString() ?? '?',
           size_label: _display_size(entry),
           permissions: _permissions(entry),
-          modified_utc: _modified_at(
-            entry.metadata.modified_at,
-          ),
+          modified_utc: _modified_at(entry.metadata.modified_at),
           role: _entry_role(entry.kind),
         ),
     ];
@@ -149,15 +143,9 @@ final class DirectoryListingPresenter {
       return left_directory ? -1 : 1;
     }
 
-    final left_name = _entry_name(
-      left,
-      directory,
-    ).toLowerCase();
+    final left_name = _entry_name(left, directory).toLowerCase();
 
-    final right_name = _entry_name(
-      right,
-      directory,
-    ).toLowerCase();
+    final right_name = _entry_name(right, directory).toLowerCase();
 
     final comparison = left_name.compareTo(right_name);
 
@@ -176,10 +164,7 @@ final class DirectoryListingPresenter {
   ///
   /// The result is display-only and must never be used
   /// to construct a filesystem operation.
-  static String _entry_name(
-    FilesystemEntry entry,
-    TargetPath directory,
-  ) {
+  static String _entry_name(FilesystemEntry entry, TargetPath directory) {
     final path = entry.path.value;
     final parent = directory.value;
 
@@ -204,10 +189,7 @@ final class DirectoryListingPresenter {
   ///
   /// Directories receive a trailing slash.
   /// Symbolic links are not followed or resolved.
-  static String _display_name(
-    FilesystemEntry entry,
-    TargetPath directory,
-  ) {
+  static String _display_name(FilesystemEntry entry, TargetPath directory) {
     final name = _entry_name(entry, directory);
 
     return entry.kind == FilesystemEntryKind.directory ? '$name/' : name;
@@ -260,14 +242,7 @@ final class DirectoryListingPresenter {
       return '$bytes B';
     }
 
-    const units = [
-      'KiB',
-      'MiB',
-      'GiB',
-      'TiB',
-      'PiB',
-      'EiB',
-    ];
+    const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB'];
 
     var value = bytes.toDouble();
     var unit_index = -1;
@@ -320,9 +295,7 @@ final class DirectoryListingPresenter {
       if (special) {
         final marker = index == 2 ? 't' : 's';
 
-        result.write(
-          executable ? marker : marker.toUpperCase(),
-        );
+        result.write(executable ? marker : marker.toUpperCase());
       } else {
         result.write(executable ? 'x' : '-');
       }

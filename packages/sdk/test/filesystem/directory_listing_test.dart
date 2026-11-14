@@ -51,20 +51,11 @@ void main() {
       expect(listing.entries, hasLength(1));
       expect(listing.entries.single, same(entry));
 
-      expect(
-        listing.entries.single.metadata,
-        same(metadata),
-      );
+      expect(listing.entries.single.metadata, same(metadata));
 
-      expect(
-        listing.entries.single.metadata.logical_size_bytes,
-        1024,
-      );
+      expect(listing.entries.single.metadata.logical_size_bytes, 1024);
 
-      expect(
-        listing.entries.single.metadata.allocated_size_bytes,
-        4096,
-      );
+      expect(listing.entries.single.metadata.allocated_size_bytes, 4096);
     });
 
     test('preserves different filesystem entry kinds', () {
@@ -93,14 +84,11 @@ void main() {
         is_complete: true,
       );
 
-      expect(
-        listing.entries.map((entry) => entry.kind),
-        [
-          FilesystemEntryKind.regularFile,
-          FilesystemEntryKind.directory,
-          FilesystemEntryKind.symbolicLink,
-        ],
-      );
+      expect(listing.entries.map((entry) => entry.kind), [
+        FilesystemEntryKind.regularFile,
+        FilesystemEntryKind.directory,
+        FilesystemEntryKind.symbolicLink,
+      ]);
     });
 
     test('defensively copies filesystem entries', () {
@@ -124,10 +112,7 @@ void main() {
       expect(listing.entries, hasLength(1));
       expect(listing.entries.single, same(entry));
 
-      expect(
-        () => listing.entries.clear(),
-        throwsUnsupportedError,
-      );
+      expect(() => listing.entries.clear(), throwsUnsupportedError);
     });
 
     test('preserves partial results with inspection issues', () {
@@ -193,10 +178,7 @@ void main() {
       expect(listing.issues, hasLength(1));
       expect(listing.issues.single, same(issue));
 
-      expect(
-        () => listing.issues.clear(),
-        throwsUnsupportedError,
-      );
+      expect(() => listing.issues.clear(), throwsUnsupportedError);
     });
 
     test('rejects blank target identifiers', () {
@@ -246,14 +228,10 @@ void main() {
     });
 
     test('preserves Windows-native paths', () {
-      final directory = TargetPath(
-        r'C:\Users\example\Downloads',
-      );
+      final directory = TargetPath(r'C:\Users\example\Downloads');
 
       final entry = FilesystemEntry(
-        path: TargetPath(
-          r'C:\Users\example\Downloads\file.txt',
-        ),
+        path: TargetPath(r'C:\Users\example\Downloads\file.txt'),
         kind: FilesystemEntryKind.regularFile,
         metadata: FilesystemMetadata(),
       );
@@ -267,10 +245,7 @@ void main() {
 
       expect(listing.target_id, 'local-windows');
 
-      expect(
-        listing.directory.value,
-        r'C:\Users\example\Downloads',
-      );
+      expect(listing.directory.value, r'C:\Users\example\Downloads');
 
       expect(
         listing.entries.single.path.value,

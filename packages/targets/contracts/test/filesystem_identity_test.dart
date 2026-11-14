@@ -17,10 +17,7 @@ void main() {
       expect(first, equals(second));
       expect(first.hashCode, second.hashCode);
 
-      final identities = <FilesystemIdentity>{
-        first,
-        second,
-      };
+      final identities = <FilesystemIdentity>{first, second};
 
       expect(identities, hasLength(1));
     });
@@ -55,20 +52,14 @@ void main() {
 
     test('rejects blank filesystem identifiers', () {
       expect(
-        () => FilesystemIdentity(
-          filesystem_id: '  ',
-          entry_id: '123',
-        ),
+        () => FilesystemIdentity(filesystem_id: '  ', entry_id: '123'),
         throwsArgumentError,
       );
     });
 
     test('rejects blank entry identifiers', () {
       expect(
-        () => FilesystemIdentity(
-          filesystem_id: 'volume-a',
-          entry_id: '',
-        ),
+        () => FilesystemIdentity(filesystem_id: 'volume-a', entry_id: ''),
         throwsArgumentError,
       );
     });

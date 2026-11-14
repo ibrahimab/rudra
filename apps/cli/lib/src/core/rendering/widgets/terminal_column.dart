@@ -27,9 +27,8 @@ import 'terminal_widget.dart';
 /// A violation produces [StateError] during building.
 final class TerminalColumn implements TerminalWidget {
   /// Creates an immutable vertical widget composition.
-  TerminalColumn({
-    required List<TerminalWidget> children,
-  }) : children = List<TerminalWidget>.unmodifiable(children);
+  TerminalColumn({required List<TerminalWidget> children})
+    : children = List<TerminalWidget>.unmodifiable(children);
 
   /// Child widgets in rendering order.
   final List<TerminalWidget> children;
@@ -46,9 +45,7 @@ final class TerminalColumn implements TerminalWidget {
   }
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     for (final child in children) {
       final expected_height = child.height;
 
@@ -62,18 +59,14 @@ final class TerminalColumn implements TerminalWidget {
         actual_height++;
 
         if (actual_height > expected_height) {
-          throw StateError(
-            'A child widget produced more rows than declared.',
-          );
+          throw StateError('A child widget produced more rows than declared.');
         }
 
         yield line;
       }
 
       if (actual_height != expected_height) {
-        throw StateError(
-          'A child widget produced fewer rows than declared.',
-        );
+        throw StateError('A child widget produced fewer rows than declared.');
       }
     }
   }

@@ -19,10 +19,7 @@ void main() {
       final fixture = _Fixture();
       final cli = fixture.create_cli();
 
-      expect(
-        cli.command_names,
-        containsAll(['about', 'ls', 'explore']),
-      );
+      expect(cli.command_names, containsAll(['about', 'ls', 'explore']));
 
       expect(
         cli.module_ids,
@@ -63,10 +60,7 @@ void main() {
         contains('Directory: /fixture'),
       );
 
-      expect(
-        fixture.terminal.output_buffer.toString(),
-        contains('docs/'),
-      );
+      expect(fixture.terminal.output_buffer.toString(), contains('docs/'));
 
       expect(fixture.terminal.entered, isTrue);
       expect(fixture.terminal.restored, isTrue);
@@ -74,11 +68,7 @@ void main() {
     });
 
     test('accepts an explicit starting directory', () async {
-      final fixture = _Fixture(
-        children: {
-          '/another/directory': [],
-        },
-      );
+      final fixture = _Fixture(children: {'/another/directory': []});
 
       final status = await fixture.create_cli().run([
         'explore',
@@ -87,10 +77,7 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        fixture.inspector.listed,
-        ['/another/directory'],
-      );
+      expect(fixture.inspector.listed, ['/another/directory']);
 
       expect(
         fixture.terminal.output_buffer.toString(),
@@ -121,10 +108,7 @@ void main() {
     test('rejects an empty explicit directory', () async {
       final fixture = _Fixture();
 
-      final status = await fixture.create_cli().run([
-        'explore',
-        '',
-      ]);
+      final status = await fixture.create_cli().run(['explore', '']);
 
       expect(status, RudraExitCode.invalid_usage.value);
       expect(fixture.host_creations, 0);
@@ -145,18 +129,11 @@ void main() {
     });
 
     test('rejects noninteractive terminals before inspection', () async {
-      final fixture = _Fixture(
-        interactive: false,
-      );
+      final fixture = _Fixture(interactive: false);
 
-      final status = await fixture.create_cli().run([
-        'explore',
-      ]);
+      final status = await fixture.create_cli().run(['explore']);
 
-      expect(
-        status,
-        RudraExitCode.configuration_error.value,
-      );
+      expect(status, RudraExitCode.configuration_error.value);
 
       expect(fixture.inspector.listed, isEmpty);
       expect(fixture.terminal.entered, isFalse);
@@ -184,27 +161,17 @@ void main() {
         },
       );
 
-      final status = await fixture.create_cli().run([
-        'explore',
-      ]);
+      final status = await fixture.create_cli().run(['explore']);
 
-      expect(
-        status,
-        RudraExitCode.inspection_incomplete.value,
-      );
+      expect(status, RudraExitCode.inspection_incomplete.value);
 
-      expect(
-        fixture.terminal.output_buffer.toString(),
-        contains('WARNING'),
-      );
+      expect(fixture.terminal.output_buffer.toString(), contains('WARNING'));
 
       expect(fixture.terminal.restored, isTrue);
     });
 
     test('propagates unexpected SDK errors before terminal entry', () async {
-      final fixture = _Fixture(
-        unexpected_directory: '/fixture',
-      );
+      final fixture = _Fixture(unexpected_directory: '/fixture');
 
       await expectLater(
         fixture.create_cli().run(['explore']),
@@ -216,21 +183,14 @@ void main() {
     });
 
     test('preserves the existing no-argument welcome workflow', () async {
-      final fixture = _Fixture(
-        children: {
-          '/fixture': [],
-        },
-      );
+      final fixture = _Fixture(children: {'/fixture': []});
 
       final status = await fixture.create_cli().run([]);
 
       expect(status, RudraExitCode.success.value);
       expect(fixture.inspector.listed, ['/fixture']);
 
-      expect(
-        fixture.normal_output.toString(),
-        contains('RUDRA  |  READ ONLY'),
-      );
+      expect(fixture.normal_output.toString(), contains('RUDRA  |  READ ONLY'));
 
       expect(fixture.host_creations, 0);
     });
@@ -252,20 +212,11 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(
-        fixture.normal_output.toString(),
-        contains('TYPE'),
-      );
+      expect(fixture.normal_output.toString(), contains('TYPE'));
 
-      expect(
-        fixture.normal_output.toString(),
-        contains('LOGICAL_BYTES'),
-      );
+      expect(fixture.normal_output.toString(), contains('LOGICAL_BYTES'));
 
-      expect(
-        fixture.normal_output.toString(),
-        contains('/fixture/readme.txt'),
-      );
+      expect(fixture.normal_output.toString(), contains('/fixture/readme.txt'));
 
       expect(fixture.host_creations, 0);
     });
@@ -294,9 +245,7 @@ final class _Fixture {
       unexpected_directory: unexpected_directory,
     );
 
-    terminal = _TestTerminalHost(
-      interactive: interactive,
-    );
+    terminal = _TestTerminalHost(interactive: interactive);
   }
 
   /// In-memory target inspector.
@@ -321,10 +270,7 @@ final class _Fixture {
   RudraCli create_cli() {
     return RudraCli.product(
       target_composition: ProductSdkComposition(
-        sdk: RudraSdk(
-          target_id: 'fixture-target',
-          inspector: inspector,
-        ),
+        sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
         working_directory: TargetPath('/fixture'),
       ),
       output: normal_output,
@@ -348,9 +294,9 @@ final class _TestInspector implements TargetInspector {
     required Map<String, FilesystemEntry> entries,
     required Map<String, TargetInspectionException> failures,
     required this.unexpected_directory,
-  })  : _children = children,
-        _entries = entries,
-        _failures = failures;
+  }) : _children = children,
+       _entries = entries,
+       _failures = failures;
 
   final Map<String, List<String>> _children;
   final Map<String, FilesystemEntry> _entries;
@@ -396,9 +342,7 @@ final class _TestInspector implements TargetInspector {
     final entry = _entries[path.value];
 
     if (entry == null) {
-      throw StateError(
-        'Unexpected inspection: ${path.value}',
-      );
+      throw StateError('Unexpected inspection: ${path.value}');
     }
 
     return entry;
@@ -406,17 +350,13 @@ final class _TestInspector implements TargetInspector {
 
   /// Rejects unnecessary capability discovery.
   @override
-  Future<TargetCapabilities> capabilities_for(
-    TargetPath path,
-  ) async {
+  Future<TargetCapabilities> capabilities_for(TargetPath path) async {
     throw StateError('Unexpected capability request.');
   }
 
   /// Rejects symbolic-link destination resolution.
   @override
-  Future<TargetPath> read_symbolic_link(
-    TargetPath path,
-  ) async {
+  Future<TargetPath> read_symbolic_link(TargetPath path) async {
     link_reads++;
     throw StateError('Unexpected symbolic-link resolution.');
   }
@@ -430,9 +370,7 @@ final class _TestInspector implements TargetInspector {
 /// to terminate through its normal navigation workflow.
 final class _TestTerminalHost implements ExplorerTerminalHost {
   /// Creates a deterministic terminal host.
-  _TestTerminalHost({
-    required this.interactive,
-  });
+  _TestTerminalHost({required this.interactive});
 
   /// Whether interactive operation is supported.
   final bool interactive;
@@ -467,18 +405,14 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
       throw StateError('No active terminal interaction.');
     }
 
-    return Stream<List<int>>.fromIterable(
-      const [
-        [0x71],
-      ],
-    );
+    return Stream<List<int>>.fromIterable(const [
+      [0x71],
+    ]);
   }
 
   /// Runs the interaction and guarantees restoration signaling.
   @override
-  Future<T> run_interactive<T>(
-    Future<T> Function() interaction,
-  ) async {
+  Future<T> run_interactive<T>(Future<T> Function() interaction) async {
     if (!interactive || _active) {
       throw StateError('Terminal interaction unavailable.');
     }
@@ -498,10 +432,7 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
 /// Creates one immutable filesystem observation.
 ///
 /// No native filesystem inspection is performed.
-FilesystemEntry _entry(
-  String path,
-  FilesystemEntryKind kind,
-) {
+FilesystemEntry _entry(String path, FilesystemEntryKind kind) {
   return FilesystemEntry(
     path: TargetPath(path),
     kind: kind,

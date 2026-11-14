@@ -50,9 +50,9 @@ final class AboutCommand extends Command<int> {
     required String product_name,
     required Renderer<AboutViewModel> renderer,
     AboutPresenter presenter = const AboutPresenter(),
-  })  : _product_name = product_name,
-        _renderer = renderer,
-        _presenter = presenter;
+  }) : _product_name = product_name,
+       _renderer = renderer,
+       _presenter = presenter;
 
   /// Product identity supplied by application composition.
   final String _product_name;
@@ -79,9 +79,7 @@ final class AboutCommand extends Command<int> {
   /// No SDK request or filesystem modification occurs.
   @override
   int run() {
-    final view_model = _presenter.present(
-      product_name: _product_name,
-    );
+    final view_model = _presenter.present(product_name: _product_name);
 
     _renderer.render(view_model);
 

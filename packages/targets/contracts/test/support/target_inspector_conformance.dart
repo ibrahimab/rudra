@@ -117,47 +117,34 @@ void run_target_inspector_conformance_tests({
       );
 
       expect(
-        capabilities.status_for(
-          TargetInspectionFeature.symbolicLinkTarget,
-        ),
+        capabilities.status_for(TargetInspectionFeature.symbolicLinkTarget),
         TargetCapabilityStatus.supported,
       );
     });
 
     test('identifies regular files', () async {
-      final entry = await inspector.inspect(
-        fixture.regular_file,
-      );
+      final entry = await inspector.inspect(fixture.regular_file);
 
       expect(entry.kind, FilesystemEntryKind.regularFile);
       expect(entry.path.value, fixture.regular_file.value);
     });
 
     test('identifies directories', () async {
-      final entry = await inspector.inspect(
-        fixture.child_directory,
-      );
+      final entry = await inspector.inspect(fixture.child_directory);
 
       expect(entry.kind, FilesystemEntryKind.directory);
       expect(entry.path.value, fixture.child_directory.value);
     });
 
     test('does not follow directory symbolic links', () async {
-      final entry = await inspector.inspect(
-        fixture.directory_symbolic_link,
-      );
+      final entry = await inspector.inspect(fixture.directory_symbolic_link);
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
-      expect(
-        entry.path.value,
-        fixture.directory_symbolic_link.value,
-      );
+      expect(entry.path.value, fixture.directory_symbolic_link.value);
     });
 
     test('inspects dangling symbolic links', () async {
-      final entry = await inspector.inspect(
-        fixture.dangling_symbolic_link,
-      );
+      final entry = await inspector.inspect(fixture.dangling_symbolic_link);
 
       expect(entry.kind, FilesystemEntryKind.symbolicLink);
     });
@@ -180,23 +167,19 @@ void run_target_inspector_conformance_tests({
     });
 
     test('returns no children for an empty directory', () async {
-      final paths =
-          await inspector.list_directory(fixture.child_directory).toList();
+      final paths = await inspector
+          .list_directory(fixture.child_directory)
+          .toList();
 
       expect(paths, isEmpty);
     });
 
     test('enumeration streams are single-subscription', () async {
-      final stream = inspector.list_directory(
-        fixture.root_directory,
-      );
+      final stream = inspector.list_directory(fixture.root_directory);
 
       await stream.toList();
 
-      expect(
-        () => stream.listen((_) {}),
-        throwsStateError,
-      );
+      expect(() => stream.listen((_) {}), throwsStateError);
     });
 
     test('preserves stored relative symbolic-link targets', () async {
@@ -204,10 +187,7 @@ void run_target_inspector_conformance_tests({
         fixture.directory_symbolic_link,
       );
 
-      expect(
-        destination.value,
-        fixture.directory_link_target.value,
-      );
+      expect(destination.value, fixture.directory_link_target.value);
     });
 
     test('reads dangling symbolic-link targets', () async {
@@ -215,10 +195,7 @@ void run_target_inspector_conformance_tests({
         fixture.dangling_symbolic_link,
       );
 
-      expect(
-        destination.value,
-        fixture.dangling_link_target.value,
-      );
+      expect(destination.value, fixture.dangling_link_target.value);
     });
 
     test('reports missing entries during inspection', () async {

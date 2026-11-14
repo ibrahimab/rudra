@@ -28,27 +28,16 @@ void main() {
 
       expect(screen.height, 4);
 
-      final lines = screen
-          .build(
-            TerminalConstraints(columns: 80),
-          )
-          .toList();
+      final lines = screen.build(TerminalConstraints(columns: 80)).toList();
 
       expect(
         lines.map((line) => line.text),
-        orderedEquals([
-          'RUDRA',
-          'Header',
-          'Content',
-          'Footer',
-        ]),
+        orderedEquals(['RUDRA', 'Header', 'Content', 'Footer']),
       );
     });
 
     test('defensively copies widget children', () {
-      final children = <TerminalWidget>[
-        const TerminalLabel('Original'),
-      ];
+      final children = <TerminalWidget>[const TerminalLabel('Original')];
 
       final column = TerminalColumn(children: children);
 
@@ -68,46 +57,27 @@ void main() {
 
       expect(column.height, 0);
 
-      expect(
-        column.build(TerminalConstraints(columns: 80)),
-        isEmpty,
-      );
+      expect(column.build(TerminalConstraints(columns: 80)), isEmpty);
     });
 
     test('retains semantic styling information', () {
-      final label = TerminalLabel(
-        'RUDRA',
-        role: TerminalRole.title,
-      );
+      final label = TerminalLabel('RUDRA', role: TerminalRole.title);
 
-      final line = label
-          .build(
-            TerminalConstraints(columns: 80),
-          )
-          .single;
+      final line = label.build(TerminalConstraints(columns: 80)).single;
 
       expect(line.text, 'RUDRA');
       expect(line.role, TerminalRole.title);
     });
 
     test('rejects negative terminal width', () {
-      expect(
-        () => TerminalConstraints(columns: -1),
-        throwsRangeError,
-      );
+      expect(() => TerminalConstraints(columns: -1), throwsRangeError);
     });
 
     test('rejects children violating their row contracts', () {
-      final column = TerminalColumn(
-        children: [_IncorrectHeightWidget()],
-      );
+      final column = TerminalColumn(children: [_IncorrectHeightWidget()]);
 
       expect(
-        () => column
-            .build(
-              TerminalConstraints(columns: 80),
-            )
-            .toList(),
+        () => column.build(TerminalConstraints(columns: 80)).toList(),
         throwsStateError,
       );
     });
@@ -118,10 +88,7 @@ void main() {
       expect(constraints.is_bounded, isFalse);
       expect(constraints.columns, isNull);
 
-      expect(
-        () => constraints.require_bounded_columns(),
-        throwsStateError,
-      );
+      expect(() => constraints.require_bounded_columns(), throwsStateError);
     });
 
     test('returns a required bounded width', () {
@@ -159,9 +126,7 @@ void main() {
       BareWidgetRenderer(
         output: output,
         terminal_columns: () => 80,
-      ).render(
-        const TerminalLabel('Unsafe\x1B[2J'),
-      );
+      ).render(const TerminalLabel('Unsafe\x1B[2J'));
 
       expect(output.toString(), 'Unsafe?[2J\n');
       expect(output.toString(), isNot(contains('\x1B')));
@@ -199,12 +164,7 @@ void main() {
         redraw_screen: true,
       );
 
-      renderer.render(
-        const TerminalLabel(
-          'RUDRA',
-          role: TerminalRole.title,
-        ),
-      );
+      renderer.render(const TerminalLabel('RUDRA', role: TerminalRole.title));
 
       expect(output.toString(), startsWith('\x1B[H\x1B[2J'));
       expect(output.toString(), contains('RUDRA'));
@@ -232,10 +192,7 @@ void main() {
       expect(
         () => renderer.render(
           TerminalColumn(
-            children: [
-              const TerminalLabel('Valid'),
-              _IncorrectHeightWidget(),
-            ],
+            children: [const TerminalLabel('Valid'), _IncorrectHeightWidget()],
           ),
         ),
         throwsStateError,
@@ -248,13 +205,9 @@ void main() {
       final output = StringBuffer();
       final long_text = List<String>.filled(240, 'x').join();
 
-      final renderer = BareWidgetRenderer(
-        output: output,
-      );
+      final renderer = BareWidgetRenderer(output: output);
 
-      renderer.render(
-        TerminalLabel(long_text),
-      );
+      renderer.render(TerminalLabel(long_text));
 
       expect(output.toString(), '$long_text\n');
     });
@@ -263,16 +216,10 @@ void main() {
       final output = StringBuffer();
       final long_text = List<String>.filled(160, 'x').join();
 
-      BareWidgetRenderer(
-        output: output,
-      ).render(
-        TerminalLabel('$long_text\x1B[2J'),
-      );
+      BareWidgetRenderer(output: output)
+          .render(TerminalLabel('$long_text\x1B[2J'));
 
-      expect(
-        output.toString(),
-        '$long_text?[2J\n',
-      );
+      expect(output.toString(), '$long_text?[2J\n');
 
       expect(output.toString(), isNot(contains('\x1B')));
     });
@@ -285,9 +232,7 @@ final class _IncorrectHeightWidget implements TerminalWidget {
   int get height => 2;
 
   @override
-  Iterable<TerminalLine> build(
-    TerminalConstraints constraints,
-  ) sync* {
+  Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine('Only one row');
   }
 }

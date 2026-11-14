@@ -146,7 +146,5 @@ abstract interface class ExplorerTerminalHost {
   ///
   /// No filesystem inspection or cleanup is performed by
   /// this lifecycle operation itself.
-  Future<T> run_interactive<T>(
-    Future<T> Function() interaction,
-  );
+  Future<T> run_interactive<T>(Future<T> Function() interaction);
 }

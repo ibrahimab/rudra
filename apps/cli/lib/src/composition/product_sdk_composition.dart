@@ -99,17 +99,12 @@ final class ProductSdkComposition {
     // platform adapters. The SDK receives the shared contract.
     final TargetInspector inspector = MacOsTargetInspector();
 
-    final sdk = RudraSdk(
-      target_id: 'local-macos',
-      inspector: inspector,
-    );
+    final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
 
     // The production adapter inspects the local filesystem,
     // so the process working directory is a valid target-local
     // starting point for the CLI.
-    final working_directory = TargetPath(
-      Directory.current.absolute.path,
-    );
+    final working_directory = TargetPath(Directory.current.absolute.path);
 
     return ProductSdkComposition(
       sdk: sdk,

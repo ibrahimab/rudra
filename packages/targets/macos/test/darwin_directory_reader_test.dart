@@ -1,5 +1,4 @@
 @TestOn('mac-os')
-
 import 'dart:io';
 
 import 'package:test/test.dart';
@@ -55,14 +54,7 @@ void main() {
         cursor.close();
       }
 
-      expect(
-        names,
-        unorderedEquals([
-          'example.txt',
-          'child',
-          'shortcut',
-        ]),
-      );
+      expect(names, unorderedEquals(['example.txt', 'child', 'shortcut']));
 
       expect(names, isNot(contains('nested.txt')));
       expect(cursor.is_closed, isTrue);
@@ -88,20 +80,14 @@ void main() {
       final link = Link('${fixture.path}/link');
       await link.create('target');
 
-      expect(
-        () => reader.open(link.path),
-        throwsA(isA<FileSystemException>()),
-      );
+      expect(() => reader.open(link.path), throwsA(isA<FileSystemException>()));
     });
 
     test('rejects a regular file as a directory', () async {
       final file = File('${fixture.path}/regular.txt');
       await file.writeAsString('Not a directory');
 
-      expect(
-        () => reader.open(file.path),
-        throwsA(isA<FileSystemException>()),
-      );
+      expect(() => reader.open(file.path), throwsA(isA<FileSystemException>()));
     });
 
     test('preserves native errors for missing directories', () {
@@ -120,17 +106,11 @@ void main() {
     });
 
     test('rejects relative paths', () {
-      expect(
-        () => reader.open('relative/directory'),
-        throwsArgumentError,
-      );
+      expect(() => reader.open('relative/directory'), throwsArgumentError);
     });
 
     test('rejects trailing directory separators', () {
-      expect(
-        () => reader.open('${fixture.path}/'),
-        throwsArgumentError,
-      );
+      expect(() => reader.open('${fixture.path}/'), throwsArgumentError);
     });
 
     test('closes safely and rejects further reads', () {
@@ -141,10 +121,7 @@ void main() {
 
       expect(cursor.is_closed, isTrue);
 
-      expect(
-        () => cursor.next_name(),
-        throwsStateError,
-      );
+      expect(() => cursor.next_name(), throwsStateError);
     });
 
     test('keeps reading an opened directory after rename', () async {

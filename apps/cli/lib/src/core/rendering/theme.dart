@@ -169,10 +169,8 @@ final class TerminalTheme {
   TerminalTheme({
     required String name,
     Map<TerminalRole, TerminalStyle> styles = const {},
-  })  : name = _require_name(name),
-        _styles = Map<TerminalRole, TerminalStyle>.unmodifiable(
-          styles,
-        );
+  }) : name = _require_name(name),
+       _styles = Map<TerminalRole, TerminalStyle>.unmodifiable(styles);
 
   /// Identifier of this theme.
   final String name;
@@ -199,9 +197,7 @@ final class TerminalTheme {
   ///
   /// Selection remains identifiable through textual markers
   /// supplied by the rendering implementation.
-  static final TerminalTheme plain = TerminalTheme(
-    name: 'plain',
-  );
+  static final TerminalTheme plain = TerminalTheme(name: 'plain');
 
   /// Default colored theme for ANSI-capable terminals.
   ///
@@ -223,9 +219,7 @@ final class TerminalTheme {
         foreground: TerminalColor.cyan,
         bold: true,
       ),
-      TerminalRole.path: const TerminalStyle(
-        foreground: TerminalColor.cyan,
-      ),
+      TerminalRole.path: const TerminalStyle(foreground: TerminalColor.cyan),
       TerminalRole.directory: const TerminalStyle(
         foreground: TerminalColor.blue,
         bold: true,
@@ -237,10 +231,7 @@ final class TerminalTheme {
       TerminalRole.other_entry: const TerminalStyle(
         foreground: TerminalColor.gray,
       ),
-      TerminalRole.selected: const TerminalStyle(
-        bold: true,
-        reverse: true,
-      ),
+      TerminalRole.selected: const TerminalStyle(bold: true, reverse: true),
       TerminalRole.warning: const TerminalStyle(
         foreground: TerminalColor.yellow,
         bold: true,
@@ -249,9 +240,7 @@ final class TerminalTheme {
         foreground: TerminalColor.red,
         bold: true,
       ),
-      TerminalRole.muted: const TerminalStyle(
-        foreground: TerminalColor.gray,
-      ),
+      TerminalRole.muted: const TerminalStyle(foreground: TerminalColor.gray),
     },
   );
 
@@ -260,11 +249,7 @@ final class TerminalTheme {
   /// The supplied spelling is preserved.
   static String _require_name(String name) {
     if (name.trim().isEmpty) {
-      throw ArgumentError.value(
-        name,
-        'name',
-        'Theme name must not be blank.',
-      );
+      throw ArgumentError.value(name, 'name', 'Theme name must not be blank.');
     }
 
     return name;

@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:rudra_cli/rudra_cli.dart';
 
 /// Identifies a package belonging to the Rudra Dart workspace.
@@ -10,10 +11,7 @@ import 'package:rudra_cli/rudra_cli.dart';
 /// that a package supports a particular target or has runnable tests.
 final class WorkspacePackage {
   /// Creates an immutable workspace package description.
-  const WorkspacePackage({
-    required this.name,
-    required this.path,
-  });
+  const WorkspacePackage({required this.name, required this.path});
 
   /// Package name declared by its pubspec.
   final String name;
@@ -47,9 +45,7 @@ List<WorkspacePackage> parse_workspace_packages(String output) {
   final lines = output.split(RegExp(r'\r?\n'));
 
   if (!RegExp(r'^Package\s+Path$').hasMatch(lines.first.trim())) {
-    throw const FormatException(
-      'Unexpected workspace listing header.',
-    );
+    throw const FormatException('Unexpected workspace listing header.');
   }
 
   final packages = <WorkspacePackage>[];
@@ -61,28 +57,19 @@ List<WorkspacePackage> parse_workspace_packages(String output) {
 
     // Package names contain no whitespace, and the CLI separates
     // table columns with at least two whitespace characters.
-    final match = RegExp(
-      r'^\s*(\S+)\s{2,}(.+?)\s*$',
-    ).firstMatch(line);
+    final match = RegExp(r'^\s*(\S+)\s{2,}(.+?)\s*$').firstMatch(line);
 
     if (match == null) {
-      throw FormatException(
-        'Invalid workspace package entry: $line',
-      );
+      throw FormatException('Invalid workspace package entry: $line');
     }
 
     packages.add(
-      WorkspacePackage(
-        name: match.group(1)!,
-        path: match.group(2)!.trim(),
-      ),
+      WorkspacePackage(name: match.group(1)!, path: match.group(2)!.trim()),
     );
   }
 
   if (packages.isEmpty) {
-    throw const FormatException(
-      'No workspace packages discovered.',
-    );
+    throw const FormatException('No workspace packages discovered.');
   }
 
   return List<WorkspacePackage>.unmodifiable(packages);
@@ -198,12 +185,7 @@ final class DevTasks {
     }
 
     final stages = <List<String>>[
-      [
-        'format',
-        '--output=none',
-        '--set-exit-if-changed',
-        target_path,
-      ],
+      ['format', '--output=none', '--set-exit-if-changed', target_path],
       ['analyze', target_path],
     ];
 
@@ -286,18 +268,12 @@ final class DevTasks {
     var skipped = 0;
 
     for (final package in selected_packages) {
-      final package_directory = Directory(
-        '${repo_root.path}/${package.path}',
-      );
+      final package_directory = Directory('${repo_root.path}/${package.path}');
 
-      final test_directory = Directory(
-        '${package_directory.path}/test',
-      );
+      final test_directory = Directory('${package_directory.path}/test');
 
       if (!test_directory.existsSync()) {
-        stdout.writeln(
-          'SKIP ${package.name} (no test directory)',
-        );
+        stdout.writeln('SKIP ${package.name} (no test directory)');
         skipped++;
         continue;
       }
@@ -310,9 +286,7 @@ final class DevTasks {
           .any((file) => file.path.endsWith('_test.dart'));
 
       if (!has_tests) {
-        stdout.writeln(
-          'SKIP ${package.name} (no test files)',
-        );
+        stdout.writeln('SKIP ${package.name} (no test files)');
         skipped++;
         continue;
       }
@@ -331,9 +305,7 @@ final class DevTasks {
       executed++;
     }
 
-    stdout.writeln(
-      'Test summary: $executed suites passed, $skipped skipped.',
-    );
+    stdout.writeln('Test summary: $executed suites passed, $skipped skipped.');
 
     if (executed == 0) {
       stderr.writeln('No runnable test suites were discovered.');
@@ -375,11 +347,9 @@ final class DevTasks {
     final ProcessResult result;
 
     try {
-      result = await Process.run(
-        binary_path,
-        ['--help'],
-        workingDirectory: repo_root.path,
-      );
+      result = await Process.run(binary_path, [
+        '--help',
+      ], workingDirectory: repo_root.path);
     } on ProcessException catch (error) {
       stderr.writeln(error);
       return 1;
@@ -393,10 +363,7 @@ final class DevTasks {
     final help = result.stdout as String;
 
     // A valid production binary must advertise its product command.
-    final product_command = RegExp(
-      r'^\s+about\s',
-      multiLine: true,
-    );
+    final product_command = RegExp(r'^\s+about\s', multiLine: true);
 
     if (!product_command.hasMatch(help)) {
       stderr.writeln('Production command verification failed.');
@@ -418,9 +385,7 @@ final class DevTasks {
       );
 
       if (pattern.hasMatch(help)) {
-        stderr.writeln(
-          'Developer command exposed in production: $command',
-        );
+        stderr.writeln('Developer command exposed in production: $command');
 
         return 1;
       }
@@ -443,53 +408,36 @@ final class DevTasks {
   /// Unexpected output formats produce a Rudra software error.
   ///
   /// This method performs no filesystem cleanup operations.
-  Future<
-      ({
-        int exit_code,
-        List<WorkspacePackage>? packages,
-      })> _discover_workspace_packages() async {
+  Future<({int exit_code, List<WorkspacePackage>? packages})>
+  _discover_workspace_packages() async {
     final ProcessResult result;
 
     try {
-      result = await Process.run(
-        'dart',
-        ['pub', 'workspace', 'list'],
-        workingDirectory: repo_root.path,
-      );
+      result = await Process.run('dart', [
+        'pub',
+        'workspace',
+        'list',
+      ], workingDirectory: repo_root.path);
     } on ProcessException catch (error) {
       stderr.writeln(error);
 
-      return (
-        exit_code: RudraExitCode.software_error.value,
-        packages: null,
-      );
+      return (exit_code: RudraExitCode.software_error.value, packages: null);
     }
 
     if (result.exitCode != RudraExitCode.success.value) {
       stderr.write(result.stderr);
 
-      return (
-        exit_code: result.exitCode,
-        packages: null,
-      );
+      return (exit_code: result.exitCode, packages: null);
     }
 
     try {
-      final packages = parse_workspace_packages(
-        result.stdout as String,
-      );
+      final packages = parse_workspace_packages(result.stdout as String);
 
-      return (
-        exit_code: RudraExitCode.success.value,
-        packages: packages,
-      );
+      return (exit_code: RudraExitCode.success.value, packages: packages);
     } on FormatException catch (error) {
       stderr.writeln(error);
 
-      return (
-        exit_code: RudraExitCode.software_error.value,
-        packages: null,
-      );
+      return (exit_code: RudraExitCode.software_error.value, packages: null);
     }
   }
 

@@ -54,8 +54,8 @@ final class ExploreCommand extends Command<int> {
   ExploreCommand({
     required TargetPath working_directory,
     required ExplorerRunner Function(TargetPath) create_runner,
-  })  : _working_directory = working_directory,
-        _create_runner = create_runner;
+  }) : _working_directory = working_directory,
+       _create_runner = create_runner;
 
   /// Public command identifier.
   @override
@@ -104,17 +104,11 @@ final class ExploreCommand extends Command<int> {
     final arguments = argResults?.rest ?? const <String>[];
 
     if (arguments.length > 1) {
-      throw UsageException(
-        'Expected at most one directory argument.',
-        usage,
-      );
+      throw UsageException('Expected at most one directory argument.', usage);
     }
 
     if (arguments.isNotEmpty && arguments.single.isEmpty) {
-      throw UsageException(
-        'The directory argument must not be empty.',
-        usage,
-      );
+      throw UsageException('The directory argument must not be empty.', usage);
     }
 
     TargetPath directory = _working_directory;
