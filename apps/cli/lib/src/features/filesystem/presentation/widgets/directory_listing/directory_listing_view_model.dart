@@ -77,34 +77,40 @@ final class DirectoryEntryViewModel {
   final TerminalRole role;
 }
 
-/// Immutable presentation model for a CLI directory listing.
+/// Immutable presentation data for one observed directory listing.
 ///
-/// This model is constructed by `DirectoryListingPresenter`
-/// from a Rudra SDK directory observation.
+/// This component owns directory-entry presentation only:
+/// - The requested compact or detailed layout.
+/// - The observed target and directory identifiers.
+/// - Inspection completeness.
+/// - Immutable, display-ready entry rows.
 ///
-/// It contains no filesystem adapters, services, or mutable
-/// navigation state.
+/// It does not own inspection diagnostics. Those are represented
+/// independently by DirectoryInspectionIssuesViewModel.
 ///
-/// The model supports both existing CLI listing layouts.
+/// DirectoryListingPresenter creates this component as part of
+/// FilesystemViewModel, which associates both components with
+/// the same SDK directory observation.
 ///
-/// An incomplete listing is explicitly marked by [is_complete].
-/// Successfully inspected rows remain available even when
-/// other entries could not be inspected.
+/// A directory with no rows is not necessarily empty.
+/// Callers must also inspect [is_complete] before interpreting
+/// the result as a complete directory inventory.
 ///
-/// The collections are defensively copied and cannot be
-/// modified through this model.
-///
-/// Rendering implementations consume this model without
-/// contacting the SDK or changing filesystem state.
+/// Entry rows are defensively copied. Construction performs
+/// no filesystem operations or terminal I/O.
 ///
 /// Example:
 /// ```dart
-/// final view_model = presenter.present(
-///   listing,
+/// final listing = DirectoryListingViewModel(
 ///   layout: DirectoryListingLayout.compact,
+///   directory_path: '/workspace',
+///   target_id: 'local-macos',
+///   is_complete: true,
+///   rows: [],
 /// );
 ///
-/// renderer.render(view_model);
+/// print(listing.observed_count);
+/// // 0
 /// ```
 final class DirectoryListingViewModel {
   /// Creates an immutable directory listing presentation.

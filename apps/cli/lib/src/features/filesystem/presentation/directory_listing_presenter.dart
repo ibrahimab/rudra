@@ -6,58 +6,70 @@ import 'filesystem_view_model.dart';
 import 'widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 import 'widgets/directory_listing/directory_listing_view_model.dart';
 
-/// Prepares SDK directory observations for CLI presentation.
+/// Prepares a filesystem presentation from an SDK observation.
 ///
-/// The presenter converts platform-independent filesystem
-/// observations into immutable [DirectoryListingViewModel] data.
+/// The presenter converts a platform-independent [DirectoryListing]
+/// into one [FilesystemViewModel] containing two components:
 ///
-/// It owns presentation-specific transformations:
-/// - Entry ordering for the requested layout.
-/// - Directory-relative display names.
-/// - Human-readable entry kinds and logical sizes.
-/// - Observed POSIX permission formatting.
-/// - UTC timestamp formatting.
-/// - Semantic entry roles.
-/// - Typed inspection diagnostic presentation.
+/// - [DirectoryListingViewModel] for observed entry rows.
+/// - [DirectoryInspectionIssuesViewModel] for typed diagnostics.
 ///
-/// The compact layout preserves SDK entry ordering.
-/// The detailed layout sorts directories first, followed
-/// by case-insensitive display-name order.
+/// Entry presentation includes deterministic ordering, target-native
+/// display names, human-readable sizes, permissions, timestamps,
+/// and semantic terminal roles.
+///
+/// The compact layout preserves SDK observation ordering.
+/// The detailed layout sorts directories first, followed by
+/// case-insensitive entry names.
+///
+/// Both component models retain the completeness status of
+/// the original observation.
 ///
 /// The presenter does not:
-/// - Inspect or modify the filesystem.
-/// - Construct navigation paths.
-/// - Resolve symbolic links.
-/// - Perform terminal I/O.
-/// - Generate ANSI formatting.
-/// - Manage sessions or authorize cleanup.
+/// - Inspect files or query SDK services.
+/// - Modify the filesystem or SDK observation.
+/// - Construct operational filesystem paths.
+/// - Write terminal output or generate ANSI sequences.
+/// - Create sessions or authorize cleanup operations.
 ///
 /// Example:
 /// ```dart
-/// const presenter = DirectoryListingPresenter();
+/// final observation = DirectoryListing(
+///   target_id: 'local-macos',
+///   directory: TargetPath('/workspace'),
+///   entries: [],
+///   is_complete: true,
+/// );
 ///
-/// final view_model = presenter.present(
-///   listing,
+/// final presentation = const DirectoryListingPresenter().present(
+///   observation,
 ///   layout: DirectoryListingLayout.detailed,
 /// );
+///
+/// print(presentation.listing.observed_count);
+/// // 0
 /// ```
 final class DirectoryListingPresenter {
   /// Creates a stateless filesystem presenter.
   const DirectoryListingPresenter();
 
-  /// Prepares an SDK listing for the requested presentation.
+  /// Converts an existing SDK directory observation into presentation data.
   ///
-  /// [listing] must originate from the configured SDK.
+  /// [listing] supplies the authoritative filesystem observation.
   ///
-  /// [layout] determines whether SDK entry ordering is
-  /// preserved or detailed display ordering is applied.
+  /// [layout] determines the display ordering and listing format.
+  /// Compact presentation retains SDK entry ordering. Detailed
+  /// presentation sorts entries for human-readable output.
   ///
-  /// Successfully observed entries remain available when
-  /// the listing is incomplete.
+  /// Successfully inspected entries remain available when observation
+  /// is incomplete. Typed inspection issues remain available through
+  /// the independent diagnostic component.
   ///
-  /// All original target-native paths are preserved.
+  /// Returns a [FilesystemViewModel] whose listing and diagnostic
+  /// components describe the same inspection result.
   ///
-  /// The source listing and its collections are not mutated.
+  /// The source observation and its collections are not modified.
+  /// No filesystem or terminal I/O occurs.
   FilesystemViewModel present(
     DirectoryListing listing, {
     DirectoryListingLayout layout = DirectoryListingLayout.detailed,

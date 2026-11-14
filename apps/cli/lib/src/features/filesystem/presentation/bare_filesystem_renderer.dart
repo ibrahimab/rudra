@@ -7,28 +7,22 @@ import 'filesystem_view_model.dart';
 import 'widgets/directory_inspection_issues/directory_inspection_issues_widget.dart';
 import 'widgets/directory_listing/directory_listing_widget.dart';
 
-/// Bare rendering adapter for filesystem directory observations.
+/// Bare rendering adapter for a complete filesystem presentation.
 ///
-/// This class connects the existing backend-independent
-/// [Renderer] contract to Rudra's shared widget renderer.
+/// Consumes [FilesystemViewModel] through the generic Renderer contract.
 ///
-/// Directory layout belongs to [DirectoryListingWidget].
-/// Diagnostic layout belongs to [DirectoryInspectionIssuesWidget].
+/// The model contains two independently composable components:
+/// - [DirectoryListingWidget] renders observed directory entries.
+/// - [DirectoryInspectionIssuesWidget] renders typed diagnostics.
 ///
-/// Both widgets are independently composable by other CLI
-/// features, including Welcome.
+/// The directory listing is written to the configured output sink.
+/// Diagnostics are written to the optional error sink.
 ///
-/// The renderer uses unbounded output by default, ensuring that
-/// filesystem paths and diagnostic information are not silently
-/// truncated by terminal-width assumptions.
+/// Both components delegate terminal encoding to [BareWidgetRenderer].
+/// Unbounded output preserves full paths, filenames, and diagnostics.
 ///
-/// Optional ANSI styling is delegated to [BareWidgetRenderer].
-///
-/// The renderer does not:
-/// - Call SDK services or filesystem adapters.
-/// - Format filesystem domain metadata.
-/// - Implement application navigation or workflow behavior.
-/// - Modify or authorize filesystem operations.
+/// This adapter performs no SDK requests, filesystem mutations,
+/// navigation operations, or cleanup authorization.
 ///
 /// Example:
 /// ```dart
@@ -37,7 +31,7 @@ import 'widgets/directory_listing/directory_listing_widget.dart';
 ///   error_output: stderr,
 /// );
 ///
-/// renderer.render(listing_view_model);
+/// renderer.render(filesystem_view_model);
 /// ```
 final class BareFilesystemRenderer implements Renderer<FilesystemViewModel> {
   /// Creates a directory-listing rendering adapter.

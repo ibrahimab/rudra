@@ -1,8 +1,6 @@
 import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
 import '../filesystem/presentation/filesystem_view_model.dart';
-import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
-
 
 /// Immutable presentation data for Rudra's welcome screen.
 ///
@@ -17,8 +15,11 @@ import '../filesystem/presentation/widgets/directory_listing/directory_listing_v
 /// - An optional detailed directory listing.
 /// - Available application commands.
 ///
-/// The nested [DirectoryListingViewModel] allows the welcome
-/// renderer to reuse the shared filesystem rendering system.
+/// The nested [FilesystemViewModel] supplies the shared directory
+/// listing and inspection-diagnostic presentation components.
+///
+/// Welcome validates that the listing describes its configured
+/// target and starting directory and requests the detailed layout.
 ///
 /// This model is not an inspection session and contains no
 /// cleanup or authorization state.
@@ -126,12 +127,15 @@ final class WelcomeViewModel {
   /// Renderers must not interpret it as a host filesystem path.
   final String? starting_directory;
 
-  /// Optional detailed filesystem listing presentation.
+  /// Optional composed filesystem presentation.
   ///
-  /// Null means no listing was supplied for display.
+  /// Contains a directory-listing component and an independent
+  /// inspection-diagnostic component.
   ///
-  /// A non-null listing may still be incomplete.
-  /// Completeness must be determined from the nested model.
+  /// Null means no directory observation was supplied.
+  ///
+  /// An available observation may be incomplete. Use
+  /// [has_incomplete_listing] to distinguish that condition.
   final FilesystemViewModel? listing;
 
   /// Whether a filesystem inspection target is configured.
@@ -143,5 +147,5 @@ final class WelcomeViewModel {
   /// Absence of a listing does not imply that an inspection
   /// was successfully completed.
   bool get has_incomplete_listing =>
-    listing?.inspection_issues.is_incomplete ?? false;
+      listing?.inspection_issues.is_incomplete ?? false;
 }

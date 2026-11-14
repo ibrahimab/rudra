@@ -211,51 +211,80 @@ The CLI uses a feature-first organization, governed by ADR 0005.
 
 The production source structure is:
 
-    apps/cli/lib/
-      rudra_cli.dart
-      src/
-        rudra_cli.dart
-        composition/
-          product_sdk_composition.dart
-        core/
-          cli/
-            rudra_cli_module.dart
-            rudra_exit_code.dart
-          rendering/
-            renderer.dart
-            theme.dart
-            terminal_text.dart
-            bare/
-              ansi_text.dart
-        features/
-          about/
-            about_cli_module.dart
-            about_command.dart
-          filesystem/
-            filesystem_cli_module.dart
-            list_command.dart
-            directory_listing_presenter.dart
-            directory_listing_view_model.dart
-            bare_filesystem_renderer.dart
-          welcome/
-            welcome_controller.dart
-            welcome_model.dart
-            welcome_presenter.dart
-            welcome_view_model.dart
-            bare_welcome_renderer.dart
-          explorer/
-            bare_explorer_renderer.dart
-            dart_explorer_terminal_host.dart
-            explore_command.dart
-            explorer_cli_module.dart
-            explorer_controller.dart
-            explorer_model.dart
-            explorer_presenter.dart
-            explorer_runner.dart
-            explorer_terminal_device.dart
-            explorer_terminal_host.dart
-            explorer_view_model.dart
-            terminal_input.dart
+apps/cli/lib/
+  rudra_cli.dart
+  src/
+    rudra_cli.dart
+    composition/
+      product_sdk_composition.dart
+    core/
+      cli/
+        rudra_cli_module.dart
+        rudra_exit_code.dart
+      rendering/
+        renderer.dart
+        terminal_text.dart
+        theme.dart
+        bare/
+          ansi_text.dart
+          bare_widget_renderer.dart
+        widgets/
+          terminal_column.dart
+          terminal_label.dart
+          terminal_widget.dart
+    features/
+      about/
+        about_cli_module.dart
+        about_command.dart
+      explorer/
+        application/
+          explorer_controller.dart
+          explorer_model.dart
+          explorer_runner.dart
+        cli/
+          explore_command.dart
+          explorer_cli_module.dart
+        terminal/
+          dart_explorer_terminal_host.dart
+          explorer_terminal_device.dart
+          explorer_terminal_host.dart
+          terminal_input.dart
+        presentation/
+          bare_explorer_renderer.dart
+          explorer_presenter.dart
+          explorer_view_model.dart
+          widgets/
+            explorer_screen.dart
+            header/
+              explorer_header.dart
+              explorer_header_view_model.dart
+            directory/
+              explorer_directory.dart
+              explorer_directory_view_model.dart
+            footer/
+              explorer_footer.dart
+              explorer_footer_view_model.dart
+      filesystem/
+        cli/
+          filesystem_cli_module.dart
+          list_command.dart
+        presentation/
+          bare_filesystem_renderer.dart
+          directory_listing_presenter.dart
+          filesystem_view_model.dart
+          widgets/
+            directory_listing/
+              directory_listing_view_model.dart
+              directory_listing_widget.dart
+            directory_inspection_issues/
+              directory_inspection_issues_view_model.dart
+              directory_inspection_issues_widget.dart
+      welcome/
+        bare_welcome_renderer.dart
+        welcome_controller.dart
+        welcome_model.dart
+        welcome_presenter.dart
+        welcome_view_model.dart
 
 Feature directories own their presentation and command implementations.
 
@@ -491,14 +520,34 @@ The existing welcome workflow uses:
 
 These components reside together under `features/welcome/`.
 
-The filesystem feature owns the reusable directory-listing presenter,
-view model, and concrete renderer under `features/filesystem/`.
+The filesystem feature owns reusable presentation components for
+directory listings and inspection diagnostics.
 
-Welcome consumes filesystem listing presentation without duplicating
-its formatting or inspection behavior.
+`DirectoryListingPresenter` converts one SDK directory observation
+into a `FilesystemViewModel`, which composes two independent
+presentation models:
 
-The dependency is one-way: welcome may import filesystem presentation,
-but filesystem must not import welcome.
+- `DirectoryListingViewModel` contains observed entry rows and
+  directory-listing layout information.
+- `DirectoryInspectionIssuesViewModel` contains inspection
+  completeness and typed diagnostic information.
+
+`FilesystemViewModel` validates that both components agree on
+inspection completeness.
+
+`DirectoryListingWidget` and `DirectoryInspectionIssuesWidget`
+render their respective component models without invoking SDK
+services or performing filesystem operations.
+
+The `BareFilesystemRenderer` delegates rendering to these widgets
+through the shared terminal rendering backend.
+
+Welcome and Explorer reuse filesystem presentation without
+duplicating SDK inspection or metadata-formatting logic.
+
+Feature dependencies remain directional: Welcome and Explorer may
+depend on filesystem presentation, but filesystem presentation
+must not depend on either consuming feature.
 
 Explorer owns transient navigation state and input decoding under
 `features/explorer/`.

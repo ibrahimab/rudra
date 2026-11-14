@@ -8,7 +8,6 @@ import '../presentation/directory_listing_presenter.dart';
 import '../presentation/filesystem_view_model.dart';
 import '../presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
-
 /// Lists the immediate children of a filesystem directory.
 ///
 /// ListCommand coordinates one read-only filesystem listing.
@@ -53,8 +52,9 @@ final class ListCommand extends Command<int> {
   /// [working_directory] is the default target-native directory
   /// when no explicit directory argument is supplied.
   ///
-  /// [renderer] displays the resulting directory ViewModel.
-  /// The renderer also owns the destination for diagnostics.
+  /// [renderer] receives the prepared [FilesystemViewModel].
+  /// Its concrete implementation determines how directory rows
+  /// and inspection diagnostics are displayed.
   ///
   /// [presenter] prepares SDK observations for the compact
   /// directory listing layout.
@@ -93,7 +93,7 @@ final class ListCommand extends Command<int> {
   /// Default target-native directory for the command.
   final TargetPath _working_directory;
 
-  /// Injected presentation backend.
+  /// Backend-independent presentation renderer.
   final Renderer<FilesystemViewModel> _renderer;
 
   /// Converts SDK observations into presentation-ready data.

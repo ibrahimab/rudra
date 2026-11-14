@@ -24,17 +24,25 @@ import 'directory_inspection_issues_view_model.dart';
 ///
 /// Example:
 /// ```dart
-/// final issues_widget = DirectoryInspectionIssuesWidget(
-///   directory_view_model,
+/// final model = DirectoryInspectionIssuesViewModel(
+///   is_complete: false,
+///   issues: [],
 /// );
 ///
-/// print(issues_widget.height);
+/// final widget = DirectoryInspectionIssuesWidget(model);
+///
+/// print(widget.height);
+/// // 1
 /// ```
 final class DirectoryInspectionIssuesWidget implements TerminalWidget {
-  /// Creates a diagnostic widget from an existing listing.
+  /// Creates a diagnostic widget from its dedicated presentation model.
+  ///
+  /// Construction performs no filesystem or terminal operations.
   const DirectoryInspectionIssuesWidget(this.view_model);
 
-  /// Listing containing prepared diagnostic information.
+  /// Immutable diagnostic information consumed by this widget.
+  ///
+  /// Directory entries and listing layout are intentionally excluded.
   final DirectoryInspectionIssuesViewModel view_model;
 
   @override

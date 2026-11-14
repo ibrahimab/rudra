@@ -144,7 +144,10 @@ final class RudraCli {
       // concrete filesystem rendering implementation.
       //
       // Controllers and commands depend only on the
-      // Renderer<DirectoryListingViewModel> contract.
+      // Commands receive a backend-independent
+      // Renderer<FilesystemViewModel>.
+      // The renderer decides how to display listing data
+      // and inspection diagnostics independently.
       //
       // Compact output intentionally remains plain text.
       final filesystem_renderer = BareFilesystemRenderer(

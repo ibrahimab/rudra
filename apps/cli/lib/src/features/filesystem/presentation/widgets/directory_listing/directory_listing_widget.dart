@@ -33,7 +33,7 @@ import 'directory_listing_view_model.dart';
 /// Example:
 /// ```dart
 /// final listing_widget = DirectoryListingWidget(
-///   listing_view_model,
+///   filesystem_view_model.listing,
 /// );
 ///
 /// final screen = TerminalColumn(

@@ -54,8 +54,10 @@ final class FilesystemCliModule implements RudraCliModule {
   /// [working_directory] supplies the default target-native
   /// directory for filesystem commands.
   ///
-  /// [renderer] receives prepared directory listing ViewModels.
-  /// Its concrete implementation is selected by the caller.
+  /// [renderer] receives complete [FilesystemViewModel] presentations,
+  /// including independent directory-listing and diagnostic components.
+  ///
+  /// Its concrete backend is selected by application composition.
   ///
   /// The caller must ensure that [working_directory] belongs
   /// to the filesystem target configured in [sdk].
@@ -75,7 +77,7 @@ final class FilesystemCliModule implements RudraCliModule {
   /// Default target-native directory for filesystem commands.
   final TargetPath _working_directory;
 
-  /// Injected backend-independent filesystem renderer.
+  /// Backend-independent renderer for composed filesystem presentations.
   final Renderer<FilesystemViewModel> _renderer;
 
   /// Stable identifier of Rudra's filesystem command module.
