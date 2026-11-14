@@ -35,12 +35,28 @@ void main() {
       }
     });
 
-    test('executes product commands successfully', () async {
-      final cli = RudraCli.product();
+    test('executes product commands through injected output', () async {
+      final output = StringBuffer();
+      final errors = StringBuffer();
+
+      final cli = RudraCli.product(
+        output: output,
+        error_output: errors,
+      );
+
+      // Application composition must not render eagerly.
+      expect(output.toString(), isEmpty);
 
       final status = await cli.run(['about']);
 
       expect(status, RudraExitCode.success.value);
+
+      expect(
+        output.toString(),
+        'Rudra - User-directed filesystem exploration.\n',
+      );
+
+      expect(errors.toString(), isEmpty);
     });
 
     test('maps invalid arguments to a typed exit code', () async {

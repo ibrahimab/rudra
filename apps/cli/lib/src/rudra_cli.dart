@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
 
 import 'composition/product_sdk_composition.dart';
 
@@ -10,7 +11,8 @@ import 'core/cli/rudra_exit_code.dart';
 import 'core/rendering/bare/ansi_text.dart';
 import 'core/rendering/theme.dart';
 
-import 'features/about/about_cli_module.dart';
+import 'features/about/cli/about_cli_module.dart';
+import 'features/about/presentation/bare_about_renderer.dart';
 
 import 'features/filesystem/cli/filesystem_cli_module.dart';
 import 'features/filesystem/presentation/bare_filesystem_renderer.dart';
@@ -137,7 +139,21 @@ final class RudraCli {
       welcome_controller: welcome_controller,
     );
 
-    cli.register_module(AboutCliModule());
+    // About uses the same application-owned output destination
+    // as other non-interactive product commands.
+    //
+    // The command receives only the rendering contract.
+    // It never writes directly to stdout.
+    final about_renderer = BareAboutRenderer(
+      output: presentation_output,
+    );
+
+    cli.register_module(
+      AboutCliModule(
+        product_name: application_name,
+        renderer: about_renderer,
+      ),
+    );
 
     if (composition != null) {
       // The application composition boundary selects the

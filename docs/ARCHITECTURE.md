@@ -234,8 +234,18 @@ apps/cli/lib/
           terminal_widget.dart
     features/
       about/
-        about_cli_module.dart
-        about_command.dart
+        cli/
+          about_cli_module.dart
+          about_command.dart
+        presentation/
+          about_presenter.dart
+          about_view_model.dart
+          bare_about_renderer.dart
+          widgets/
+            about_screen.dart
+            information/
+              about_information.dart
+              about_information_view_model.dart
       explorer/
         application/
           explorer_controller.dart
@@ -526,6 +536,24 @@ view models, input handlers, and renderers depending on its needs.
 
 A universal MVC hierarchy is not required.
 
+The About feature uses the same composable terminal presentation
+architecture as Explorer, Welcome, and Filesystem.
+
+`AboutCommand` coordinates the request without performing output.
+`AboutPresenter` prepares an immutable `AboutViewModel`, containing
+the dedicated `AboutInformationViewModel`.
+
+`AboutScreen` composes `AboutInformation` using `TerminalColumn`.
+`BareAboutRenderer` delegates terminal encoding and styling to
+the shared `BareWidgetRenderer`.
+
+About has no application controller because it performs no
+application workflow, filesystem inspection, or state mutation.
+
+The product name and rendering backend are supplied by
+`RudraCli.product()` through `AboutCliModule`.
+The feature does not depend on SDK services or direct stdout access.
+
 Welcome uses application and presentation responsibilities under its
 feature directory.
 
@@ -631,6 +659,13 @@ constructs concrete renderers, and assembles production features.
 
 Feature controllers and commands receive their dependencies
 through explicit constructor injection.
+
+`AboutCliModule` receives the application name and an injected
+`Renderer<AboutViewModel>`.
+
+`AboutCommand` delegates to `AboutPresenter` and the injected
+renderer. It is available even without a configured filesystem
+target and performs no SDK inspection.
 
 `WelcomeController` receives a nullable SDK and starting directory,
 plus an injected `Renderer<WelcomeViewModel>`.
