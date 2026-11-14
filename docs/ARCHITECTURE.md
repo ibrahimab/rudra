@@ -613,7 +613,7 @@ or both be absent.
 Their absence represents an unsupported inspection target.
 
 `ListCommand` receives the configured SDK, starting directory,
-and `Renderer<DirectoryListingViewModel>`.
+and `Renderer<FilesystemViewModel>`.
 
 `FilesystemCliModule` supplies its injected dependencies to
 its registered commands.

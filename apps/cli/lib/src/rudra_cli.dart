@@ -143,11 +143,11 @@ final class RudraCli {
       // The application composition boundary selects the
       // concrete filesystem rendering implementation.
       //
-      // Controllers and commands depend only on the
       // Commands receive a backend-independent
       // Renderer<FilesystemViewModel>.
-      // The renderer decides how to display listing data
-      // and inspection diagnostics independently.
+      //
+      // The concrete renderer independently presents
+      // directory entries and inspection diagnostics.
       //
       // Compact output intentionally remains plain text.
       final filesystem_renderer = BareFilesystemRenderer(
