@@ -1,8 +1,8 @@
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
-import 'package:rudra_cli/src/features/welcome/welcome_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/welcome_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/bare/ansi_text.dart';
-import 'package:rudra_cli/src/features/welcome/bare_welcome_renderer.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/bare_welcome_renderer.dart';
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:test/test.dart';
@@ -24,7 +24,10 @@ void main() {
       final output = StringBuffer();
 
       BareWelcomeRenderer(output: output).render(
-        WelcomeViewModel(product_title: 'RUDRA'),
+        _welcome(
+          target_id: null,
+          starting_directory: null,
+        ),
       );
 
       expect(
@@ -343,8 +346,7 @@ void main() {
       final output = StringBuffer();
 
       BareWelcomeRenderer(output: output).render(
-        WelcomeViewModel(
-          product_title: 'RUDRA',
+        _welcome(
           target_id: 'fixture\x1B[2Jtarget',
           starting_directory: '/fixture\nunsafe',
         ),
@@ -380,18 +382,34 @@ void main() {
   });
 }
 
-/// Creates a configured welcome-screen view model.
+/// Creates a composed Welcome presentation without SDK operations.
 ///
-/// The optional listing must describe the same target
-/// and starting directory.
+/// All visual components receive their independent view models.
+///
+/// Target availability determines filesystem command visibility.
 WelcomeViewModel _welcome({
   FilesystemViewModel? listing,
+  String? target_id = 'fixture-target',
+  String? starting_directory = '/fixture',
 }) {
+  final target = WelcomeTargetViewModel(
+    target_id: target_id,
+    starting_directory: starting_directory,
+  );
+
   return WelcomeViewModel(
-    product_title: 'RUDRA',
-    target_id: 'fixture-target',
-    starting_directory: '/fixture',
-    listing: listing,
+    header: WelcomeHeaderViewModel(
+      product_title: 'RUDRA',
+    ),
+    target: target,
+    commands: WelcomeCommandsViewModel(
+      show_filesystem_commands: target.can_inspect,
+    ),
+    footer: WelcomeFooterViewModel(
+      safety_statement:
+          'Inspection never authorizes file modification or deletion.',
+    ),
+    filesystem: listing,
   );
 }
 

@@ -1,7 +1,7 @@
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
-import 'package:rudra_cli/src/features/welcome/welcome_controller.dart';
-import 'package:rudra_cli/src/features/welcome/bare_welcome_renderer.dart';
+import 'package:rudra_cli/src/features/welcome/application/welcome_controller.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/bare_welcome_renderer.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 

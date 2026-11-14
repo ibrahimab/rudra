@@ -1,10 +1,16 @@
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
-import 'package:rudra_cli/src/features/welcome/welcome_model.dart';
-import 'package:rudra_cli/src/features/welcome/welcome_presenter.dart';
-import 'package:rudra_cli/src/features/welcome/welcome_view_model.dart';
-
 import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
+
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/commands/welcome_commands_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/footer/welcome_footer_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/header/welcome_header_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/target/welcome_target_view_model.dart';
+
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/commands/welcome_commands_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/footer/welcome_footer_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/header/welcome_header_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/target/welcome_target_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -29,9 +35,9 @@ void main() {
 
       final result = presenter.present(model);
 
-      expect(result.product_title, 'RUDRA');
+      expect(result.header.product_title, 'RUDRA');
       expect(result.can_inspect, isFalse);
-      expect(result.listing, isNull);
+      expect(result.filesystem, isNull);
 
       // Presentation must not modify source state.
       expect(model.product_name, 'Rudra');
@@ -46,11 +52,11 @@ void main() {
 
       final result = presenter.present(model);
 
-      expect(result.product_title, 'RUDRA');
-      expect(result.target_id, 'local-macos');
-      expect(result.starting_directory, '/workspace');
+      expect(result.header.product_title, 'RUDRA');
+      expect(result.target.target_id, 'local-macos');
+      expect(result.target.starting_directory, '/workspace');
       expect(result.can_inspect, isTrue);
-      expect(result.listing, isNull);
+      expect(result.filesystem, isNull);
     });
 
     test('preserves target-native Windows paths', () {
@@ -65,7 +71,7 @@ void main() {
       );
 
       expect(
-        result.starting_directory,
+        result.target.starting_directory,
         r'C:\Users\example',
       );
     });
@@ -87,7 +93,7 @@ void main() {
         _welcome_model(listing: listing),
       );
 
-      final directory = result.listing!;
+      final directory = result.filesystem!;
 
       expect(
         directory.listing.layout,
@@ -141,7 +147,7 @@ void main() {
 
       expect(result.has_incomplete_listing, isTrue);
 
-      final directory = result.listing!;
+      final directory = result.filesystem!;
 
       expect(directory.listing.is_complete, isFalse);
       expect(directory.listing.observed_count, 1);
@@ -167,8 +173,8 @@ void main() {
       );
 
       expect(result.has_incomplete_listing, isTrue);
-      expect(result.listing!.inspection_issues.issues, isEmpty);
-      expect(result.listing!.listing.observed_count, 0);
+      expect(result.filesystem!.inspection_issues.issues, isEmpty);
+      expect(result.filesystem!.listing.observed_count, 0);
     });
 
     test('does not report absent listings as complete', () {
@@ -176,7 +182,7 @@ void main() {
         _welcome_model(),
       );
 
-      expect(result.listing, isNull);
+      expect(result.filesystem, isNull);
       expect(result.has_incomplete_listing, isFalse);
     });
 
@@ -193,23 +199,23 @@ void main() {
       final first = presenter.present(model);
       final second = presenter.present(model);
 
-      expect(first.product_title, second.product_title);
-      expect(first.target_id, second.target_id);
+      expect(first.header.product_title, second.header.product_title);
+      expect(first.target.target_id, second.target.target_id);
 
       expect(
-        first.listing!.listing.rows.map((row) => row.path),
+        first.filesystem!.listing.rows.map((row) => row.path),
         orderedEquals(
-          second.listing!.listing.rows.map((row) => row.path),
+          second.filesystem!.listing.rows.map((row) => row.path),
         ),
       );
     });
   });
 
-  group('WelcomeViewModel invariants', () {
+  group('Welcome component invariants', () {
     test('rejects blank product titles', () {
       for (final title in ['', ' ', '\t', '\n']) {
         expect(
-          () => WelcomeViewModel(
+          () => WelcomeHeaderViewModel(
             product_title: title,
           ),
           throwsArgumentError,
@@ -217,28 +223,25 @@ void main() {
       }
     });
 
-    test('requires target and directory together', () {
+    test('requires target and starting directory together', () {
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
+        () => WelcomeTargetViewModel(
           target_id: 'fixture-target',
         ),
         throwsArgumentError,
       );
 
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
+        () => WelcomeTargetViewModel(
           starting_directory: '/fixture',
         ),
         throwsArgumentError,
       );
     });
 
-    test('rejects blank target and directory values', () {
+    test('rejects blank target information', () {
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
+        () => WelcomeTargetViewModel(
           target_id: ' ',
           starting_directory: '/fixture',
         ),
@@ -246,8 +249,7 @@ void main() {
       );
 
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
+        () => WelcomeTargetViewModel(
           target_id: 'fixture-target',
           starting_directory: ' ',
         ),
@@ -255,37 +257,50 @@ void main() {
       );
     });
 
-    test('rejects a listing for another target', () {
+    test('rejects blank safety statements', () {
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
+        () => WelcomeFooterViewModel(
+          safety_statement: ' ',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects a listing from another target', () {
+      expect(
+        () => _welcome_view_model(
           target_id: 'another-target',
-          starting_directory: '/fixture',
-          listing: _directory_view_model(),
+          filesystem: _directory_view_model(),
         ),
         throwsArgumentError,
       );
     });
 
-    test('rejects a listing for another directory', () {
+    test('rejects a listing from another directory', () {
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
-          target_id: 'fixture-target',
+        () => _welcome_view_model(
           starting_directory: '/other',
-          listing: _directory_view_model(),
+          filesystem: _directory_view_model(),
         ),
         throwsArgumentError,
       );
     });
 
-    test('rejects compact listings on the welcome screen', () {
+    test('rejects listings without a configured target', () {
       expect(
-        () => WelcomeViewModel(
-          product_title: 'RUDRA',
-          target_id: 'fixture-target',
-          starting_directory: '/fixture',
-          listing: _directory_view_model(
+        () => _welcome_view_model(
+          target_id: null,
+          starting_directory: null,
+          filesystem: _directory_view_model(),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects compact filesystem presentation', () {
+      expect(
+        () => _welcome_view_model(
+          filesystem: _directory_view_model(
             layout: DirectoryListingLayout.compact,
           ),
         ),
@@ -293,19 +308,70 @@ void main() {
       );
     });
 
-    test('accepts a matching detailed listing', () {
-      final model = WelcomeViewModel(
-        product_title: 'RUDRA',
-        target_id: 'fixture-target',
-        starting_directory: '/fixture',
-        listing: _directory_view_model(),
+    test('rejects command hints inconsistent with the target', () {
+      expect(
+        () => _welcome_view_model(
+          show_filesystem_commands: false,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('accepts matching detailed filesystem presentation', () {
+      final model = _welcome_view_model(
+        filesystem: _directory_view_model(),
       );
 
       expect(model.can_inspect, isTrue);
-      expect(model.listing, isNotNull);
+      expect(model.filesystem, isNotNull);
       expect(model.has_incomplete_listing, isFalse);
+      expect(model.commands.show_filesystem_commands, isTrue);
+    });
+
+    test('accepts unsupported target presentation', () {
+      final model = _welcome_view_model(
+        target_id: null,
+        starting_directory: null,
+      );
+
+      expect(model.can_inspect, isFalse);
+      expect(model.filesystem, isNull);
+      expect(model.commands.show_filesystem_commands, isFalse);
     });
   });
+}
+
+/// Creates a complete Welcome presentation for invariant tests.
+///
+/// Component models remain independent. The root model verifies
+/// their cross-component consistency.
+///
+/// No filesystem inspection or terminal I/O occurs.
+WelcomeViewModel _welcome_view_model({
+  String? target_id = 'fixture-target',
+  String? starting_directory = '/fixture',
+  FilesystemViewModel? filesystem,
+  bool? show_filesystem_commands,
+}) {
+  final target = WelcomeTargetViewModel(
+    target_id: target_id,
+    starting_directory: starting_directory,
+  );
+
+  return WelcomeViewModel(
+    header: WelcomeHeaderViewModel(
+      product_title: 'RUDRA',
+    ),
+    target: target,
+    commands: WelcomeCommandsViewModel(
+      show_filesystem_commands: show_filesystem_commands ?? target.can_inspect,
+    ),
+    footer: WelcomeFooterViewModel(
+      safety_statement:
+          'Inspection never authorizes file modification or deletion.',
+    ),
+    filesystem: filesystem,
+  );
 }
 
 /// Creates a configured welcome presentation source.

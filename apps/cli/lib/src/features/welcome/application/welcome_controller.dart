@@ -1,11 +1,12 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../core/cli/rudra_exit_code.dart';
-import '../../core/rendering/renderer.dart';
+import '../../../core/cli/rudra_exit_code.dart';
+import '../../../core/rendering/renderer.dart';
+
+import '../presentation/welcome_presenter.dart';
+import '../presentation/welcome_view_model.dart';
 
 import 'welcome_model.dart';
-import 'welcome_presenter.dart';
-import 'welcome_view_model.dart';
 
 /// Coordinates Rudra's read-only welcome workflow.
 ///
@@ -37,7 +38,8 @@ import 'welcome_view_model.dart';
 /// Example:
 /// ```dart
 /// final controller = WelcomeController(
-///   composition: composition,
+///   sdk: sdk,
+///   starting_directory: TargetPath('/workspace'),
 ///   renderer: renderer,
 /// );
 ///

@@ -15,8 +15,8 @@ import 'features/about/about_cli_module.dart';
 import 'features/filesystem/cli/filesystem_cli_module.dart';
 import 'features/filesystem/presentation/bare_filesystem_renderer.dart';
 
-import 'features/welcome/bare_welcome_renderer.dart';
-import 'features/welcome/welcome_controller.dart';
+import 'features/welcome/application/welcome_controller.dart';
+import 'features/welcome/presentation/bare_welcome_renderer.dart';
 
 import 'features/explorer/presentation/bare_explorer_renderer.dart';
 

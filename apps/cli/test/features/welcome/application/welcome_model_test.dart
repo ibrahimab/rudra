@@ -1,4 +1,4 @@
-import 'package:rudra_cli/src/features/welcome/welcome_model.dart';
+import 'package:rudra_cli/src/features/welcome/application/welcome_model.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 

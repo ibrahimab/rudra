@@ -280,11 +280,27 @@ apps/cli/lib/
               directory_inspection_issues_view_model.dart
               directory_inspection_issues_widget.dart
       welcome/
-        bare_welcome_renderer.dart
-        welcome_controller.dart
-        welcome_model.dart
-        welcome_presenter.dart
-        welcome_view_model.dart
+        application/
+          welcome_controller.dart
+          welcome_model.dart
+        presentation/
+          bare_welcome_renderer.dart
+          welcome_presenter.dart
+          welcome_view_model.dart
+          widgets/
+            welcome_screen.dart
+            header/
+              welcome_header.dart
+              welcome_header_view_model.dart
+            target/
+              welcome_target.dart
+              welcome_target_view_model.dart
+            commands/
+              welcome_commands.dart
+              welcome_commands_view_model.dart
+            footer/
+              welcome_footer.dart
+              welcome_footer_view_model.dart
 
 Feature directories own their presentation and command implementations.
 
@@ -510,15 +526,27 @@ view models, input handlers, and renderers depending on its needs.
 
 A universal MVC hierarchy is not required.
 
-The existing welcome workflow uses:
+Welcome uses application and presentation responsibilities under its
+feature directory.
 
-- `WelcomeController` to coordinate the SDK-backed workflow.
-- `WelcomeModel` to represent validated presentation state.
-- `WelcomePresenter` to prepare rendering data.
-- `WelcomeViewModel` to hold immutable display-ready information.
-- `BareWelcomeRenderer` to render the welcome screen.
+`WelcomeController` coordinates one read-only SDK listing request.
+`WelcomeModel` preserves validated application state.
 
-These components reside together under `features/welcome/`.
+`WelcomePresenter` converts that state into `WelcomeViewModel`,
+which composes independently owned header, target, command, and
+footer presentation models alongside an optional `FilesystemViewModel`.
+
+`WelcomeScreen` composes its visual components with the shared
+`TerminalColumn` infrastructure and reuses `DirectoryListingWidget`
+for filesystem entries.
+
+`BareWelcomeRenderer` delegates main output to
+`BareWidgetRenderer` and independently renders typed inspection
+diagnostics using `DirectoryInspectionIssuesWidget`.
+
+Welcome does not construct or nest a filesystem-specific renderer,
+duplicate filesystem metadata formatting, or perform inspection
+operations during presentation.
 
 The filesystem feature owns reusable presentation components for
 directory listings and inspection diagnostics.
