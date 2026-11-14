@@ -24,3 +24,23 @@ abstract interface class WorkflowEvent {
   /// Stable, implementation-independent event type identifier.
   String get event_type;
 }
+
+/// A workflow event that an application may submit as a request.
+///
+/// Command events express intent rather than an established outcome.
+///
+/// Only this interface is accepted by [EventManager.trigger].
+/// Outcome events such as WorkflowStartedEvent are created by
+/// trusted SDK processing, never submitted as frontend commands.
+///
+/// Implementing this interface is not authorization to perform
+/// filesystem operations.
+///
+/// Example:
+/// ```dart
+/// final WorkflowCommandEvent request = WorkflowStartEvent(
+///   target_id: 'local-macos',
+///   root: TargetPath('/workspace'),
+/// );
+/// ```
+abstract interface class WorkflowCommandEvent implements WorkflowEvent {}
