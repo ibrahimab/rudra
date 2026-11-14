@@ -678,11 +678,18 @@ contracts remain unchanged.
 The development launcher continues to use the repository root
 as its working directory.
 
-`BareWelcomeRenderer` reuses `BareFilesystemRenderer` when displaying
-an embedded directory listing.
+`BareWelcomeRenderer` renders the composable `WelcomeScreen`
+through the shared `BareWidgetRenderer`.
 
-This is a feature-to-feature presentation dependency, not SDK
-composition or domain behavior.
+`WelcomeScreen` directly composes `DirectoryListingWidget`
+when an SDK filesystem observation is available.
+
+Typed inspection diagnostics are independently rendered through
+`DirectoryInspectionIssuesWidget` to the configured diagnostic
+output sink.
+
+Welcome does not construct `BareFilesystemRenderer` or duplicate
+filesystem listing formatting.
 
 Controllers and commands must not construct concrete rendering
 backends or terminal styling encoders.

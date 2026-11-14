@@ -1,25 +1,35 @@
-import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
-import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
-import 'package:rudra_cli/src/features/welcome/presentation/welcome_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/bare/ansi_text.dart';
-import 'package:rudra_cli/src/features/welcome/presentation/bare_welcome_renderer.dart';
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
-import 'package:test/test.dart';
+import 'package:rudra_cli/src/core/rendering/bare/bare_widget_renderer.dart';
+
 import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
+
+import 'package:rudra_cli/src/features/welcome/presentation/bare_welcome_renderer.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/welcome_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/commands/welcome_commands_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/footer/welcome_footer_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/header/welcome_header_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/target/welcome_target_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/widgets/welcome_screen.dart';
+
+import 'package:test/test.dart';
 
 /// Verifies the bare welcome-screen rendering backend.
 ///
 /// Tests consume immutable presentation models directly.
 ///
-/// The renderer must preserve the established welcome-screen
-/// format, delegate directory tables to the filesystem renderer,
-/// and respect semantic themes.
+/// The renderer delegates Welcome screen composition to
+/// [WelcomeScreen] and terminal encoding to [BareWidgetRenderer].
+///
+/// Filesystem listings and diagnostics use independent widgets.
 ///
 /// No filesystem adapter, SDK service, or terminal session
 /// is required.
 void main() {
-  group('BareWelcomeRenderer compatibility', () {
+  group('BareWelcomeRenderer composition', () {
     test('preserves unsupported-target output exactly', () {
       final output = StringBuffer();
 

@@ -1,11 +1,10 @@
-import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
-import 'package:rudra_cli/src/features/welcome/presentation/widgets/commands/welcome_commands_view_model.dart';
-import 'package:rudra_cli/src/features/welcome/presentation/widgets/footer/welcome_footer_view_model.dart';
-import 'package:rudra_cli/src/features/welcome/presentation/widgets/header/welcome_header_view_model.dart';
-import 'package:rudra_cli/src/features/welcome/presentation/widgets/target/welcome_target_view_model.dart';
+import 'package:rudra_cli/src/features/welcome/application/welcome_model.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/welcome_presenter.dart';
+import 'package:rudra_cli/src/features/welcome/presentation/welcome_view_model.dart';
 
 import 'package:rudra_cli/src/features/welcome/presentation/widgets/commands/welcome_commands_view_model.dart';
 import 'package:rudra_cli/src/features/welcome/presentation/widgets/footer/welcome_footer_view_model.dart';
