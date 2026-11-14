@@ -55,6 +55,12 @@ export 'src/workflow/events/workflow_start_event.dart';
 export 'src/workflow/events/workflow_started_event.dart';
 export 'src/workflow/events/workflow_ended_event.dart';
 
+/// Durable workflow command submission contracts.
+export 'src/workflow/event_manager.dart';
+export 'src/workflow/event_submission_store.dart';
+export 'src/workflow/event_submission_receipt.dart';
+export 'src/workflow/event_submission_exception.dart';
+
 /// Immutable workflow lifecycle states.
 export 'src/workflow/states/workflow_state.dart';
 export 'src/workflow/states/workflow_initial_state.dart';

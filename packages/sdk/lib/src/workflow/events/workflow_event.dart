@@ -29,7 +29,7 @@ abstract interface class WorkflowEvent {
 ///
 /// Command events express intent rather than an established outcome.
 ///
-/// Only this interface is accepted by [EventManager.trigger].
+/// Only this interface is accepted by `EventManager.trigger`.
 /// Outcome events such as WorkflowStartedEvent are created by
 /// trusted SDK processing, never submitted as frontend commands.
 ///

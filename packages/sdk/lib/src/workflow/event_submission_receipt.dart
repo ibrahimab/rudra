@@ -1,4 +1,3 @@
-
 /// Acknowledgment that a workflow request was durably accepted.
 ///
 /// Receipt creation does not establish workflow creation,

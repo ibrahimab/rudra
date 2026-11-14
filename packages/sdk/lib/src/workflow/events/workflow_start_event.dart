@@ -2,7 +2,6 @@ import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
 import 'workflow_event.dart';
 
-
 /// A request to create a new workflow.
 ///
 /// The request identifies the intended filesystem target and

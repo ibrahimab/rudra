@@ -1,4 +1,3 @@
-
 /// Stable categories of event submission failure.
 ///
 /// These failures concern accepting a request, not the eventual
