@@ -1,11 +1,11 @@
-import '../../core/rendering/bare/ansi_text.dart';
-import '../../core/rendering/bare/bare_widget_renderer.dart';
-import '../../core/rendering/renderer.dart';
-import '../../core/rendering/theme.dart';
+import '../../../core/rendering/bare/ansi_text.dart';
+import '../../../core/rendering/bare/bare_widget_renderer.dart';
+import '../../../core/rendering/renderer.dart';
+import '../../../core/rendering/theme.dart';
 
-import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
-import 'presentation/widgets/directory_inspection_issues/directory_inspection_issues_widget.dart';
-import 'presentation/widgets/directory_listing/directory_listing_widget.dart';
+import 'filesystem_view_model.dart';
+import 'widgets/directory_inspection_issues/directory_inspection_issues_widget.dart';
+import 'widgets/directory_listing/directory_listing_widget.dart';
 
 /// Bare rendering adapter for filesystem directory observations.
 ///
@@ -39,8 +39,7 @@ import 'presentation/widgets/directory_listing/directory_listing_widget.dart';
 ///
 /// renderer.render(listing_view_model);
 /// ```
-final class BareFilesystemRenderer
-    implements Renderer<DirectoryListingViewModel> {
+final class BareFilesystemRenderer implements Renderer<FilesystemViewModel> {
   /// Creates a directory-listing rendering adapter.
   ///
   /// [output] receives the listing presentation.
@@ -77,21 +76,16 @@ final class BareFilesystemRenderer
   /// ANSI encoder shared with diagnostic rendering.
   final AnsiText _ansi_text;
 
-  /// Renders one directory listing and its optional diagnostics.
+  /// Renders the two independently prepared components.
   ///
-  /// Directory data is passed to the reusable listing widget.
+  /// The listing is sent to the presentation destination.
+  /// Diagnostics are sent to the optional diagnostic sink.
   ///
-  /// If a diagnostic sink is configured, inspection issues are
-  /// rendered separately after the listing completes.
-  ///
-  /// An incomplete listing without typed issues still produces
-  /// an explicit fallback diagnostic.
-  ///
-  /// Rendering performs no SDK or filesystem operations.
+  /// No SDK calls or filesystem mutations occur.
   @override
-  void render(DirectoryListingViewModel view_model) {
+  void render(FilesystemViewModel view_model) {
     _listing_renderer.render(
-      DirectoryListingWidget(view_model),
+      DirectoryListingWidget(view_model.listing),
     );
 
     final error_output = _error_output;
@@ -116,7 +110,7 @@ final class BareFilesystemRenderer
   ///
   /// Untrusted diagnostic text is sanitized before encoding.
   void render_issues(
-    DirectoryListingViewModel view_model, {
+    FilesystemViewModel view_model, {
     required StringSink output,
   }) {
     final renderer = BareWidgetRenderer(

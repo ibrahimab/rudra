@@ -1,5 +1,7 @@
-import '../filesystem/directory_listing_presenter.dart';
+import '../filesystem/presentation/directory_listing_presenter.dart';
+import '../filesystem/presentation/filesystem_view_model.dart';
 import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
+
 import 'welcome_model.dart';
 import 'welcome_view_model.dart';
 
@@ -79,7 +81,7 @@ final class WelcomePresenter {
   WelcomeViewModel present(WelcomeModel model) {
     final listing = model.listing;
 
-    final DirectoryListingViewModel? listing_view_model = listing == null
+    final FilesystemViewModel? listing_view_model = listing == null
         ? null
         : _directory_listing_presenter.present(
             listing,

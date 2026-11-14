@@ -12,8 +12,8 @@ import 'core/rendering/theme.dart';
 
 import 'features/about/about_cli_module.dart';
 
-import 'features/filesystem/bare_filesystem_renderer.dart';
-import 'features/filesystem/filesystem_cli_module.dart';
+import 'features/filesystem/cli/filesystem_cli_module.dart';
+import 'features/filesystem/presentation/bare_filesystem_renderer.dart';
 
 import 'features/welcome/bare_welcome_renderer.dart';
 import 'features/welcome/welcome_controller.dart';

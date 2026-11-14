@@ -1,5 +1,9 @@
 import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 
+import '../filesystem/presentation/filesystem_view_model.dart';
+import '../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
+
+
 /// Immutable presentation data for Rudra's welcome screen.
 ///
 /// The view model contains information prepared for rendering,
@@ -87,7 +91,7 @@ final class WelcomeViewModel {
       );
     }
 
-    final directory_listing = listing;
+    final directory_listing = listing?.listing;
 
     if (directory_listing != null) {
       if (directory_listing.target_id != target_id ||
@@ -128,7 +132,7 @@ final class WelcomeViewModel {
   ///
   /// A non-null listing may still be incomplete.
   /// Completeness must be determined from the nested model.
-  final DirectoryListingViewModel? listing;
+  final FilesystemViewModel? listing;
 
   /// Whether a filesystem inspection target is configured.
   bool get can_inspect => target_id != null;
@@ -138,5 +142,6 @@ final class WelcomeViewModel {
   /// Returns false when no listing is available.
   /// Absence of a listing does not imply that an inspection
   /// was successfully completed.
-  bool get has_incomplete_listing => listing?.is_incomplete ?? false;
+  bool get has_incomplete_listing =>
+    listing?.inspection_issues.is_incomplete ?? false;
 }

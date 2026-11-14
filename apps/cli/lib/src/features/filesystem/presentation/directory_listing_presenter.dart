@@ -1,9 +1,10 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../core/rendering/theme.dart';
+import '../../../core/rendering/theme.dart';
 
-import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
-import 'presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
+import 'filesystem_view_model.dart';
+import 'widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
+import 'widgets/directory_listing/directory_listing_view_model.dart';
 
 /// Prepares SDK directory observations for CLI presentation.
 ///
@@ -57,7 +58,7 @@ final class DirectoryListingPresenter {
   /// All original target-native paths are preserved.
   ///
   /// The source listing and its collections are not mutated.
-  DirectoryListingViewModel present(
+  FilesystemViewModel present(
     DirectoryListing listing, {
     DirectoryListingLayout layout = DirectoryListingLayout.detailed,
   }) {
@@ -100,13 +101,18 @@ final class DirectoryListingPresenter {
         ),
     ];
 
-    return DirectoryListingViewModel(
-      layout: layout,
-      directory_path: listing.directory.value,
-      target_id: listing.target_id,
-      is_complete: listing.is_complete,
-      rows: rows,
-      issues: issues,
+    return FilesystemViewModel(
+      listing: DirectoryListingViewModel(
+        layout: layout,
+        directory_path: listing.directory.value,
+        target_id: listing.target_id,
+        is_complete: listing.is_complete,
+        rows: rows,
+      ),
+      inspection_issues: DirectoryInspectionIssuesViewModel(
+        is_complete: listing.is_complete,
+        issues: issues,
+      ),
     );
   }
 

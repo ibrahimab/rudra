@@ -6,6 +6,7 @@ import 'package:rudra_cli/src/features/welcome/bare_welcome_renderer.dart';
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:test/test.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
 
 /// Verifies the bare welcome-screen rendering backend.
 ///
@@ -384,7 +385,7 @@ void main() {
 /// The optional listing must describe the same target
 /// and starting directory.
 WelcomeViewModel _welcome({
-  DirectoryListingViewModel? listing,
+  FilesystemViewModel? listing,
 }) {
   return WelcomeViewModel(
     product_title: 'RUDRA',
@@ -394,22 +395,26 @@ WelcomeViewModel _welcome({
   );
 }
 
-/// Creates an immutable detailed filesystem presentation.
+/// Creates a detailed filesystem presentation for Welcome.
 ///
-/// Observations are already prepared for rendering.
-/// No SDK service or target adapter is involved.
-DirectoryListingViewModel _directory_listing({
+/// Both component models are supplied without SDK operations.
+FilesystemViewModel _directory_listing({
   bool is_complete = true,
   List<DirectoryEntryViewModel> rows = const [],
   List<DirectoryInspectionIssueViewModel> issues = const [],
 }) {
-  return DirectoryListingViewModel(
-    layout: DirectoryListingLayout.detailed,
-    directory_path: '/fixture',
-    target_id: 'fixture-target',
-    is_complete: is_complete,
-    rows: rows,
-    issues: issues,
+  return FilesystemViewModel(
+    listing: DirectoryListingViewModel(
+      layout: DirectoryListingLayout.detailed,
+      directory_path: '/fixture',
+      target_id: 'fixture-target',
+      is_complete: is_complete,
+      rows: rows,
+    ),
+    inspection_issues: DirectoryInspectionIssuesViewModel(
+      is_complete: is_complete,
+      issues: issues,
+    ),
   );
 }
 

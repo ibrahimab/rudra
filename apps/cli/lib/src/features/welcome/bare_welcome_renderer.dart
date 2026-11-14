@@ -2,7 +2,7 @@ import '../../core/rendering/bare/ansi_text.dart';
 import '../../core/rendering/renderer.dart';
 import '../../core/rendering/theme.dart';
 
-import '../filesystem/bare_filesystem_renderer.dart';
+import '../filesystem/presentation/bare_filesystem_renderer.dart';
 
 import 'welcome_view_model.dart';
 

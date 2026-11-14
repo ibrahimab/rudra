@@ -1,11 +1,13 @@
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../core/cli/rudra_exit_code.dart';
-import '../../core/rendering/renderer.dart';
+import '../../../core/cli/rudra_exit_code.dart';
+import '../../../core/rendering/renderer.dart';
 
-import 'directory_listing_presenter.dart';
-import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
+import '../presentation/directory_listing_presenter.dart';
+import '../presentation/filesystem_view_model.dart';
+import '../presentation/widgets/directory_listing/directory_listing_view_model.dart';
+
 
 /// Lists the immediate children of a filesystem directory.
 ///
@@ -65,7 +67,7 @@ final class ListCommand extends Command<int> {
   ListCommand({
     required RudraSdk sdk,
     required TargetPath working_directory,
-    required Renderer<DirectoryListingViewModel> renderer,
+    required Renderer<FilesystemViewModel> renderer,
     DirectoryListingPresenter presenter = const DirectoryListingPresenter(),
   })  : _sdk = sdk,
         _working_directory = working_directory,
@@ -92,7 +94,7 @@ final class ListCommand extends Command<int> {
   final TargetPath _working_directory;
 
   /// Injected presentation backend.
-  final Renderer<DirectoryListingViewModel> _renderer;
+  final Renderer<FilesystemViewModel> _renderer;
 
   /// Converts SDK observations into presentation-ready data.
   final DirectoryListingPresenter _presenter;

@@ -1,6 +1,6 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../filesystem/directory_listing_presenter.dart';
+import '../../filesystem/presentation/directory_listing_presenter.dart';
 import '../../filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import '../../filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 
@@ -93,7 +93,7 @@ final class ExplorerPresenter {
       layout: DirectoryListingLayout.compact,
     );
 
-    final rows = listing_view_model.rows;
+    final rows = listing_view_model.listing.rows;
     final total_entries = rows.length;
     final selected_index = model.selected_index;
 
@@ -128,7 +128,7 @@ final class ExplorerPresenter {
       selected_index: selected_index,
       selected_visible_index: selected_visible_index,
       visible_rows: rows.sublist(visible_start, visible_end),
-      is_complete: listing_view_model.is_complete,
+      is_complete: listing_view_model.listing.is_complete,
     );
 
     final header = ExplorerHeaderViewModel(

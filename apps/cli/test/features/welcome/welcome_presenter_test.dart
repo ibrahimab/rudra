@@ -2,6 +2,10 @@ import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory
 import 'package:rudra_cli/src/features/welcome/welcome_model.dart';
 import 'package:rudra_cli/src/features/welcome/welcome_presenter.dart';
 import 'package:rudra_cli/src/features/welcome/welcome_view_model.dart';
+
+import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
+
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -86,24 +90,24 @@ void main() {
       final directory = result.listing!;
 
       expect(
-        directory.layout,
+        directory.listing.layout,
         DirectoryListingLayout.detailed,
       );
 
-      expect(directory.target_id, 'fixture-target');
-      expect(directory.directory_path, '/fixture');
-      expect(directory.observed_count, 2);
+      expect(directory.listing.target_id, 'fixture-target');
+      expect(directory.listing.directory_path, '/fixture');
+      expect(directory.listing.observed_count, 2);
 
       // Detailed presentation sorts directories first.
       expect(
-        directory.rows.map((row) => row.name),
+        directory.listing.rows.map((row) => row.name),
         orderedEquals([
           'docs/',
           'readme.txt',
         ]),
       );
 
-      expect(directory.rows.last.size_label, '1.0 KiB');
+      expect(directory.listing.rows.last.size_label, '1.0 KiB');
 
       // The original SDK observation remains unchanged.
       expect(
@@ -139,8 +143,8 @@ void main() {
 
       final directory = result.listing!;
 
-      expect(directory.is_complete, isFalse);
-      expect(directory.observed_count, 1);
+      expect(directory.listing.is_complete, isFalse);
+      expect(directory.listing.observed_count, 1);
       expect(directory.inspection_issues.issues, hasLength(1));
       expect(
         directory.inspection_issues.issues.single.code,
@@ -164,7 +168,7 @@ void main() {
 
       expect(result.has_incomplete_listing, isTrue);
       expect(result.listing!.inspection_issues.issues, isEmpty);
-      expect(result.listing!.observed_count, 0);
+      expect(result.listing!.listing.observed_count, 0);
     });
 
     test('does not report absent listings as complete', () {
@@ -193,9 +197,9 @@ void main() {
       expect(first.target_id, second.target_id);
 
       expect(
-        first.listing!.rows.map((row) => row.path),
+        first.listing!.listing.rows.map((row) => row.path),
         orderedEquals(
-          second.listing!.rows.map((row) => row.path),
+          second.listing!.listing.rows.map((row) => row.path),
         ),
       );
     });
@@ -354,18 +358,24 @@ FilesystemEntry _entry(
   );
 }
 
-/// Creates a directory view model for invariant testing.
+/// Builds a filesystem presentation for Welcome invariants.
 ///
-/// Defaults to a complete detailed observation with no entries.
-DirectoryListingViewModel _directory_view_model({
+/// A complete, empty directory is used unless a different
+/// listing layout is requested.
+FilesystemViewModel _directory_view_model({
   DirectoryListingLayout layout = DirectoryListingLayout.detailed,
 }) {
-  return DirectoryListingViewModel(
-    layout: layout,
-    directory_path: '/fixture',
-    target_id: 'fixture-target',
-    is_complete: true,
-    rows: [],
-    issues: [],
+  return FilesystemViewModel(
+    listing: DirectoryListingViewModel(
+      layout: layout,
+      directory_path: '/fixture',
+      target_id: 'fixture-target',
+      is_complete: true,
+      rows: [],
+    ),
+    inspection_issues: DirectoryInspectionIssuesViewModel(
+      is_complete: true,
+      issues: [],
+    ),
   );
 }

@@ -1,7 +1,9 @@
 import 'package:rudra_cli/rudra_cli.dart';
-import 'package:rudra_cli/src/features/filesystem/filesystem_cli_module.dart';
-import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
-import 'package:rudra_cli/src/features/filesystem/bare_filesystem_renderer.dart';
+
+import 'package:rudra_cli/src/features/filesystem/cli/filesystem_cli_module.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
+
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -401,16 +403,16 @@ void main() {
       final view_model = renderer.models.single;
 
       expect(
-        view_model.layout,
+        view_model.listing.layout,
         DirectoryListingLayout.compact,
       );
 
-      expect(view_model.directory_path, '/fixture');
-      expect(view_model.target_id, 'local-macos');
-      expect(view_model.is_complete, isTrue);
-      expect(view_model.rows, hasLength(1));
+      expect(view_model.listing.directory_path, '/fixture');
+      expect(view_model.listing.target_id, 'local-macos');
+      expect(view_model.listing.is_complete, isTrue);
+      expect(view_model.listing.rows, hasLength(1));
 
-      final row = view_model.rows.single;
+      final row = view_model.listing.rows.single;
 
       expect(row.path, '/fixture/example.txt');
       expect(row.logical_bytes, '2048');
@@ -440,7 +442,7 @@ RudraCli _create_cli({
   required StringBuffer output,
   required StringBuffer error_output,
   String target_id = 'local-macos',
-  Renderer<DirectoryListingViewModel>? renderer,
+  Renderer<FilesystemViewModel>? renderer,
 }) {
   final sdk = RudraSdk(
     target_id: target_id,
@@ -493,13 +495,13 @@ FilesystemEntry _create_entry(
 ///
 /// Rendering performs no I/O and does not modify the models.
 final class _RecordingFilesystemRenderer
-    implements Renderer<DirectoryListingViewModel> {
+    implements Renderer<FilesystemViewModel> {
   /// ViewModels supplied during command execution.
-  final List<DirectoryListingViewModel> models = [];
+  final List<FilesystemViewModel> models = [];
 
   /// Records one presentation request without producing output.
   @override
-  void render(DirectoryListingViewModel view_model) {
+  void render(FilesystemViewModel view_model) {
     models.add(view_model);
   }
 }

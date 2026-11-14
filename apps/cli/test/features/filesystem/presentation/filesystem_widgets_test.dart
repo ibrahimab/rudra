@@ -6,7 +6,8 @@ import 'package:rudra_cli/src/core/rendering/widgets/terminal_label.dart';
 import 'package:rudra_cli/src/core/rendering/widgets/terminal_widget.dart';
 import 'package:rudra_cli/src/core/rendering/terminal_text.dart';
 
-import 'package:rudra_cli/src/features/filesystem/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_widget.dart';
@@ -29,7 +30,7 @@ void main() {
         rows: [_row()],
       );
 
-      final widget = DirectoryListingWidget(model);
+      final widget = DirectoryListingWidget(model.listing);
 
       final lines = widget
           .build(
@@ -49,7 +50,7 @@ void main() {
         rows: [_row()],
       );
 
-      final widget = DirectoryListingWidget(model);
+      final widget = DirectoryListingWidget(model.listing);
 
       final lines = widget
           .build(
@@ -77,7 +78,7 @@ void main() {
         rows: [_row()],
       );
 
-      final widget = DirectoryListingWidget(model);
+      final widget = DirectoryListingWidget(model.listing);
 
       final lines = widget
           .build(
@@ -128,7 +129,7 @@ void main() {
       BareWidgetRenderer(
         output: output,
       ).render(
-        DirectoryListingWidget(model),
+        DirectoryListingWidget(model.listing),
       );
 
       expect(output.toString(), contains('unsafe?[2Jname.txt'));
@@ -147,7 +148,7 @@ void main() {
         output: output,
         terminal_columns: () => 12,
       ).render(
-        DirectoryListingWidget(model),
+        DirectoryListingWidget(model.listing),
       );
 
       for (final line in output.toString().split('\n')) {
@@ -170,7 +171,7 @@ void main() {
             'WELCOME',
             role: TerminalRole.title,
           ),
-          DirectoryListingWidget(model),
+          DirectoryListingWidget(model.listing),
           const TerminalLabel('Available commands:'),
         ],
       );
@@ -206,7 +207,7 @@ void main() {
         theme: TerminalTheme.ansi,
         ansi_text: const AnsiText(enabled: true),
       ).render(
-        DirectoryListingWidget(model),
+        DirectoryListingWidget(model.listing),
       );
 
       expect(output.toString(), contains('\x1B[1;36m'));
@@ -313,24 +314,69 @@ void main() {
       expect(errors.toString(), isNot(contains('\x1B[2J')));
     });
   });
+
+  group('FilesystemViewModel', () {
+    test('composes independently owned presentation data', () {
+      final model = _listing(
+        layout: DirectoryListingLayout.detailed,
+        is_complete: false,
+        rows: [_row()],
+        issues: [_issue()],
+      );
+
+      expect(model.listing.rows, hasLength(1));
+      expect(model.listing.is_incomplete, isTrue);
+      expect(model.inspection_issues.issues, hasLength(1));
+      expect(model.inspection_issues.is_incomplete, isTrue);
+    });
+
+    test('rejects mismatched inspection completeness', () {
+      final listing = DirectoryListingViewModel(
+        layout: DirectoryListingLayout.compact,
+        directory_path: '/fixture',
+        target_id: 'fixture-target',
+        is_complete: true,
+        rows: [],
+      );
+
+      final issues = DirectoryInspectionIssuesViewModel(
+        is_complete: false,
+        issues: [],
+      );
+
+      expect(
+        () => FilesystemViewModel(
+          listing: listing,
+          inspection_issues: issues,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
 }
 
-/// Creates an immutable filesystem listing presentation.
+/// Creates a complete filesystem presentation fixture.
 ///
-/// All data is supplied without invoking the SDK.
-DirectoryListingViewModel _listing({
+/// Listing rows and inspection diagnostics are independent,
+/// but both retain the supplied completeness status.
+FilesystemViewModel _listing({
   required DirectoryListingLayout layout,
   List<DirectoryEntryViewModel> rows = const [],
   List<DirectoryInspectionIssueViewModel> issues = const [],
   bool is_complete = true,
 }) {
-  return DirectoryListingViewModel(
-    layout: layout,
-    directory_path: '/fixture',
-    target_id: 'fixture-target',
-    is_complete: is_complete,
-    rows: rows,
-    issues: issues,
+  return FilesystemViewModel(
+    listing: DirectoryListingViewModel(
+      layout: layout,
+      directory_path: '/fixture',
+      target_id: 'fixture-target',
+      is_complete: is_complete,
+      rows: rows,
+    ),
+    inspection_issues: DirectoryInspectionIssuesViewModel(
+      is_complete: is_complete,
+      issues: issues,
+    ),
   );
 }
 

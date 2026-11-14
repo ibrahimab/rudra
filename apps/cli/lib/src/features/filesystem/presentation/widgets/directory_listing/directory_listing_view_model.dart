@@ -1,7 +1,5 @@
 import '../../../../../core/rendering/theme.dart';
 
-import '../directory_inspection_issues/directory_inspection_issues_view_model.dart';
-
 /// Identifies the presentation layout for a directory listing.
 ///
 /// The layout describes the intended CLI presentation, not
@@ -109,25 +107,22 @@ final class DirectoryEntryViewModel {
 /// renderer.render(view_model);
 /// ```
 final class DirectoryListingViewModel {
-  /// Creates an immutable filesystem listing presentation.
+  /// Creates an immutable directory listing presentation.
   ///
-  /// Entry rows remain owned by the listing component.
-  /// Diagnostics are represented by their dedicated
-  /// [DirectoryInspectionIssuesViewModel].
+  /// The listing owns observed entry rows and their display
+  /// layout, but not inspection diagnostic collections.
   ///
-  /// Both components describe the same inspection result.
+  /// A failed or incomplete observation remains explicitly
+  /// identified by [is_complete].
+  ///
+  /// Entry rows are defensively copied.
   DirectoryListingViewModel({
     required this.layout,
     required this.directory_path,
     required this.target_id,
     required this.is_complete,
     required List<DirectoryEntryViewModel> rows,
-    required List<DirectoryInspectionIssueViewModel> issues,
-  })  : rows = List<DirectoryEntryViewModel>.unmodifiable(rows),
-        inspection_issues = DirectoryInspectionIssuesViewModel(
-          is_complete: is_complete,
-          issues: issues,
-        );
+  }) : rows = List<DirectoryEntryViewModel>.unmodifiable(rows);
 
   /// Requested CLI presentation layout.
   final DirectoryListingLayout layout;
@@ -146,12 +141,6 @@ final class DirectoryListingViewModel {
 
   /// Immutable collection of observed entry rows.
   final List<DirectoryEntryViewModel> rows;
-
-  /// Independent presentation of inspection diagnostics.
-  ///
-  /// This component can be rendered separately from entry rows,
-  /// including to a diagnostic output stream.
-  final DirectoryInspectionIssuesViewModel inspection_issues;
 
   /// Number of successfully observed entries.
   int get observed_count => rows.length;

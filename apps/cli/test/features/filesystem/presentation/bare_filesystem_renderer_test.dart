@@ -1,6 +1,7 @@
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/bare/ansi_text.dart';
-import 'package:rudra_cli/src/features/filesystem/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/bare_filesystem_renderer.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/filesystem_view_model.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:test/test.dart';
@@ -435,22 +436,27 @@ List<DirectoryEntryViewModel> _sample_rows() {
   ];
 }
 
-/// Creates an immutable directory listing presentation.
+/// Creates independent directory and diagnostic presentations.
 ///
-/// No SDK invocation or filesystem inspection is performed.
-DirectoryListingViewModel _model({
+/// Both components describe the same synthetic observation.
+FilesystemViewModel _model({
   required DirectoryListingLayout layout,
   List<DirectoryEntryViewModel>? rows,
   List<DirectoryInspectionIssueViewModel>? issues,
   bool is_complete = true,
 }) {
-  return DirectoryListingViewModel(
-    layout: layout,
-    directory_path: '/fixture',
-    target_id: 'fixture-target',
-    is_complete: is_complete,
-    rows: rows ?? _sample_rows(),
-    issues: issues ?? const [],
+  return FilesystemViewModel(
+    listing: DirectoryListingViewModel(
+      layout: layout,
+      directory_path: '/fixture',
+      target_id: 'fixture-target',
+      is_complete: is_complete,
+      rows: rows ?? _sample_rows(),
+    ),
+    inspection_issues: DirectoryInspectionIssuesViewModel(
+      is_complete: is_complete,
+      issues: issues ?? const [],
+    ),
   );
 }
 

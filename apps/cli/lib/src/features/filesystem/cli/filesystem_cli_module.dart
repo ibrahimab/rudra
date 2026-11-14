@@ -1,10 +1,10 @@
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../core/cli/rudra_cli_module.dart';
-import '../../core/rendering/renderer.dart';
+import '../../../core/cli/rudra_cli_module.dart';
+import '../../../core/rendering/renderer.dart';
 
-import 'presentation/widgets/directory_listing/directory_listing_view_model.dart';
+import '../presentation/filesystem_view_model.dart';
 import 'list_command.dart';
 
 /// Registers SDK-backed filesystem commands for Rudra.
@@ -64,7 +64,7 @@ final class FilesystemCliModule implements RudraCliModule {
   FilesystemCliModule({
     required RudraSdk sdk,
     required TargetPath working_directory,
-    required Renderer<DirectoryListingViewModel> renderer,
+    required Renderer<FilesystemViewModel> renderer,
   })  : _sdk = sdk,
         _working_directory = working_directory,
         _renderer = renderer;
@@ -76,7 +76,7 @@ final class FilesystemCliModule implements RudraCliModule {
   final TargetPath _working_directory;
 
   /// Injected backend-independent filesystem renderer.
-  final Renderer<DirectoryListingViewModel> _renderer;
+  final Renderer<FilesystemViewModel> _renderer;
 
   /// Stable identifier of Rudra's filesystem command module.
   @override

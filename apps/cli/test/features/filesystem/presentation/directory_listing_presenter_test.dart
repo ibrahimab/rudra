@@ -1,4 +1,4 @@
-import 'package:rudra_cli/src/features/filesystem/directory_listing_presenter.dart';
+import 'package:rudra_cli/src/features/filesystem/presentation/directory_listing_presenter.dart';
 import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory_listing/directory_listing_view_model.dart';
 import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -28,9 +28,9 @@ void main() {
         layout: DirectoryListingLayout.compact,
       );
 
-      expect(model.layout, DirectoryListingLayout.compact);
+      expect(model.listing.layout, DirectoryListingLayout.compact);
       expect(
-        model.rows.map((row) => row.path),
+        model.listing.rows.map((row) => row.path),
         orderedEquals([
           '/fixture/z.txt',
           '/fixture/docs',
@@ -42,7 +42,7 @@ void main() {
     test('defaults to the detailed layout', () {
       final model = presenter.present(_listing([]));
 
-      expect(model.layout, DirectoryListingLayout.detailed);
+      expect(model.listing.layout, DirectoryListingLayout.detailed);
     });
 
     test('detailed layout sorts directories before files', () {
@@ -56,7 +56,7 @@ void main() {
       final model = presenter.present(listing);
 
       expect(
-        model.rows.map((row) => row.name),
+        model.listing.rows.map((row) => row.name),
         orderedEquals([
           'Alpha/',
           'zeta/',
@@ -78,7 +78,7 @@ void main() {
       final model = presenter.present(listing);
 
       expect(
-        model.rows.map((row) => row.path),
+        model.listing.rows.map((row) => row.path),
         orderedEquals([
           '/fixture/A.txt',
           '/fixture/a.txt',
@@ -96,15 +96,15 @@ void main() {
 
       final model = presenter.present(listing);
 
-      expect(model.directory_path, '/fixture');
-      expect(model.target_id, 'fixture-target');
-      expect(model.observed_count, 2);
+      expect(model.listing.directory_path, '/fixture');
+      expect(model.listing.target_id, 'fixture-target');
+      expect(model.listing.observed_count, 2);
 
-      expect(model.rows[0].name, 'apps/');
-      expect(model.rows[0].path, '/fixture/apps');
+      expect(model.listing.rows[0].name, 'apps/');
+      expect(model.listing.rows[0].path, '/fixture/apps');
 
-      expect(model.rows[1].name, 'readme.txt');
-      expect(model.rows[1].path, '/fixture/readme.txt');
+      expect(model.listing.rows[1].name, 'readme.txt');
+      expect(model.listing.rows[1].path, '/fixture/readme.txt');
     });
 
     test('preserves Windows-native path spelling', () {
@@ -120,9 +120,9 @@ void main() {
 
       final model = presenter.present(listing);
 
-      expect(model.directory_path, r'C:\workspace');
-      expect(model.rows.single.path, r'C:\workspace\src');
-      expect(model.rows.single.name, 'src/');
+      expect(model.listing.directory_path, r'C:\workspace');
+      expect(model.listing.rows.single.path, r'C:\workspace\src');
+      expect(model.listing.rows.single.name, 'src/');
     });
 
     test('preserves unexpected paths instead of rewriting them', () {
@@ -136,12 +136,12 @@ void main() {
       final model = presenter.present(listing);
 
       expect(
-        model.rows.single.name,
+        model.listing.rows.single.name,
         '/fixture-extra/file.txt',
       );
 
       expect(
-        model.rows.single.path,
+        model.listing.rows.single.path,
         '/fixture-extra/file.txt',
       );
     });
@@ -160,7 +160,7 @@ void main() {
       );
 
       expect(
-        model.rows.map((row) => row.type_label),
+        model.listing.rows.map((row) => row.type_label),
         orderedEquals([
           'Directory',
           'File',
@@ -170,7 +170,7 @@ void main() {
       );
 
       expect(
-        model.rows.map((row) => row.role),
+        model.listing.rows.map((row) => row.role),
         orderedEquals([
           TerminalRole.directory,
           TerminalRole.regular_file,
@@ -180,7 +180,7 @@ void main() {
       );
 
       expect(
-        model.rows.map((row) => row.compact_type),
+        model.listing.rows.map((row) => row.compact_type),
         orderedEquals([
           'directory',
           'regularFile',
@@ -225,7 +225,7 @@ void main() {
       );
 
       expect(
-        model.rows.map((row) => row.logical_bytes),
+        model.listing.rows.map((row) => row.logical_bytes),
         orderedEquals([
           '4096',
           '0',
@@ -236,7 +236,7 @@ void main() {
       );
 
       expect(
-        model.rows.map((row) => row.size_label),
+        model.listing.rows.map((row) => row.size_label),
         orderedEquals([
           '—',
           '0 B',
@@ -272,7 +272,7 @@ void main() {
       );
 
       expect(
-        model.rows.map((row) => row.permissions),
+        model.listing.rows.map((row) => row.permissions),
         orderedEquals([
           '-rw-r--r--',
           '-rwsr-xr-x',
@@ -292,7 +292,7 @@ void main() {
 
       final model = presenter.present(listing);
 
-      expect(model.rows.single.modified_utc, '2026-11-10 21:15');
+      expect(model.listing.rows.single.modified_utc, '2026-11-10 21:15');
     });
 
     test('preserves explicitly unknown metadata', () {
@@ -303,7 +303,7 @@ void main() {
         ),
       ]);
 
-      final row = presenter.present(listing).rows.single;
+      final row = presenter.present(listing).listing.rows.single;
 
       expect(row.logical_bytes, '?');
       expect(row.size_label, '?');
@@ -334,9 +334,9 @@ void main() {
 
       final model = presenter.present(listing);
 
-      expect(model.is_complete, isFalse);
-      expect(model.is_incomplete, isTrue);
-      expect(model.observed_count, 1);
+      expect(model.listing.is_complete, isFalse);
+      expect(model.listing.is_incomplete, isTrue);
+      expect(model.listing.observed_count, 1);
       expect(model.inspection_issues.issues, hasLength(1));
 
       final diagnostic = model.inspection_issues.issues.single;
@@ -352,9 +352,9 @@ void main() {
         _listing([], is_complete: false),
       );
 
-      expect(model.is_incomplete, isTrue);
+      expect(model.listing.is_incomplete, isTrue);
       expect(model.inspection_issues.issues, isEmpty);
-      expect(model.rows, isEmpty);
+      expect(model.listing.rows, isEmpty);
     });
 
     test('defensively preserves immutable collections', () {
@@ -368,7 +368,7 @@ void main() {
       );
 
       expect(
-        () => model.rows.clear(),
+        () => model.listing.rows.clear(),
         throwsUnsupportedError,
       );
 
