@@ -52,3 +52,7 @@ export 'processing/workflow_commit_exception.dart';
 export 'processing/workflow_submission_resolution.dart';
 export 'processing/workflow_processing_result.dart';
 export 'processing/workflow_quarantine.dart';
+
+/// Read-only workflow history and restoration.
+export 'reading/workflow_history_store.dart';
+export 'reading/workflow_state_reader.dart';
