@@ -5,6 +5,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
 
 import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_committer.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_history_store.dart';
 
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_event_submission_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
@@ -59,8 +60,7 @@ void main() {
     committer = DriftWorkflowCommitter(
       database: database,
       scope_id: scope_id,
-      codec: codec,
-      flow: runtime.flow,
+      runtime: runtime,
     );
   });
 
@@ -416,8 +416,8 @@ void main() {
     final failing_committer = DriftWorkflowCommitter(
       database: database,
       scope_id: scope_id,
+      runtime: runtime,
       codec: incomplete_codec,
-      flow: runtime.flow,
     );
 
     await expectLater(failing_committer.commit(plan), throwsUnsupportedError);
@@ -433,6 +433,122 @@ void main() {
         .getSingle();
 
     expect(submission.processing_state, 'pending');
+  });
+
+  test(
+    'refuses a second start when the ownership projection is missing',
+    () async {
+      await submit('/first');
+
+      expect(
+        await processor('workflow-1').process_next(),
+        isA<WorkflowProcessingCommitted>(),
+      );
+
+      // Simulate loss of the derived ownership reservation.
+      // The authoritative workflow journal remains committed.
+      await database.delete(database.unfinishedWorkflows).go();
+
+      final second = await submit('/second');
+
+      // Bypass the normal CLI read-before-start check.
+      // The commit boundary must still protect the invariant.
+      await expectLater(
+        processor('workflow-2').process_next(),
+        throwsA(
+          isA<WorkflowStateReadException>().having(
+            (error) => error.code,
+            'code',
+            WorkflowStateReadErrorCode.orphaned_workflow,
+          ),
+        ),
+      );
+
+      // No second workflow was committed.
+      final history = await database.select(database.workflowEvents).get();
+
+      expect(history, hasLength(2));
+      expect(history.map((event) => event.workflow_id).toSet(), {'workflow-1'});
+
+      // The failed commit must not recreate a projection.
+      expect(
+        await database.select(database.unfinishedWorkflows).get(),
+        isEmpty,
+      );
+
+      // An integrity failure is not a confirmed business rejection.
+      // The submission remains pending for explicit recovery.
+      final status = await DriftWorkflowStatusReader(
+        database: database,
+        scope_id: scope_id,
+      ).status_for(second);
+
+      expect(status, isNotNull);
+      expect(status!.state, WorkflowSubmissionState.pending);
+    },
+  );
+
+  test('allows a new workflow after a valid terminal history', () async {
+    await submit('/first');
+
+    expect(
+      await processor('workflow-1').process_next(),
+      isA<WorkflowProcessingCommitted>(),
+    );
+
+    final original = await database.select(database.workflowEvents).get();
+    final correlation_id = original.first.correlation_id;
+
+    // Simulate a future atomic workflow-end commitment.
+    // Production stop processing is not implemented yet.
+    await database.transaction(() async {
+      await database
+          .into(database.workflowEvents)
+          .insert(
+            WorkflowEventsCompanion.insert(
+              event_id: 'workflow-1-ended',
+              workflow_id: 'workflow-1',
+              version: 3,
+              correlation_id: correlation_id,
+              event_type: WorkflowEndedEvent.type_id,
+              payload_json: codec.encode(
+                WorkflowEndedEvent(workflow_id: 'workflow-1'),
+              ),
+              recorded_at_unix_ms: DateTime.now()
+                  .toUtc()
+                  .millisecondsSinceEpoch,
+            ),
+          );
+
+      await database.delete(database.unfinishedWorkflows).go();
+    });
+
+    expect(
+      await WorkflowStateReader(
+        runtime: runtime,
+        history_store: DriftWorkflowHistoryStore(database: database),
+        os_user_id: os_user_id,
+      ).current(),
+      isNull,
+    );
+
+    await submit('/second');
+
+    expect(
+      await processor('workflow-2').process_next(),
+      isA<WorkflowProcessingCommitted>(),
+    );
+
+    // The old journal is preserved and the new workflow
+    // receives the ownership reservation.
+    final history = await database.select(database.workflowEvents).get();
+    final reservations = await database
+        .select(database.unfinishedWorkflows)
+        .get();
+
+    expect(history, hasLength(5));
+    expect(reservations, hasLength(1));
+    expect(reservations.single.workflow_id, 'workflow-2');
   });
 }
 

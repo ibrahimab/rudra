@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../../database/rudra_database.dart';
 
+import 'drift_workflow_history_store.dart';
+
 /// Atomically establishes a new workflow in SQLite.
 ///
 /// This first implementation supports an initial workflow
@@ -28,12 +30,13 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
   DriftWorkflowCommitter({
     required RudraDatabase database,
     required String scope_id,
-    required WorkflowEventCodec codec,
-    required WorkflowFlow flow,
+    required WorkflowRuntime runtime,
+    WorkflowEventCodec? codec,
   }) : _database = database,
        _scope_id = _require_scope(scope_id),
-       _codec = codec,
-       _machine = WorkflowStateMachine(flow: flow);
+       _runtime = runtime,
+       _codec = codec ?? runtime.codec,
+       _machine = WorkflowStateMachine(flow: runtime.flow);
 
   static final Uuid _uuid = Uuid();
 
@@ -41,6 +44,9 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
   final String _scope_id;
   final WorkflowEventCodec _codec;
   final WorkflowStateMachine _machine;
+
+  /// Shared SDK runtime used for authoritative history validation.
+  final WorkflowRuntime _runtime;
 
   /// Atomically commits the first two events of a workflow.
   ///
@@ -123,6 +129,31 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
       }
 
       final identity = replayed.identity;
+
+      // Verify committed ownership within the same transaction
+      // that will reserve and establish the new workflow.
+      //
+      // The unfinished-workflow projection alone is insufficient:
+      // it could have been deleted or incorrectly reassigned.
+      //
+      // This SDK reader validates indexed journal histories through
+      // the configured workflow state machine.
+      //
+      // A missing projection for an active workflow throws a typed
+      // integrity failure. Do not convert that failure into a
+      // business rejection or silently repair the database.
+      final existing_workflow = await WorkflowStateReader(
+        runtime: _runtime,
+        history_store: DriftWorkflowHistoryStore(database: _database),
+        os_user_id: identity.os_user_id,
+      ).current();
+
+      if (existing_workflow != null) {
+        throw const WorkflowCommitException(
+          code: WorkflowCommitErrorCode.ownership_conflict,
+          message: 'The OS user already has an active workflow.',
+        );
+      }
 
       // Enforce one unfinished workflow per OS user.
       // The SQLite primary key independently enforces this

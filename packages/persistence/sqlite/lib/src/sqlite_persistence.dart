@@ -79,8 +79,7 @@ final class RudraSqlitePersistence {
   late final WorkflowCommitter workflow_committer = DriftWorkflowCommitter(
     database: _database,
     scope_id: _scope_id,
-    codec: _runtime.codec,
-    flow: _runtime.flow,
+    runtime: _runtime,
   );
 
   /// Read-only access to authoritative committed workflow history.

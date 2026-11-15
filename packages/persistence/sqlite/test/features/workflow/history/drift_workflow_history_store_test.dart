@@ -93,8 +93,7 @@ void main() {
       committer: DriftWorkflowCommitter(
         database: database,
         scope_id: scope_id,
-        codec: runtime.codec,
-        flow: runtime.flow,
+        runtime: runtime,
       ),
       rejector: DriftWorkflowRejectionStore(
         database: database,
@@ -497,7 +496,6 @@ void main() {
             WorkflowEventsCompanion.insert(
               event_id: 'foreign-start-event',
               workflow_id: foreign_workflow_id,
-              os_user_id: const Value('foreign-os-user'),
               version: 1,
               correlation_id: 'foreign-correlation',
               event_type: WorkflowStartEvent.type_id,
@@ -514,6 +512,7 @@ void main() {
             WorkflowEventsCompanion.insert(
               event_id: 'foreign-started-event',
               workflow_id: foreign_workflow_id,
+              os_user_id: const Value('foreign-os-user'),
               version: 2,
               correlation_id: 'foreign-correlation',
               event_type: WorkflowStartedEvent.type_id,
