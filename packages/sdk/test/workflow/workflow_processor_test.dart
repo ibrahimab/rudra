@@ -3,11 +3,13 @@ import 'package:test/test.dart';
 
 /// Verifies processing orchestration with independent test doubles.
 void main() {
-  late WorkflowModuleRegistry registry;
+  late WorkflowRuntime runtime;
 
   setUp(() {
-    registry = WorkflowModuleRegistry()
+    final registry = WorkflowModuleRegistry()
       ..register(const LifecycleWorkflowModule());
+
+    runtime = WorkflowRuntime.from_registry(registry);
   });
 
   test('commits a validated workflow start', () async {
@@ -15,7 +17,7 @@ void main() {
     final committer = _FakeWorkflowCommitter();
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: inbox,
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: committer,
@@ -54,7 +56,7 @@ void main() {
     final identity_provider = _FakeWorkflowIdentityProvider();
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _FakeWorkflowInbox(null),
       identity_provider: identity_provider,
       committer: committer,
@@ -71,7 +73,7 @@ void main() {
     final committer = _FakeWorkflowCommitter();
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(root: '/different-root'),
       committer: committer,
@@ -97,7 +99,7 @@ void main() {
     final committer = _FakeWorkflowCommitter(fail_commit: true);
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: committer,
@@ -114,7 +116,7 @@ void main() {
     final rejector = _FakeWorkflowRejector();
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: _RejectingWorkflowCommitter(
@@ -143,7 +145,7 @@ void main() {
     final rejector = _FakeWorkflowRejector();
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: _RejectingWorkflowCommitter(
@@ -171,7 +173,7 @@ void main() {
     final rejector = _FakeWorkflowRejector(fail_rejection: true);
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: _RejectingWorkflowCommitter(
@@ -202,7 +204,7 @@ void main() {
     );
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _UnreadableWorkflowInbox(issue),
       identity_provider: identity_provider,
       committer: committer,
@@ -241,7 +243,7 @@ void main() {
     );
 
     final processor = WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: _UnreadableWorkflowInbox(issue),
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: _FakeWorkflowCommitter(),

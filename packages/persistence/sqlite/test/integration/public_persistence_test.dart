@@ -7,6 +7,8 @@ import 'package:test/test.dart';
 /// Verifies persistence through its public composition API.
 void main() {
   test('recovers submissions through public SDK contracts', () async {
+    final runtime = WorkflowRuntime.standard();
+
     final directory = await Directory.systemTemp.createTemp(
       'rudra-public-persistence-',
     );
@@ -22,6 +24,7 @@ void main() {
       final first = RudraSqlitePersistence(
         database_file: database_file,
         scope_id: 'test-user',
+        runtime: runtime,
       );
 
       late final EventSubmissionReceipt original;
@@ -42,6 +45,7 @@ void main() {
       final reopened = RudraSqlitePersistence(
         database_file: database_file,
         scope_id: 'test-user',
+        runtime: runtime,
       );
 
       try {
@@ -67,6 +71,7 @@ void main() {
       () => RudraSqlitePersistence(
         database_file: File('unused.db'),
         scope_id: ' ',
+        runtime: WorkflowRuntime.standard(),
       ),
       throwsArgumentError,
     );

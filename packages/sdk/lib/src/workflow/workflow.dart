@@ -28,6 +28,7 @@ export 'workflow_flow.dart';
 export 'workflow_flow_exception.dart';
 export 'workflow_state_machine.dart';
 export 'workflow_transition_exception.dart';
+export 'workflow_runtime.dart';
 
 /// Extension contracts and module registration.
 export 'transitions/workflow_transition.dart';

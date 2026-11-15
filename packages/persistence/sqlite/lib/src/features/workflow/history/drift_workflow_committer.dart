@@ -15,18 +15,24 @@ import '../../../database/rudra_database.dart';
 /// It does not generate identities, process commands,
 /// or execute filesystem operations.
 final class DriftWorkflowCommitter implements WorkflowCommitter {
-  /// Creates a committer using a shared database connection.
+  /// Creates a committer with explicitly configured workflow rules.
   ///
-  /// [scope_id] must be supplied by trusted application composition.
-  /// [codec] and [flow] must match the processor configuration.
+  /// [codec] serializes committed events and reads historical
+  /// command representations.
+  ///
+  /// [flow] must be the same transition graph used by the
+  /// processor that creates workflow processing plans.
+  ///
+  /// Production composition supplies both from one
+  /// immutable WorkflowRuntime.
   DriftWorkflowCommitter({
     required RudraDatabase database,
     required String scope_id,
-    WorkflowEventCodec? codec,
-    WorkflowFlow? flow,
+    required WorkflowEventCodec codec,
+    required WorkflowFlow flow,
   }) : _database = database,
        _scope_id = _require_scope(scope_id),
-       _codec = codec ?? WorkflowEventCodec.standard(),
+       _codec = codec,
        _machine = WorkflowStateMachine(flow: flow);
 
   static final Uuid _uuid = Uuid();

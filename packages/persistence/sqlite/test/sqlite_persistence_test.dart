@@ -29,7 +29,7 @@ void main() {
     final registry = WorkflowModuleRegistry()
       ..register(const LifecycleWorkflowModule());
 
-    final codec = WorkflowEventCodec.from_registry(registry);
+    final runtime = WorkflowRuntime.from_registry(registry);
 
     late EventSubmissionReceipt first;
     late EventSubmissionReceipt second;
@@ -39,7 +39,7 @@ void main() {
       final persistence = RudraSqlitePersistence(
         database_file: database_file,
         scope_id: scope_id,
-        codec: codec,
+        runtime: runtime,
       );
 
       try {
@@ -68,7 +68,7 @@ void main() {
         /// Creates a processor from public SDK contracts.
         WorkflowProcessor make_processor(String workflow_id) {
           return WorkflowProcessor(
-            registry: registry,
+            runtime: runtime,
             inbox: persistence.workflow_inbox,
             identity_provider: _TestIdentityProvider(
               workflow_id: workflow_id,
@@ -117,7 +117,7 @@ void main() {
       final reopened = RudraSqlitePersistence(
         database_file: database_file,
         scope_id: scope_id,
-        codec: codec,
+        runtime: runtime,
       );
 
       try {

@@ -27,6 +27,7 @@ void main() {
   late EventManager manager;
   late DriftWorkflowInbox inbox;
   late DriftWorkflowCommitter committer;
+  late WorkflowRuntime runtime;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('rudra-committer-test-');
@@ -38,7 +39,8 @@ void main() {
     registry = WorkflowModuleRegistry()
       ..register(const LifecycleWorkflowModule());
 
-    codec = WorkflowEventCodec.from_registry(registry);
+    runtime = WorkflowRuntime.from_registry(registry);
+    codec = runtime.codec;
 
     manager = EventManager(
       store: DriftEventSubmissionStore(
@@ -58,6 +60,7 @@ void main() {
       database: database,
       scope_id: scope_id,
       codec: codec,
+      flow: runtime.flow,
     );
   });
 
@@ -76,7 +79,7 @@ void main() {
   /// Constructs a processor with deterministic test identities.
   WorkflowProcessor processor(String workflow_id) {
     return WorkflowProcessor(
-      registry: registry,
+      runtime: runtime,
       inbox: inbox,
       identity_provider: _TestIdentityProvider(
         workflow_id: workflow_id,
@@ -151,7 +154,7 @@ void main() {
       ),
     );
 
-    final restored = WorkflowStateMachine().replay(events);
+    final restored = WorkflowStateMachine(flow: runtime.flow).replay(events);
 
     expect(restored, isA<WorkflowActiveState>());
     expect(restored.version, 2);
@@ -411,6 +414,7 @@ void main() {
       database: database,
       scope_id: scope_id,
       codec: incomplete_codec,
+      flow: runtime.flow,
     );
 
     await expectLater(failing_committer.commit(plan), throwsUnsupportedError);

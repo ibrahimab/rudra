@@ -25,6 +25,7 @@ import 'features/workflow/submissions/drift_workflow_quarantine_store.dart';
 /// final persistence = RudraSqlitePersistence(
 ///   database_file: File('rudra.db'),
 ///   scope_id: 'trusted-user',
+///   runtime: WorkflowRuntime.standard(),
 /// );
 ///
 /// try {
@@ -38,18 +39,21 @@ import 'features/workflow/submissions/drift_workflow_quarantine_store.dart';
 final class RudraSqlitePersistence {
   /// Creates a SQLite persistence context.
   ///
-  /// The optional codec allows application composition to
-  /// register additional workflow modules consistently.
+  /// [runtime] supplies the exact workflow configuration
+  /// shared with the SDK processor.
+  ///
+  /// The database does not register modules or construct
+  /// default state-transition rules independently.
   RudraSqlitePersistence({
     required File database_file,
     required String scope_id,
-    WorkflowEventCodec? codec,
+    required WorkflowRuntime runtime,
   }) : _scope_id = _validate_scope(scope_id),
-       _codec = codec ?? WorkflowEventCodec.standard(),
+       _runtime = runtime,
        _database = RudraDatabase.file(database_file);
 
   final String _scope_id;
-  final WorkflowEventCodec _codec;
+  final WorkflowRuntime _runtime;
   final RudraDatabase _database;
 
   /// Durable submission contract consumed by the SDK.
@@ -57,14 +61,14 @@ final class RudraSqlitePersistence {
       DriftEventSubmissionStore(
         database: _database,
         scope_id: _scope_id,
-        codec: _codec,
+        codec: _runtime.codec,
       );
 
   /// Read boundary for accepted workflow commands.
   late final WorkflowInbox workflow_inbox = DriftWorkflowInbox(
     database: _database,
     scope_id: _scope_id,
-    codec: _codec,
+    codec: _runtime.codec,
   );
 
   /// Atomic persistence boundary for committed workflow changes.
@@ -74,7 +78,8 @@ final class RudraSqlitePersistence {
   late final WorkflowCommitter workflow_committer = DriftWorkflowCommitter(
     database: _database,
     scope_id: _scope_id,
-    codec: _codec,
+    codec: _runtime.codec,
+    flow: _runtime.flow,
   );
 
   /// Records confirmed business rejections of pending commands.
@@ -85,7 +90,7 @@ final class RudraSqlitePersistence {
       DriftWorkflowRejectionStore(
         database: _database,
         scope_id: _scope_id,
-        codec: _codec,
+        codec: _runtime.codec,
       );
 
   /// Durable quarantine boundary for unreadable submissions.

@@ -1,8 +1,7 @@
 import '../behaviors/workflow_behavior.dart';
 import '../events/workflow_event.dart';
-import '../modules/workflow_module_registry.dart';
-import '../workflow_flow.dart';
 import '../workflow_state_machine.dart';
+import '../workflow_runtime.dart';
 
 import 'workflow_committer.dart';
 import 'workflow_identity_provider.dart';
@@ -21,12 +20,13 @@ import 'workflow_quarantine.dart';
 /// Does not access SQLite, perform filesystem operations,
 /// or commit changes itself.
 final class WorkflowProcessor {
-  /// Creates a processor from independently supplied services.
+  /// [runtime] supplies the immutable command handlers and
+  /// transition graph shared with persistence composition.
   ///
-  /// Transition and command-handler registrations are
-  /// snapshotted during construction.
+  /// The processor does not independently register modules
+  /// or construct a separate workflow configuration.
   WorkflowProcessor({
-    required WorkflowModuleRegistry registry,
+    required WorkflowRuntime runtime,
     required WorkflowInbox inbox,
     required WorkflowIdentityProvider identity_provider,
     required WorkflowCommitter committer,
@@ -37,10 +37,8 @@ final class WorkflowProcessor {
        _committer = committer,
        _rejector = rejector,
        _quarantiner = quarantiner,
-       _handlers = Map.unmodifiable(registry.command_behaviors),
-       _machine = WorkflowStateMachine(
-         flow: WorkflowFlow(transitions: registry.transitions),
-       );
+       _handlers = runtime.command_behaviors,
+       _machine = WorkflowStateMachine(flow: runtime.flow);
 
   final WorkflowInbox _inbox;
   final WorkflowIdentityProvider _identity_provider;
