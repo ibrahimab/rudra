@@ -1,6 +1,7 @@
 import '../behaviors/workflow_behavior.dart';
 import '../serialization/workflow_event_serializer.dart';
 import '../transitions/workflow_transition.dart';
+import '../events/workflow_event.dart';
 import 'workflow_module.dart';
 
 /// Collects workflow capabilities contributed by modules.
@@ -16,7 +17,7 @@ final class WorkflowModuleRegistry {
 
   final Map<Type, WorkflowCommandBehavior<dynamic>> _command_behaviors = {};
 
-  final List<WorkflowEventSerializer<dynamic>> _serializers = [];
+  final List<WorkflowEventSerializer<WorkflowEvent>> _serializers = [];
   final Set<(String, int)> _serializer_keys = {};
 
   /// Registers all contributions from one workflow module.
@@ -125,7 +126,7 @@ final class WorkflowModuleRegistry {
       Map.unmodifiable(_command_behaviors);
 
   /// Immutable snapshot of registered event serializers.
-  List<WorkflowEventSerializer<dynamic>> get serializers =>
+  List<WorkflowEventSerializer<WorkflowEvent>> get serializers =>
       List.unmodifiable(_serializers);
 
   /// Finds the handler responsible for an exact command type.
@@ -138,7 +139,7 @@ final class WorkflowModuleRegistry {
 final class _ModuleRegistration implements WorkflowModuleRegistration {
   final List<WorkflowTransitionDefinition> transitions = [];
   final List<WorkflowCommandBehavior<dynamic>> command_behaviors = [];
-  final List<WorkflowEventSerializer<dynamic>> serializers = [];
+  final List<WorkflowEventSerializer<WorkflowEvent>> serializers = [];
 
   /// Stages a workflow behavior and its optional command handler.
   @override
@@ -162,7 +163,7 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
 
   /// Stages an event serializer without executing it.
   @override
-  void add_serializer(WorkflowEventSerializer<dynamic> serializer) {
+  void add_serializer(WorkflowEventSerializer<WorkflowEvent> serializer) {
     serializers.add(serializer);
   }
 }

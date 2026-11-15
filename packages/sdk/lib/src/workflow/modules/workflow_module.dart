@@ -1,5 +1,6 @@
 import '../behaviors/workflow_behavior.dart';
 import '../serialization/workflow_event_serializer.dart';
+import '../events/workflow_event.dart';
 
 /// A composable contribution to Rudra's workflow engine.
 ///
@@ -26,5 +27,5 @@ abstract interface class WorkflowModuleRegistration {
   ///
   /// Multiple versions of the same event type may be registered,
   /// but the same event type and schema version must be unique.
-  void add_serializer(WorkflowEventSerializer<dynamic> serializer);
+  void add_serializer(WorkflowEventSerializer<WorkflowEvent> serializer);
 }
