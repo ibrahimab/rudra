@@ -73,6 +73,11 @@ export 'src/workflow/transitions/workflow_transition.dart';
 export 'src/workflow/workflow_flow.dart';
 export 'src/workflow/workflow_flow_exception.dart';
 
+/// Composable workflow feature registration.
+export 'src/workflow/modules/workflow_module.dart';
+export 'src/workflow/modules/workflow_module_registry.dart';
+export 'src/workflow/modules/lifecycle_workflow_module.dart';
+
 /// Versioned serialization of workflow command events.
 export 'src/workflow/serialization/workflow_command_codec.dart';
 

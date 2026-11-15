@@ -1,6 +1,6 @@
-import 'transitions/workflow_ended_transition.dart';
-import 'transitions/workflow_start_transition.dart';
-import 'transitions/workflow_started_transition.dart';
+import 'modules/standard_workflow_modules.dart';
+import 'modules/workflow_module.dart';
+import 'modules/workflow_module_registry.dart';
 import 'transitions/workflow_transition.dart';
 import 'workflow_flow_exception.dart';
 
@@ -15,9 +15,11 @@ import 'workflow_flow_exception.dart';
 ///
 /// Duplicate state/event pairs are rejected during construction.
 ///
-/// A flow is assembled explicitly from Dart transition definitions.
-/// No reflection, filesystem discovery, mutable global registry,
-/// or runtime registration is used.
+/// A flow is assembled from explicit transition definitions
+/// contributed by registered workflow modules.
+///
+/// Module composition is deterministic and does not use
+/// reflection or filesystem discovery.
 ///
 /// Once constructed, the registry and its exposed rule list cannot
 /// be modified.
@@ -81,20 +83,32 @@ final class WorkflowFlow {
     );
   }
 
+  /// Builds an immutable flow from registered workflow modules.
+  ///
+  /// Module registration is performed before the existing
+  /// transition graph validates duplicate state/event pairs.
+  factory WorkflowFlow.from_modules({
+    required Iterable<WorkflowModule> modules,
+  }) {
+    final registry = WorkflowModuleRegistry();
+
+    for (final module in modules) {
+      registry.register(module);
+    }
+
+    return WorkflowFlow(transitions: registry.transitions);
+  }
+
   /// Creates Rudra's standard workflow lifecycle definition.
   ///
-  /// New lifecycle transitions are introduced here by importing
-  /// and explicitly registering their typed definitions.
+  /// The standard module list defines the enabled features.
+  ///
+  /// Individual modules own their concrete transition imports
+  /// and register their behavior through the module contract.
   ///
   /// The ordering of these definitions has no effect on dispatch.
   factory WorkflowFlow.standard() {
-    return WorkflowFlow(
-      transitions: [
-        workflow_start_transition(),
-        workflow_started_transition(),
-        workflow_ended_transition(),
-      ],
-    );
+    return WorkflowFlow.from_modules(modules: standard_workflow_modules());
   }
 
   /// Stores already-validated immutable registry structures.
