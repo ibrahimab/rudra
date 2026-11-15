@@ -1,25 +1,23 @@
-import '../transitions/workflow_transition.dart';
+import '../behaviors/workflow_behavior.dart';
 
 /// A composable contribution to Rudra's workflow engine.
 ///
-/// Modules declare their behavior through a registration
-/// interface rather than depending on the engine itself.
+/// Modules register their behaviors without executing them.
 abstract interface class WorkflowModule {
   /// Stable identifier unique across registered modules.
   String get module_id;
 
-  /// Registers the behavior provided by this module.
+  /// Contributes this module's workflow behaviors.
   ///
-  /// Registration must not execute domain operations or
-  /// perform persistence or filesystem I/O.
+  /// Registration must not perform persistence or I/O.
   void register(WorkflowModuleRegistration registration);
 }
 
-/// Receives behavior contributed by workflow modules.
+/// Receives behaviors contributed by a workflow module.
 ///
-/// Additional registration capabilities, such as command
-/// handlers, can be introduced as they are implemented.
+/// All contributions are collected before the module
+/// registration is committed.
 abstract interface class WorkflowModuleRegistration {
-  /// Registers a typed state transition.
-  void add_transition(WorkflowTransitionDefinition transition);
+  /// Registers one self-contained workflow behavior.
+  void add(WorkflowBehavior behavior);
 }

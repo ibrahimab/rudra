@@ -1,17 +1,21 @@
+import '../behaviors/workflow_behavior.dart';
 import '../transitions/workflow_transition.dart';
 import 'workflow_module.dart';
 
-/// Collects and validates workflow module registrations.
+/// Collects workflow behavior definitions from modules.
 ///
-/// Module identities must be unique. Contributions are
-/// exposed as immutable snapshots.
-final class WorkflowModuleRegistry implements WorkflowModuleRegistration {
+/// Failed module registrations do not modify the registry.
+/// Duplicate transition pairs are validated by WorkflowFlow.
+final class WorkflowModuleRegistry {
   final Set<String> _module_ids = {};
   final List<WorkflowTransitionDefinition> _transitions = [];
 
-  /// Registers a module and collects its contributions.
+  /// Registers a module atomically at the configuration level.
   ///
   /// Rejects blank or duplicate module identifiers.
+  ///
+  /// If registration throws, no contributions from that module
+  /// are installed.
   void register(WorkflowModule module) {
     final module_id = module.module_id;
 
@@ -23,8 +27,6 @@ final class WorkflowModuleRegistry implements WorkflowModuleRegistration {
       throw StateError('Duplicate workflow module: $module_id');
     }
 
-    // Only commit a module's contributions after its
-    // registration completes successfully.
     final staging = _ModuleRegistration();
 
     module.register(staging);
@@ -33,29 +35,22 @@ final class WorkflowModuleRegistry implements WorkflowModuleRegistration {
     _module_ids.add(module_id);
   }
 
-  /// Registers a transition directly.
+  /// Immutable snapshot of contributed transitions.
   ///
-  /// Duplicate state/event combinations are validated when
-  /// WorkflowFlow is constructed.
-  @override
-  void add_transition(WorkflowTransitionDefinition transition) {
-    _transitions.add(transition);
-  }
-
-  /// Returns an immutable snapshot of registered transitions.
+  /// Each transition comes from a registered behavior.
   List<WorkflowTransitionDefinition> get transitions =>
       List.unmodifiable(_transitions);
 }
 
-/// Temporarily collects one module's contributions.
+/// Stages a module's behavior contributions.
 ///
-/// Failed module registration cannot partially modify the
-/// owning registry.
+/// Resolves transition definitions exactly once during
+/// registration, before they enter the shared registry.
 final class _ModuleRegistration implements WorkflowModuleRegistration {
   final List<WorkflowTransitionDefinition> transitions = [];
 
   @override
-  void add_transition(WorkflowTransitionDefinition transition) {
-    transitions.add(transition);
+  void add(WorkflowBehavior behavior) {
+    transitions.add(behavior.transition);
   }
 }

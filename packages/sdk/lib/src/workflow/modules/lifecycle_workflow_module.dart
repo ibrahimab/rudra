@@ -1,12 +1,13 @@
-import '../transitions/workflow_ended_transition.dart';
-import '../transitions/workflow_start_transition.dart';
-import '../transitions/workflow_started_transition.dart';
-
+import '../behaviors/workflow_ended_behavior.dart';
+import '../behaviors/workflow_start_behavior.dart';
+import '../behaviors/workflow_started_behavior.dart';
 import 'workflow_module.dart';
 
-/// Contributes the standard workflow lifecycle behavior.
+/// Registers Rudra's standard workflow lifecycle behaviors.
 ///
-/// Owns its transition imports and registration.
+/// The module owns its concrete behavior dependencies.
+/// Neither WorkflowFlow nor WorkflowStateMachine needs
+/// to import individual lifecycle implementations.
 final class LifecycleWorkflowModule implements WorkflowModule {
   /// Creates the stateless lifecycle module.
   const LifecycleWorkflowModule();
@@ -17,8 +18,8 @@ final class LifecycleWorkflowModule implements WorkflowModule {
   @override
   void register(WorkflowModuleRegistration registration) {
     registration
-      ..add_transition(workflow_start_transition())
-      ..add_transition(workflow_started_transition())
-      ..add_transition(workflow_ended_transition());
+      ..add(const WorkflowStartBehavior())
+      ..add(const WorkflowStartedBehavior())
+      ..add(const WorkflowEndedBehavior());
   }
 }

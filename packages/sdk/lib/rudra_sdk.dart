@@ -78,6 +78,9 @@ export 'src/workflow/modules/workflow_module.dart';
 export 'src/workflow/modules/workflow_module_registry.dart';
 export 'src/workflow/modules/lifecycle_workflow_module.dart';
 
+/// Extensible workflow behavior definitions.
+export 'src/workflow/behaviors/workflow_behavior.dart';
+
 /// Versioned serialization of workflow command events.
 export 'src/workflow/serialization/workflow_command_codec.dart';
 
