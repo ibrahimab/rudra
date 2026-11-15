@@ -188,6 +188,9 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
               WorkflowEventsCompanion.insert(
                 event_id: event_id,
                 workflow_id: identity.workflow_id,
+                os_user_id: event is WorkflowStartedEvent
+                    ? Value(identity.os_user_id)
+                    : const Value.absent(),
                 version: plan.previous_state.version + index + 1,
                 correlation_id: receipt.correlation_id,
                 causation_id: Value(index == 0 ? null : receipt.event_id),

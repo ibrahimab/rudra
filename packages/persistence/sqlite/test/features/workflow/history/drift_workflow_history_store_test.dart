@@ -497,6 +497,7 @@ void main() {
             WorkflowEventsCompanion.insert(
               event_id: 'foreign-start-event',
               workflow_id: foreign_workflow_id,
+              os_user_id: const Value('foreign-os-user'),
               version: 1,
               correlation_id: 'foreign-correlation',
               event_type: WorkflowStartEvent.type_id,
@@ -549,16 +550,10 @@ void main() {
       final plan = await database
           .customSelect(
             '''
-        EXPLAIN QUERY PLAN
-        SELECT DISTINCT workflow_id
-        FROM workflow_events
-        WHERE event_type = 'workflow.started'
-          AND (
-            CASE
-              WHEN json_valid(payload_json)
-              THEN json_extract(payload_json, '\$.os_user_id')
-            END
-          ) = ?
+          EXPLAIN QUERY PLAN
+          SELECT DISTINCT workflow_id
+          FROM workflow_events
+          WHERE os_user_id = ?
         ''',
             variables: [Variable.withString(os_user_id)],
           )
@@ -566,7 +561,54 @@ void main() {
 
       final details = plan.map((row) => row.read<String>('detail')).join('\n');
 
-      expect(details, contains('workflow_events_started_owner_idx'));
+      expect(details, contains('workflow_events_owner_idx'));
+    });
+
+    test('detects corrupted owner event without a projection', () async {
+      await establish_workflow();
+
+      await (database.update(
+        database.workflowEvents,
+      )..where((row) => row.version.equals(2))).write(
+        const WorkflowEventsCompanion(payload_json: Value('invalid-json')),
+      );
+
+      await database.delete(database.unfinishedWorkflows).go();
+
+      // Independent owner metadata locates the journal.
+      // The SDK still detects its invalid event payload.
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.invalid_event,
+      );
+    });
+
+    test('rejects changed event owner without a projection', () async {
+      await establish_workflow();
+
+      final altered_event = WorkflowStartedEvent(
+        identity: WorkflowIdentity(
+          workflow_id: workflow_id,
+          os_user_id: 'another-os-user',
+          target_id: 'local-macos',
+          root: TargetPath('/workspace'),
+        ),
+      );
+
+      await (database.update(
+        database.workflowEvents,
+      )..where((row) => row.version.equals(2))).write(
+        WorkflowEventsCompanion(
+          payload_json: Value(runtime.codec.encode(altered_event)),
+        ),
+      );
+
+      await database.delete(database.unfinishedWorkflows).go();
+
+      // Journal metadata still identifies the original owner.
+      // The SDK must not silently return "no workflow".
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.ownership_mismatch,
+      );
     });
   });
 }

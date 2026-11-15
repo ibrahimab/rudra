@@ -18,16 +18,9 @@ import 'package:drift/drift.dart';
 /// SQLite maintains this index atomically with journal writes.
 /// Future serializer versions must preserve or explicitly
 /// migrate this ownership-index expression.
-@TableIndex.sql(r'''
-CREATE INDEX workflow_events_started_owner_idx
-ON workflow_events (
-  CASE
-    WHEN json_valid(payload_json)
-    THEN json_extract(payload_json, '$.os_user_id')
-  END,
-  workflow_id
-)
-WHERE event_type = 'workflow.started'
+@TableIndex.sql('''
+CREATE INDEX workflow_events_owner_idx
+ON workflow_events (os_user_id, workflow_id)
 ''')
 class WorkflowEvents extends Table {
   /// Database-local event sequence.
@@ -38,6 +31,14 @@ class WorkflowEvents extends Table {
 
   /// Workflow receiving this event.
   TextColumn get workflow_id => text()();
+
+  /// Trusted OS-user identity established at commit time.
+  ///
+  /// This is journal metadata, independent of serialized
+  /// event payloads and the unfinished-workflow projection.
+  ///
+  /// Null for events without established ownership.
+  TextColumn get os_user_id => text().nullable()();
 
   /// Version resulting from this event.
   IntColumn get version => integer()();

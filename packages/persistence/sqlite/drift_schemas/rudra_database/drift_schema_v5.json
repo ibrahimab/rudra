@@ -231,6 +231,16 @@
             "dsl_features": []
           },
           {
+            "name": "os_user_id",
+            "getter_name": "os_user_id",
+            "moor_type": "string",
+            "nullable": true,
+            "customConstraints": null,
+            "default_dart": null,
+            "default_client_dart": null,
+            "dsl_features": []
+          },
+          {
             "name": "version",
             "getter_name": "version",
             "moor_type": "int",
@@ -385,8 +395,8 @@
       "type": "index",
       "data": {
         "on": 1,
-        "name": "workflow_events_started_owner_idx",
-        "sql": "CREATE INDEX workflow_events_started_owner_idx\nON workflow_events (\n  CASE\n    WHEN json_valid(payload_json)\n    THEN json_extract(payload_json, '$.os_user_id')\n  END,\n  workflow_id\n)\nWHERE event_type = 'workflow.started'\n",
+        "name": "workflow_events_owner_idx",
+        "sql": "CREATE INDEX workflow_events_owner_idx\nON workflow_events (os_user_id, workflow_id)\n",
         "unique": false,
         "columns": []
       }
@@ -407,7 +417,7 @@
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE TABLE IF NOT EXISTS \"workflow_events\" (\"sequence\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"event_id\" TEXT NOT NULL UNIQUE, \"workflow_id\" TEXT NOT NULL, \"version\" INTEGER NOT NULL, \"correlation_id\" TEXT NOT NULL, \"causation_id\" TEXT NULL, \"event_type\" TEXT NOT NULL, \"payload_json\" TEXT NOT NULL, \"recorded_at_unix_ms\" INTEGER NOT NULL, UNIQUE (\"workflow_id\", \"version\")) STRICT;"
+          "sql": "CREATE TABLE IF NOT EXISTS \"workflow_events\" (\"sequence\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"event_id\" TEXT NOT NULL UNIQUE, \"workflow_id\" TEXT NOT NULL, \"os_user_id\" TEXT NULL, \"version\" INTEGER NOT NULL, \"correlation_id\" TEXT NOT NULL, \"causation_id\" TEXT NULL, \"event_type\" TEXT NOT NULL, \"payload_json\" TEXT NOT NULL, \"recorded_at_unix_ms\" INTEGER NOT NULL, UNIQUE (\"workflow_id\", \"version\")) STRICT;"
         }
       ]
     },
@@ -421,11 +431,11 @@
       ]
     },
     {
-      "name": "workflow_events_started_owner_idx",
+      "name": "workflow_events_owner_idx",
       "sql": [
         {
           "dialect": "sqlite",
-          "sql": "CREATE INDEX workflow_events_started_owner_idx ON workflow_events (CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, '$.os_user_id') END, workflow_id) WHERE event_type = 'workflow.started'"
+          "sql": "CREATE INDEX workflow_events_owner_idx ON workflow_events (os_user_id, workflow_id)"
         }
       ]
     }

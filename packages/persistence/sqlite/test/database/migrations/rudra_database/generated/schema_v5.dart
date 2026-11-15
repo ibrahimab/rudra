@@ -742,6 +742,14 @@ class WorkflowEvents extends Table
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<String> osUserId = GeneratedColumn<String>(
+    'os_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   late final GeneratedColumn<int> version = GeneratedColumn<int>(
     'version',
     aliasedName,
@@ -795,6 +803,7 @@ class WorkflowEvents extends Table
     sequence,
     eventId,
     workflowId,
+    osUserId,
     version,
     correlationId,
     causationId,
@@ -829,6 +838,10 @@ class WorkflowEvents extends Table
         DriftSqlType.string,
         data['${effectivePrefix}workflow_id'],
       )!,
+      osUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}os_user_id'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -874,6 +887,7 @@ class WorkflowEventsData extends DataClass
   final int sequence;
   final String eventId;
   final String workflowId;
+  final String? osUserId;
   final int version;
   final String correlationId;
   final String? causationId;
@@ -884,6 +898,7 @@ class WorkflowEventsData extends DataClass
     required this.sequence,
     required this.eventId,
     required this.workflowId,
+    this.osUserId,
     required this.version,
     required this.correlationId,
     this.causationId,
@@ -897,6 +912,9 @@ class WorkflowEventsData extends DataClass
     map['sequence'] = Variable<int>(sequence);
     map['event_id'] = Variable<String>(eventId);
     map['workflow_id'] = Variable<String>(workflowId);
+    if (!nullToAbsent || osUserId != null) {
+      map['os_user_id'] = Variable<String>(osUserId);
+    }
     map['version'] = Variable<int>(version);
     map['correlation_id'] = Variable<String>(correlationId);
     if (!nullToAbsent || causationId != null) {
@@ -913,6 +931,9 @@ class WorkflowEventsData extends DataClass
       sequence: Value(sequence),
       eventId: Value(eventId),
       workflowId: Value(workflowId),
+      osUserId: osUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(osUserId),
       version: Value(version),
       correlationId: Value(correlationId),
       causationId: causationId == null && nullToAbsent
@@ -933,6 +954,7 @@ class WorkflowEventsData extends DataClass
       sequence: serializer.fromJson<int>(json['sequence']),
       eventId: serializer.fromJson<String>(json['eventId']),
       workflowId: serializer.fromJson<String>(json['workflowId']),
+      osUserId: serializer.fromJson<String?>(json['osUserId']),
       version: serializer.fromJson<int>(json['version']),
       correlationId: serializer.fromJson<String>(json['correlationId']),
       causationId: serializer.fromJson<String?>(json['causationId']),
@@ -948,6 +970,7 @@ class WorkflowEventsData extends DataClass
       'sequence': serializer.toJson<int>(sequence),
       'eventId': serializer.toJson<String>(eventId),
       'workflowId': serializer.toJson<String>(workflowId),
+      'osUserId': serializer.toJson<String?>(osUserId),
       'version': serializer.toJson<int>(version),
       'correlationId': serializer.toJson<String>(correlationId),
       'causationId': serializer.toJson<String?>(causationId),
@@ -961,6 +984,7 @@ class WorkflowEventsData extends DataClass
     int? sequence,
     String? eventId,
     String? workflowId,
+    Value<String?> osUserId = const Value.absent(),
     int? version,
     String? correlationId,
     Value<String?> causationId = const Value.absent(),
@@ -971,6 +995,7 @@ class WorkflowEventsData extends DataClass
     sequence: sequence ?? this.sequence,
     eventId: eventId ?? this.eventId,
     workflowId: workflowId ?? this.workflowId,
+    osUserId: osUserId.present ? osUserId.value : this.osUserId,
     version: version ?? this.version,
     correlationId: correlationId ?? this.correlationId,
     causationId: causationId.present ? causationId.value : this.causationId,
@@ -985,6 +1010,7 @@ class WorkflowEventsData extends DataClass
       workflowId: data.workflowId.present
           ? data.workflowId.value
           : this.workflowId,
+      osUserId: data.osUserId.present ? data.osUserId.value : this.osUserId,
       version: data.version.present ? data.version.value : this.version,
       correlationId: data.correlationId.present
           ? data.correlationId.value
@@ -1008,6 +1034,7 @@ class WorkflowEventsData extends DataClass
           ..write('sequence: $sequence, ')
           ..write('eventId: $eventId, ')
           ..write('workflowId: $workflowId, ')
+          ..write('osUserId: $osUserId, ')
           ..write('version: $version, ')
           ..write('correlationId: $correlationId, ')
           ..write('causationId: $causationId, ')
@@ -1023,6 +1050,7 @@ class WorkflowEventsData extends DataClass
     sequence,
     eventId,
     workflowId,
+    osUserId,
     version,
     correlationId,
     causationId,
@@ -1037,6 +1065,7 @@ class WorkflowEventsData extends DataClass
           other.sequence == this.sequence &&
           other.eventId == this.eventId &&
           other.workflowId == this.workflowId &&
+          other.osUserId == this.osUserId &&
           other.version == this.version &&
           other.correlationId == this.correlationId &&
           other.causationId == this.causationId &&
@@ -1049,6 +1078,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
   final Value<int> sequence;
   final Value<String> eventId;
   final Value<String> workflowId;
+  final Value<String?> osUserId;
   final Value<int> version;
   final Value<String> correlationId;
   final Value<String?> causationId;
@@ -1059,6 +1089,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
     this.sequence = const Value.absent(),
     this.eventId = const Value.absent(),
     this.workflowId = const Value.absent(),
+    this.osUserId = const Value.absent(),
     this.version = const Value.absent(),
     this.correlationId = const Value.absent(),
     this.causationId = const Value.absent(),
@@ -1070,6 +1101,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
     this.sequence = const Value.absent(),
     required String eventId,
     required String workflowId,
+    this.osUserId = const Value.absent(),
     required int version,
     required String correlationId,
     this.causationId = const Value.absent(),
@@ -1087,6 +1119,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
     Expression<int>? sequence,
     Expression<String>? eventId,
     Expression<String>? workflowId,
+    Expression<String>? osUserId,
     Expression<int>? version,
     Expression<String>? correlationId,
     Expression<String>? causationId,
@@ -1098,6 +1131,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
       if (sequence != null) 'sequence': sequence,
       if (eventId != null) 'event_id': eventId,
       if (workflowId != null) 'workflow_id': workflowId,
+      if (osUserId != null) 'os_user_id': osUserId,
       if (version != null) 'version': version,
       if (correlationId != null) 'correlation_id': correlationId,
       if (causationId != null) 'causation_id': causationId,
@@ -1111,6 +1145,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
     Value<int>? sequence,
     Value<String>? eventId,
     Value<String>? workflowId,
+    Value<String?>? osUserId,
     Value<int>? version,
     Value<String>? correlationId,
     Value<String?>? causationId,
@@ -1122,6 +1157,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
       sequence: sequence ?? this.sequence,
       eventId: eventId ?? this.eventId,
       workflowId: workflowId ?? this.workflowId,
+      osUserId: osUserId ?? this.osUserId,
       version: version ?? this.version,
       correlationId: correlationId ?? this.correlationId,
       causationId: causationId ?? this.causationId,
@@ -1142,6 +1178,9 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
     }
     if (workflowId.present) {
       map['workflow_id'] = Variable<String>(workflowId.value);
+    }
+    if (osUserId.present) {
+      map['os_user_id'] = Variable<String>(osUserId.value);
     }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
@@ -1170,6 +1209,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEventsData> {
           ..write('sequence: $sequence, ')
           ..write('eventId: $eventId, ')
           ..write('workflowId: $workflowId, ')
+          ..write('osUserId: $osUserId, ')
           ..write('version: $version, ')
           ..write('correlationId: $correlationId, ')
           ..write('causationId: $causationId, ')
@@ -1507,9 +1547,9 @@ class DatabaseAtV5 extends GeneratedDatabase {
   late final UnfinishedWorkflows unfinishedWorkflows = UnfinishedWorkflows(
     this,
   );
-  late final Index workflowEventsStartedOwnerIdx = Index(
-    'workflow_events_started_owner_idx',
-    'CREATE INDEX workflow_events_started_owner_idx ON workflow_events (CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, \'\$.os_user_id\') END, workflow_id) WHERE event_type = \'workflow.started\'',
+  late final Index workflowEventsOwnerIdx = Index(
+    'workflow_events_owner_idx',
+    'CREATE INDEX workflow_events_owner_idx ON workflow_events (os_user_id, workflow_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -1519,7 +1559,7 @@ class DatabaseAtV5 extends GeneratedDatabase {
     workflowSubmissions,
     workflowEvents,
     unfinishedWorkflows,
-    workflowEventsStartedOwnerIdx,
+    workflowEventsOwnerIdx,
   ];
   @override
   int get schemaVersion => 5;

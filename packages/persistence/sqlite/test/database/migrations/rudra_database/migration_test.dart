@@ -130,16 +130,12 @@ void main() {
         final indexed = await new_db
             .customSelect(
               '''
+
           SELECT DISTINCT workflow_id
           FROM workflow_events
-            INDEXED BY workflow_events_started_owner_idx
-          WHERE event_type = 'workflow.started'
-            AND (
-              CASE
-                WHEN json_valid(payload_json)
-                THEN json_extract(payload_json, '\$.os_user_id')
-              END
-            ) = ?
+            INDEXED BY workflow_events_owner_idx
+          WHERE os_user_id = ?
+
           ''',
               variables: [Variable.withString(legacy_os_user_id)],
             )

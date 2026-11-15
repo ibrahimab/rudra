@@ -294,7 +294,7 @@ void main() {
       );
     });
 
-    test('ignores another users valid active history', () async {
+    test('rejects an indexed history with a different owner', () async {
       final store = _FixtureHistoryStore(
         null,
         other_histories: [
@@ -314,7 +314,16 @@ void main() {
         os_user_id: 'os-user-1',
       );
 
-      expect(await reader.current(), isNull);
+      await expectLater(
+        reader.current(),
+        throwsA(
+          isA<WorkflowStateReadException>().having(
+            (error) => error.code,
+            'code',
+            WorkflowStateReadErrorCode.ownership_mismatch,
+          ),
+        ),
+      );
     });
 
     test('accepts terminal history without a projection', () async {

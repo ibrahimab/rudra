@@ -94,21 +94,28 @@ final class RudraDatabase extends _$RudraDatabase {
       },
 
       from4To5: (migrator, schema) async {
-        // Index historical workflow ownership without modifying
-        // committed event data.
+        await migrator.addColumn(
+          schema.workflowEvents,
+          schema.workflowEvents.osUserId,
+        );
+
+        // Backfill existing v4 histories using their original
+        // ownership outcome. This is migration-only compatibility.
         //
-        // Malformed event payloads receive a NULL index entry
-        // instead of preventing database migration.
+        // New commits receive trusted ownership metadata directly
+        // and never need JSON extraction for owner lookup.
         await customStatement(r'''
-          CREATE INDEX workflow_events_started_owner_idx
-          ON workflow_events (
-            CASE
-              WHEN json_valid(payload_json)
-              THEN json_extract(payload_json, '$.os_user_id')
-            END,
-            workflow_id
-          )
+          UPDATE workflow_events
+          SET os_user_id = CASE
+            WHEN json_valid(payload_json)
+            THEN json_extract(payload_json, '$.os_user_id')
+          END
           WHERE event_type = 'workflow.started'
+        ''');
+
+        await customStatement('''
+          CREATE INDEX workflow_events_owner_idx
+          ON workflow_events (os_user_id, workflow_id)
         ''');
       },
     ),

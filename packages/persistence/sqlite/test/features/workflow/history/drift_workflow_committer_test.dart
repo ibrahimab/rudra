@@ -127,6 +127,9 @@ void main() {
     // Query results are sorted by workflow version for replay.
     history.sort((first, second) => first.version.compareTo(second.version));
 
+    expect(history[0].os_user_id, isNull);
+    expect(history[1].os_user_id, os_user_id);
+
     expect(history[0].version, 1);
     expect(history[1].version, 2);
 

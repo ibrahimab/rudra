@@ -507,7 +507,7 @@ final class Schema5 extends i0.VersionedSchema {
     workflowSubmissions,
     workflowEvents,
     unfinishedWorkflows,
-    workflowEventsStartedOwnerIdx,
+    workflowEventsOwnerIdx,
   ];
   late final Shape4 workflowSubmissions = Shape4(
     source: i0.VersionedTable(
@@ -535,7 +535,7 @@ final class Schema5 extends i0.VersionedSchema {
     ),
     alias: null,
   );
-  late final Shape1 workflowEvents = Shape1(
+  late final Shape5 workflowEvents = Shape5(
     source: i0.VersionedTable(
       entityName: 'workflow_events',
       withoutRowId: false,
@@ -545,6 +545,7 @@ final class Schema5 extends i0.VersionedSchema {
         _column_0,
         _column_1,
         _column_9,
+        _column_22,
         _column_10,
         _column_2,
         _column_11,
@@ -567,12 +568,44 @@ final class Schema5 extends i0.VersionedSchema {
     ),
     alias: null,
   );
-  final i1.Index workflowEventsStartedOwnerIdx = i1.Index(
-    'workflow_events_started_owner_idx',
-    'CREATE INDEX workflow_events_started_owner_idx ON workflow_events (CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, \'\$.os_user_id\') END, workflow_id) WHERE event_type = \'workflow.started\'',
+  final i1.Index workflowEventsOwnerIdx = i1.Index(
+    'workflow_events_owner_idx',
+    'CREATE INDEX workflow_events_owner_idx ON workflow_events (os_user_id, workflow_id)',
   );
 }
 
+class Shape5 extends i0.VersionedTable {
+  Shape5({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get sequence =>
+      columnsByName['sequence']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get eventId =>
+      columnsByName['event_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get workflowId =>
+      columnsByName['workflow_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get osUserId =>
+      columnsByName['os_user_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get version =>
+      columnsByName['version']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get correlationId =>
+      columnsByName['correlation_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get causationId =>
+      columnsByName['causation_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get eventType =>
+      columnsByName['event_type']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get payloadJson =>
+      columnsByName['payload_json']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get recordedAtUnixMs =>
+      columnsByName['recorded_at_unix_ms']! as i1.GeneratedColumn<int>;
+}
+
+i1.GeneratedColumn<String> _column_22(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'os_user_id',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.string,
+      $customConstraints: 'NULL',
+    );
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,

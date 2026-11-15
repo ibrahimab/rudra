@@ -974,6 +974,17 @@ class $WorkflowEventsTable extends WorkflowEvents
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _os_user_idMeta = const VerificationMeta(
+    'os_user_id',
+  );
+  @override
+  late final GeneratedColumn<String> os_user_id = GeneratedColumn<String>(
+    'os_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _versionMeta = const VerificationMeta(
     'version',
   );
@@ -1044,6 +1055,7 @@ class $WorkflowEventsTable extends WorkflowEvents
     sequence,
     event_id,
     workflow_id,
+    os_user_id,
     version,
     correlation_id,
     causation_id,
@@ -1087,6 +1099,12 @@ class $WorkflowEventsTable extends WorkflowEvents
       );
     } else if (isInserting) {
       context.missing(_workflow_idMeta);
+    }
+    if (data.containsKey('os_user_id')) {
+      context.handle(
+        _os_user_idMeta,
+        os_user_id.isAcceptableOrUnknown(data['os_user_id']!, _os_user_idMeta),
+      );
     }
     if (data.containsKey('version')) {
       context.handle(
@@ -1171,6 +1189,10 @@ class $WorkflowEventsTable extends WorkflowEvents
         DriftSqlType.string,
         data['${effectivePrefix}workflow_id'],
       )!,
+      os_user_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}os_user_id'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -1217,6 +1239,14 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
   /// Workflow receiving this event.
   final String workflow_id;
 
+  /// Trusted OS-user identity established at commit time.
+  ///
+  /// This is journal metadata, independent of serialized
+  /// event payloads and the unfinished-workflow projection.
+  ///
+  /// Null for events without established ownership.
+  final String? os_user_id;
+
   /// Version resulting from this event.
   final int version;
 
@@ -1238,6 +1268,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
     required this.sequence,
     required this.event_id,
     required this.workflow_id,
+    this.os_user_id,
     required this.version,
     required this.correlation_id,
     this.causation_id,
@@ -1251,6 +1282,9 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
     map['sequence'] = Variable<int>(sequence);
     map['event_id'] = Variable<String>(event_id);
     map['workflow_id'] = Variable<String>(workflow_id);
+    if (!nullToAbsent || os_user_id != null) {
+      map['os_user_id'] = Variable<String>(os_user_id);
+    }
     map['version'] = Variable<int>(version);
     map['correlation_id'] = Variable<String>(correlation_id);
     if (!nullToAbsent || causation_id != null) {
@@ -1267,6 +1301,9 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
       sequence: Value(sequence),
       event_id: Value(event_id),
       workflow_id: Value(workflow_id),
+      os_user_id: os_user_id == null && nullToAbsent
+          ? const Value.absent()
+          : Value(os_user_id),
       version: Value(version),
       correlation_id: Value(correlation_id),
       causation_id: causation_id == null && nullToAbsent
@@ -1287,6 +1324,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
       sequence: serializer.fromJson<int>(json['sequence']),
       event_id: serializer.fromJson<String>(json['event_id']),
       workflow_id: serializer.fromJson<String>(json['workflow_id']),
+      os_user_id: serializer.fromJson<String?>(json['os_user_id']),
       version: serializer.fromJson<int>(json['version']),
       correlation_id: serializer.fromJson<String>(json['correlation_id']),
       causation_id: serializer.fromJson<String?>(json['causation_id']),
@@ -1304,6 +1342,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
       'sequence': serializer.toJson<int>(sequence),
       'event_id': serializer.toJson<String>(event_id),
       'workflow_id': serializer.toJson<String>(workflow_id),
+      'os_user_id': serializer.toJson<String?>(os_user_id),
       'version': serializer.toJson<int>(version),
       'correlation_id': serializer.toJson<String>(correlation_id),
       'causation_id': serializer.toJson<String?>(causation_id),
@@ -1317,6 +1356,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
     int? sequence,
     String? event_id,
     String? workflow_id,
+    Value<String?> os_user_id = const Value.absent(),
     int? version,
     String? correlation_id,
     Value<String?> causation_id = const Value.absent(),
@@ -1327,6 +1367,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
     sequence: sequence ?? this.sequence,
     event_id: event_id ?? this.event_id,
     workflow_id: workflow_id ?? this.workflow_id,
+    os_user_id: os_user_id.present ? os_user_id.value : this.os_user_id,
     version: version ?? this.version,
     correlation_id: correlation_id ?? this.correlation_id,
     causation_id: causation_id.present ? causation_id.value : this.causation_id,
@@ -1341,6 +1382,9 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
       workflow_id: data.workflow_id.present
           ? data.workflow_id.value
           : this.workflow_id,
+      os_user_id: data.os_user_id.present
+          ? data.os_user_id.value
+          : this.os_user_id,
       version: data.version.present ? data.version.value : this.version,
       correlation_id: data.correlation_id.present
           ? data.correlation_id.value
@@ -1366,6 +1410,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
           ..write('sequence: $sequence, ')
           ..write('event_id: $event_id, ')
           ..write('workflow_id: $workflow_id, ')
+          ..write('os_user_id: $os_user_id, ')
           ..write('version: $version, ')
           ..write('correlation_id: $correlation_id, ')
           ..write('causation_id: $causation_id, ')
@@ -1381,6 +1426,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
     sequence,
     event_id,
     workflow_id,
+    os_user_id,
     version,
     correlation_id,
     causation_id,
@@ -1395,6 +1441,7 @@ class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
           other.sequence == this.sequence &&
           other.event_id == this.event_id &&
           other.workflow_id == this.workflow_id &&
+          other.os_user_id == this.os_user_id &&
           other.version == this.version &&
           other.correlation_id == this.correlation_id &&
           other.causation_id == this.causation_id &&
@@ -1407,6 +1454,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
   final Value<int> sequence;
   final Value<String> event_id;
   final Value<String> workflow_id;
+  final Value<String?> os_user_id;
   final Value<int> version;
   final Value<String> correlation_id;
   final Value<String?> causation_id;
@@ -1417,6 +1465,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
     this.sequence = const Value.absent(),
     this.event_id = const Value.absent(),
     this.workflow_id = const Value.absent(),
+    this.os_user_id = const Value.absent(),
     this.version = const Value.absent(),
     this.correlation_id = const Value.absent(),
     this.causation_id = const Value.absent(),
@@ -1428,6 +1477,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
     this.sequence = const Value.absent(),
     required String event_id,
     required String workflow_id,
+    this.os_user_id = const Value.absent(),
     required int version,
     required String correlation_id,
     this.causation_id = const Value.absent(),
@@ -1445,6 +1495,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
     Expression<int>? sequence,
     Expression<String>? event_id,
     Expression<String>? workflow_id,
+    Expression<String>? os_user_id,
     Expression<int>? version,
     Expression<String>? correlation_id,
     Expression<String>? causation_id,
@@ -1456,6 +1507,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
       if (sequence != null) 'sequence': sequence,
       if (event_id != null) 'event_id': event_id,
       if (workflow_id != null) 'workflow_id': workflow_id,
+      if (os_user_id != null) 'os_user_id': os_user_id,
       if (version != null) 'version': version,
       if (correlation_id != null) 'correlation_id': correlation_id,
       if (causation_id != null) 'causation_id': causation_id,
@@ -1470,6 +1522,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
     Value<int>? sequence,
     Value<String>? event_id,
     Value<String>? workflow_id,
+    Value<String?>? os_user_id,
     Value<int>? version,
     Value<String>? correlation_id,
     Value<String?>? causation_id,
@@ -1481,6 +1534,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
       sequence: sequence ?? this.sequence,
       event_id: event_id ?? this.event_id,
       workflow_id: workflow_id ?? this.workflow_id,
+      os_user_id: os_user_id ?? this.os_user_id,
       version: version ?? this.version,
       correlation_id: correlation_id ?? this.correlation_id,
       causation_id: causation_id ?? this.causation_id,
@@ -1501,6 +1555,9 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
     }
     if (workflow_id.present) {
       map['workflow_id'] = Variable<String>(workflow_id.value);
+    }
+    if (os_user_id.present) {
+      map['os_user_id'] = Variable<String>(os_user_id.value);
     }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
@@ -1529,6 +1586,7 @@ class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
           ..write('sequence: $sequence, ')
           ..write('event_id: $event_id, ')
           ..write('workflow_id: $workflow_id, ')
+          ..write('os_user_id: $os_user_id, ')
           ..write('version: $version, ')
           ..write('correlation_id: $correlation_id, ')
           ..write('causation_id: $causation_id, ')
@@ -1937,9 +1995,9 @@ abstract class _$RudraDatabase extends GeneratedDatabase {
   late final $WorkflowEventsTable workflowEvents = $WorkflowEventsTable(this);
   late final $UnfinishedWorkflowsTable unfinishedWorkflows =
       $UnfinishedWorkflowsTable(this);
-  late final Index workflowEventsStartedOwnerIdx = Index(
-    'workflow_events_started_owner_idx',
-    'CREATE INDEX workflow_events_started_owner_idx ON workflow_events (CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, \'\$.os_user_id\') END, workflow_id) WHERE event_type = \'workflow.started\'',
+  late final Index workflowEventsOwnerIdx = Index(
+    'workflow_events_owner_idx',
+    'CREATE INDEX workflow_events_owner_idx ON workflow_events (os_user_id, workflow_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -1949,7 +2007,7 @@ abstract class _$RudraDatabase extends GeneratedDatabase {
     workflowSubmissions,
     workflowEvents,
     unfinishedWorkflows,
-    workflowEventsStartedOwnerIdx,
+    workflowEventsOwnerIdx,
   ];
 }
 
@@ -2372,6 +2430,7 @@ typedef $$WorkflowEventsTableCreateCompanionBuilder =
       Value<int> sequence,
       required String event_id,
       required String workflow_id,
+      Value<String?> os_user_id,
       required int version,
       required String correlation_id,
       Value<String?> causation_id,
@@ -2384,6 +2443,7 @@ typedef $$WorkflowEventsTableUpdateCompanionBuilder =
       Value<int> sequence,
       Value<String> event_id,
       Value<String> workflow_id,
+      Value<String?> os_user_id,
       Value<int> version,
       Value<String> correlation_id,
       Value<String?> causation_id,
@@ -2413,6 +2473,11 @@ class $$WorkflowEventsTableFilterComposer
 
   ColumnFilters<String> get workflow_id => $composableBuilder(
     column: $table.workflow_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get os_user_id => $composableBuilder(
+    column: $table.os_user_id,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2471,6 +2536,11 @@ class $$WorkflowEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get os_user_id => $composableBuilder(
+    column: $table.os_user_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get version => $composableBuilder(
     column: $table.version,
     builder: (column) => ColumnOrderings(column),
@@ -2519,6 +2589,11 @@ class $$WorkflowEventsTableAnnotationComposer
 
   GeneratedColumn<String> get workflow_id => $composableBuilder(
     column: $table.workflow_id,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get os_user_id => $composableBuilder(
+    column: $table.os_user_id,
     builder: (column) => column,
   );
 
@@ -2591,6 +2666,7 @@ class $$WorkflowEventsTableTableManager
                 Value<int> sequence = const Value.absent(),
                 Value<String> event_id = const Value.absent(),
                 Value<String> workflow_id = const Value.absent(),
+                Value<String?> os_user_id = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<String> correlation_id = const Value.absent(),
                 Value<String?> causation_id = const Value.absent(),
@@ -2601,6 +2677,7 @@ class $$WorkflowEventsTableTableManager
                 sequence: sequence,
                 event_id: event_id,
                 workflow_id: workflow_id,
+                os_user_id: os_user_id,
                 version: version,
                 correlation_id: correlation_id,
                 causation_id: causation_id,
@@ -2613,6 +2690,7 @@ class $$WorkflowEventsTableTableManager
                 Value<int> sequence = const Value.absent(),
                 required String event_id,
                 required String workflow_id,
+                Value<String?> os_user_id = const Value.absent(),
                 required int version,
                 required String correlation_id,
                 Value<String?> causation_id = const Value.absent(),
@@ -2623,6 +2701,7 @@ class $$WorkflowEventsTableTableManager
                 sequence: sequence,
                 event_id: event_id,
                 workflow_id: workflow_id,
+                os_user_id: os_user_id,
                 version: version,
                 correlation_id: correlation_id,
                 causation_id: causation_id,

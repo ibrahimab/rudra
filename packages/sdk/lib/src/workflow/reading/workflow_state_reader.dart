@@ -155,23 +155,29 @@ final class WorkflowStateReader {
       final state = _replay_history(history);
 
       if (state is WorkflowActiveState) {
-        if (state.identity.os_user_id == _os_user_id) {
+        if (state.identity.os_user_id != _os_user_id) {
           throw const WorkflowStateReadException(
-            code: WorkflowStateReadErrorCode.orphaned_workflow,
-            message:
-                'An active workflow exists without its expected '
-                'OS-user ownership projection.',
+            code: WorkflowStateReadErrorCode.ownership_mismatch,
+            message: 'Indexed workflow owner disagrees with committed history.',
           );
         }
 
-        // Another OS user's active history is not this
-        // user's current workflow.
-        continue;
+        throw const WorkflowStateReadException(
+          code: WorkflowStateReadErrorCode.orphaned_workflow,
+          message:
+              'An active workflow exists without its expected '
+              'OS-user ownership projection.',
+        );
       }
 
       if (state is WorkflowEndedState) {
-        // Terminal history is retained but does not require
-        // an unfinished-workflow projection.
+        if (state.identity.os_user_id != _os_user_id) {
+          throw const WorkflowStateReadException(
+            code: WorkflowStateReadErrorCode.ownership_mismatch,
+            message: 'Indexed workflow owner disagrees with terminal history.',
+          );
+        }
+
         continue;
       }
 

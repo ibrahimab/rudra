@@ -80,17 +80,11 @@ final class DriftWorkflowHistoryStore implements WorkflowHistoryStore {
       // SQL. No journal payload is decoded at this boundary.
       final owner_rows = await _database
           .customSelect(
-            r'''
+            '''
         SELECT DISTINCT workflow_id
         FROM workflow_events
-          INDEXED BY workflow_events_started_owner_idx
-        WHERE event_type = 'workflow.started'
-          AND (
-            CASE
-              WHEN json_valid(payload_json)
-              THEN json_extract(payload_json, '$.os_user_id')
-            END
-          ) = ?
+          INDEXED BY workflow_events_owner_idx
+        WHERE os_user_id = ?
         ''',
             variables: [Variable.withString(os_user_id)],
             readsFrom: {_database.workflowEvents},
