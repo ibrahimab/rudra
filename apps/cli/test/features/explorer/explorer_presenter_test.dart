@@ -261,6 +261,57 @@ void main() {
       expect(view_model.footer.navigation_hints, 'Explorer closed.');
       expect(model.can_go_back, isFalse);
     });
+
+    test('projects workflow start and started into an active header', () {
+      final identity = WorkflowIdentity(
+        workflow_id: 'workflow-1',
+        os_user_id: 'trusted-user',
+        target_id: 'fixture-target',
+        root: TargetPath('/fixture'),
+      );
+
+      // Exercise the actual SDK lifecycle transitions.
+      // This validates the projection, not durable commitment.
+      final state = WorkflowStateMachine().replay([
+        WorkflowStartEvent(
+          target_id: 'fixture-target',
+          root: TargetPath('/fixture'),
+        ),
+        WorkflowStartedEvent(identity: identity),
+      ]);
+
+      expect(state, isA<WorkflowActiveState>());
+      expect(state.version, 2);
+
+      final view_model = presenter.present(
+        _model([]),
+        visible_row_limit: 5,
+        active_workflow: state as WorkflowActiveState,
+      );
+
+      expect(view_model.header.workflow_status, 'ACTIVE');
+      expect(view_model.header.workflow_id, 'workflow-1');
+      expect(view_model.header.workflow_version, 2);
+      expect(view_model.header.workflow_target_id, 'fixture-target');
+      expect(view_model.header.current_directory, '/fixture');
+    });
+
+    test('presents an accepted receipt as pending', () {
+      final receipt = EventSubmissionReceipt(
+        event_id: 'submission-1',
+        correlation_id: 'correlation-1',
+      );
+
+      final view_model = presenter.present(
+        _model([]),
+        visible_row_limit: 5,
+        pending_submission: receipt,
+      );
+
+      expect(view_model.header.workflow_status, 'PENDING');
+      expect(view_model.header.pending_submission_id, receipt.event_id);
+      expect(view_model.header.workflow_id, isNull);
+    });
   });
 }
 

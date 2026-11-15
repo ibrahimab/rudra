@@ -50,14 +50,15 @@ void main() {
 
       expect(lines[0].text, 'RUDRA / EXPLORER  |  READ ONLY');
       expect(lines[1].text, 'Directory: /fixture');
-      expect(lines[2].text, contains('NAME'));
+      expect(lines[2].text, 'Workflow: NOT LOADED');
 
-      expect(lines[3].text, contains('(empty directory)'));
-      expect(lines[4].text, isEmpty);
+      expect(lines[3].text, contains('NAME'));
+      expect(lines[4].text, contains('(empty directory)'));
+      expect(lines[5].text, isEmpty);
 
-      expect(lines[5].text, contains('0 observed entries'));
-      expect(lines[6].text, contains('No filesystem changes.'));
-      expect(lines[7].text, contains('Q Quit'));
+      expect(lines[6].text, contains('0 observed entries'));
+      expect(lines[7].text, contains('No filesystem changes.'));
+      expect(lines[8].text, contains('Q Quit'));
     });
 
     test('supports a zero-height entry viewport', () {

@@ -9,6 +9,7 @@ import 'package:rudra_cli/src/features/explorer/application/explorer_runner.dart
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
+import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -228,7 +229,7 @@ void main() {
             _entry(path, FilesystemEntryKind.regularFile),
         ],
         keys: '\x1B[B\x1B[B\x1B[Bq',
-        rows: 9,
+        rows: 10,
       );
 
       await scenario.runner.run();
@@ -263,12 +264,12 @@ void main() {
           _entry('/root/b.txt', FilesystemEntryKind.regularFile),
         ],
         keys: '\x1B[Bq',
-        rows: 9,
+        rows: 10,
       );
 
       scenario.renderer.on_render = (_) {
         if (scenario.renderer.frames.length == 1) {
-          scenario.terminal.rows = 11;
+          scenario.terminal.rows = 12;
         }
       };
 
@@ -289,7 +290,7 @@ void main() {
         },
         entries: [_entry('/root/a.txt', FilesystemEntryKind.regularFile)],
         keys: 'q',
-        rows: 7,
+        rows: 8,
       );
 
       expect(await scenario.runner.run(), RudraExitCode.success.value);
@@ -468,6 +469,45 @@ void main() {
       expect(scenario.inspector.listed, isEmpty);
       expect(scenario.terminal.invocations, 0);
     });
+
+    test('renders a supplied active workflow without changing it', () async {
+      final identity = WorkflowIdentity(
+        workflow_id: 'workflow-1',
+        os_user_id: 'trusted-user',
+        target_id: 'fixture-target',
+        root: TargetPath('/root'),
+      );
+
+      final active_state = WorkflowStateMachine().replay([
+        WorkflowStartEvent(
+          target_id: 'fixture-target',
+          root: TargetPath('/root'),
+        ),
+        WorkflowStartedEvent(identity: identity),
+      ]) as WorkflowActiveState;
+
+      final scenario = _Scenario(
+        children: {'/root': []},
+        entries: [],
+        active_workflow: active_state,
+        keys: 'q',
+      );
+
+      final status = await scenario.runner.run();
+
+      expect(status, RudraExitCode.success.value);
+
+      final header = scenario.renderer.frames.single.header;
+
+      expect(header.workflow_status, 'ACTIVE');
+      expect(header.workflow_id, identity.workflow_id);
+      expect(header.workflow_version, 2);
+
+      // Quitting ends only the terminal interaction.
+      expect(scenario.controller.model?.is_closed, isTrue);
+      expect(scenario.terminal.restored, isTrue);
+      expect(active_state.is_terminal, isFalse);
+    });
   });
 }
 
@@ -484,6 +524,8 @@ final class _Scenario {
     String keys = 'q',
     Stream<List<int>>? source,
     int rows = 24,
+    WorkflowActiveState? active_workflow,
+    EventSubmissionReceipt? pending_submission,
   }) {
     inspector = _Inspector(
       children: children,
@@ -509,6 +551,8 @@ final class _Scenario {
       terminal: terminal,
       renderer: renderer,
       error_output: errors,
+      active_workflow: active_workflow,
+      pending_submission: pending_submission,
     );
   }
 
@@ -688,11 +732,15 @@ final class _FakeTerminalHost implements ExplorerTerminalHost {
 /// Rendering may be configured to fail to verify exception
 /// propagation through the terminal lifecycle boundary.
 final class _RecordingRenderer implements ViewportRenderer<ExplorerViewModel> {
-  /// Configurable fixed layout height for viewport tests.
+  /// Default height derived from the actual Explorer layout.
   ///
-  /// The default matches the current composed Explorer screen.
+  /// Tests may override this value to simulate renderers
+  /// with different fixed-height requirements.
+  ///
+  /// Keeping the default tied to the composed screen
+  /// prevents layout changes from invalidating viewport tests.
   @override
-  int fixed_rows = 6;
+  int fixed_rows = ExplorerScreen.fixed_rows;
 
   /// Screens successfully accepted by this renderer.
   final List<ExplorerViewModel> frames = [];

@@ -1,3 +1,6 @@
+import 'package:rudra_sdk/rudra_sdk.dart'
+    show WorkflowActiveState, EventSubmissionReceipt;
+
 import '../../../core/cli/rudra_exit_code.dart';
 import '../../../core/rendering/renderer.dart';
 
@@ -64,11 +67,15 @@ final class ExplorerRunner {
     required ViewportRenderer<ExplorerViewModel> renderer,
     required StringSink error_output,
     ExplorerPresenter presenter = const ExplorerPresenter(),
+    WorkflowActiveState? active_workflow,
+    EventSubmissionReceipt? pending_submission,
   }) : _controller = controller,
        _terminal = terminal,
        _renderer = renderer,
        _error_output = error_output,
-       _presenter = presenter;
+       _presenter = presenter,
+       _active_workflow = active_workflow,
+       _pending_submission = pending_submission;
 
   /// Read-only navigation coordinator.
   final ExplorerController _controller;
@@ -84,6 +91,17 @@ final class ExplorerRunner {
 
   /// Stateless Explorer presentation coordinator.
   final ExplorerPresenter _presenter;
+
+  /// Committed workflow snapshot supplied by application composition.
+  ///
+  /// The runner does not establish or terminate this workflow.
+  final WorkflowActiveState? _active_workflow;
+
+  /// Receipt of an accepted but unresolved workflow-start request.
+  ///
+  /// A receipt must never be presented as a successfully
+  /// established workflow.
+  final EventSubmissionReceipt? _pending_submission;
 
   /// Whether this runner has already been invoked.
   bool _has_started = false;
@@ -211,6 +229,8 @@ final class ExplorerRunner {
             current_model,
             visible_row_limit: visible_row_limit,
             first_visible_index: first_visible_index,
+            active_workflow: _active_workflow,
+            pending_submission: _pending_submission,
           );
 
           _renderer.render(view_model);

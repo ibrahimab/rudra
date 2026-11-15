@@ -32,7 +32,9 @@ void main() {
       final widget = ExplorerHeader(model);
       final lines = widget.build(constraints).toList();
 
-      expect(widget.height, 2);
+      expect(widget.height, 3);
+      expect(lines, hasLength(3));
+      expect(lines[2].text, 'Workflow: NOT LOADED');
       expect(lines[0].text, contains('RUDRA / EXPLORER'));
       expect(lines[1].text, 'Directory: /workspace/src');
       expect(lines[1].role, TerminalRole.path);
@@ -41,6 +43,64 @@ void main() {
     test('rejects an empty current directory', () {
       expect(
         () => ExplorerHeaderViewModel(current_directory: ''),
+        throwsArgumentError,
+      );
+    });
+
+    test('displays an established workflow', () {
+      final model = ExplorerHeaderViewModel(
+        current_directory: '/workspace',
+        workflow_id: 'workflow-1',
+        workflow_version: 2,
+        workflow_target_id: 'local-macos',
+      );
+
+      final lines = ExplorerHeader(model).build(constraints).toList();
+
+      expect(model.workflow_status, 'ACTIVE');
+      expect(model.has_active_workflow, isTrue);
+
+      expect(lines[2].text, contains('Workflow: ACTIVE'));
+      expect(lines[2].text, contains('ID: workflow-1'));
+      expect(lines[2].text, contains('Version: 2'));
+      expect(lines[2].text, contains('Target: local-macos'));
+      expect(lines[2].role, TerminalRole.heading);
+    });
+
+    test('distinguishes accepted requests from active workflows', () {
+      final model = ExplorerHeaderViewModel(
+        current_directory: '/workspace',
+        pending_submission_id: 'submission-1',
+      );
+
+      final lines = ExplorerHeader(model).build(constraints).toList();
+
+      expect(model.workflow_status, 'PENDING');
+      expect(model.has_active_workflow, isFalse);
+      expect(model.has_pending_workflow, isTrue);
+
+      expect(lines[2].text, contains('Workflow: PENDING'));
+      expect(lines[2].text, contains('submission-1'));
+      expect(lines[2].text, isNot(contains('ACTIVE')));
+    });
+
+    test('rejects contradictory workflow metadata', () {
+      expect(
+        () => ExplorerHeaderViewModel(
+          current_directory: '/workspace',
+          workflow_id: 'workflow-1',
+        ),
+        throwsArgumentError,
+      );
+
+      expect(
+        () => ExplorerHeaderViewModel(
+          current_directory: '/workspace',
+          workflow_id: 'workflow-1',
+          workflow_version: 2,
+          workflow_target_id: 'local-macos',
+          pending_submission_id: 'submission-1',
+        ),
         throwsArgumentError,
       );
     });

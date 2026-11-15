@@ -59,6 +59,18 @@ final class ExplorerPresenter {
   /// [first_visible_index] is the preferred viewport position.
   /// It is clamped to the available entry range.
   ///
+  /// [active_workflow] is an established SDK workflow state,
+  /// loaded or committed by the application layer.
+  ///
+  /// [pending_submission] identifies an accepted workflow-start
+  /// request that has not yet established a workflow.
+  ///
+  /// Both [active_workflow] and [pending_submission] are optional.
+  /// Explorer navigation and filesystem presentation remain available
+  /// without a workflow.
+  ///
+  /// The presenter does not infer success from an accepted receipt.
+  ///
   /// The selected row remains visible when at least one entry
   /// row is available.
   ///
@@ -69,6 +81,8 @@ final class ExplorerPresenter {
     ExplorerModel model, {
     required int visible_row_limit,
     int first_visible_index = 0,
+    WorkflowActiveState? active_workflow,
+    EventSubmissionReceipt? pending_submission,
   }) {
     if (visible_row_limit < 0) {
       throw RangeError.value(
@@ -136,6 +150,10 @@ final class ExplorerPresenter {
 
     final header = ExplorerHeaderViewModel(
       current_directory: model.current_directory.value,
+      workflow_id: active_workflow?.identity.workflow_id,
+      workflow_version: active_workflow?.version,
+      workflow_target_id: active_workflow?.identity.target_id,
+      pending_submission_id: pending_submission?.event_id,
     );
 
     final selected_label = directory.selected_index == null

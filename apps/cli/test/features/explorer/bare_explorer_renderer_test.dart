@@ -105,15 +105,13 @@ void main() {
 
       final lines = output.split('\n');
 
-      // Six fixed lines, five entry slots, and the final
-      // trailing newline represented by an empty split item.
-      expect(lines.length, 12);
-      expect(lines[3], contains('only.txt'));
+      // Seven fixed rows, five entry slots, and a trailing newline.
+      expect(lines.length, 13);
+      expect(lines[4], contains('only.txt'));
 
-      expect(lines[4], isEmpty);
-      expect(lines[5], isEmpty);
-      expect(lines[6], isEmpty);
-      expect(lines[7], isEmpty);
+      for (final index in [5, 6, 7, 8]) {
+        expect(lines[index], isEmpty);
+      }
     });
 
     test('distinguishes empty and incomplete observations', () {
