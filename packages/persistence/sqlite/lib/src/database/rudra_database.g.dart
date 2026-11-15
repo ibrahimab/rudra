@@ -614,16 +614,1022 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
   }
 }
 
+class $WorkflowEventsTable extends WorkflowEvents
+    with TableInfo<$WorkflowEventsTable, WorkflowEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkflowEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sequenceMeta = const VerificationMeta(
+    'sequence',
+  );
+  @override
+  late final GeneratedColumn<int> sequence = GeneratedColumn<int>(
+    'sequence',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _event_idMeta = const VerificationMeta(
+    'event_id',
+  );
+  @override
+  late final GeneratedColumn<String> event_id = GeneratedColumn<String>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _workflow_idMeta = const VerificationMeta(
+    'workflow_id',
+  );
+  @override
+  late final GeneratedColumn<String> workflow_id = GeneratedColumn<String>(
+    'workflow_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _correlation_idMeta = const VerificationMeta(
+    'correlation_id',
+  );
+  @override
+  late final GeneratedColumn<String> correlation_id = GeneratedColumn<String>(
+    'correlation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _causation_idMeta = const VerificationMeta(
+    'causation_id',
+  );
+  @override
+  late final GeneratedColumn<String> causation_id = GeneratedColumn<String>(
+    'causation_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _event_typeMeta = const VerificationMeta(
+    'event_type',
+  );
+  @override
+  late final GeneratedColumn<String> event_type = GeneratedColumn<String>(
+    'event_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payload_jsonMeta = const VerificationMeta(
+    'payload_json',
+  );
+  @override
+  late final GeneratedColumn<String> payload_json = GeneratedColumn<String>(
+    'payload_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recorded_at_unix_msMeta =
+      const VerificationMeta('recorded_at_unix_ms');
+  @override
+  late final GeneratedColumn<int> recorded_at_unix_ms = GeneratedColumn<int>(
+    'recorded_at_unix_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    sequence,
+    event_id,
+    workflow_id,
+    version,
+    correlation_id,
+    causation_id,
+    event_type,
+    payload_json,
+    recorded_at_unix_ms,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'workflow_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkflowEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sequence')) {
+      context.handle(
+        _sequenceMeta,
+        sequence.isAcceptableOrUnknown(data['sequence']!, _sequenceMeta),
+      );
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(
+        _event_idMeta,
+        event_id.isAcceptableOrUnknown(data['event_id']!, _event_idMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_event_idMeta);
+    }
+    if (data.containsKey('workflow_id')) {
+      context.handle(
+        _workflow_idMeta,
+        workflow_id.isAcceptableOrUnknown(
+          data['workflow_id']!,
+          _workflow_idMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workflow_idMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_versionMeta);
+    }
+    if (data.containsKey('correlation_id')) {
+      context.handle(
+        _correlation_idMeta,
+        correlation_id.isAcceptableOrUnknown(
+          data['correlation_id']!,
+          _correlation_idMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_correlation_idMeta);
+    }
+    if (data.containsKey('causation_id')) {
+      context.handle(
+        _causation_idMeta,
+        causation_id.isAcceptableOrUnknown(
+          data['causation_id']!,
+          _causation_idMeta,
+        ),
+      );
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(
+        _event_typeMeta,
+        event_type.isAcceptableOrUnknown(data['event_type']!, _event_typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_event_typeMeta);
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+        _payload_jsonMeta,
+        payload_json.isAcceptableOrUnknown(
+          data['payload_json']!,
+          _payload_jsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_payload_jsonMeta);
+    }
+    if (data.containsKey('recorded_at_unix_ms')) {
+      context.handle(
+        _recorded_at_unix_msMeta,
+        recorded_at_unix_ms.isAcceptableOrUnknown(
+          data['recorded_at_unix_ms']!,
+          _recorded_at_unix_msMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recorded_at_unix_msMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {sequence};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {workflow_id, version},
+  ];
+  @override
+  WorkflowEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkflowEvent(
+      sequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sequence'],
+      )!,
+      event_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_id'],
+      )!,
+      workflow_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workflow_id'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      correlation_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}correlation_id'],
+      )!,
+      causation_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}causation_id'],
+      ),
+      event_type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_type'],
+      )!,
+      payload_json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_json'],
+      )!,
+      recorded_at_unix_ms: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}recorded_at_unix_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkflowEventsTable createAlias(String alias) {
+    return $WorkflowEventsTable(attachedDatabase, alias);
+  }
+
+  @override
+  bool get isStrict => true;
+}
+
+class WorkflowEvent extends DataClass implements Insertable<WorkflowEvent> {
+  /// Database-local event sequence.
+  final int sequence;
+
+  /// Stable identity of the committed event.
+  final String event_id;
+
+  /// Workflow receiving this event.
+  final String workflow_id;
+
+  /// Version resulting from this event.
+  final int version;
+
+  /// Correlation identifier shared with its original request.
+  final String correlation_id;
+
+  /// Event responsible for causing this event, if known.
+  final String? causation_id;
+
+  /// Stable domain event type.
+  final String event_type;
+
+  /// Versioned event representation.
+  final String payload_json;
+
+  /// UTC commit timestamp in Unix milliseconds.
+  final int recorded_at_unix_ms;
+  const WorkflowEvent({
+    required this.sequence,
+    required this.event_id,
+    required this.workflow_id,
+    required this.version,
+    required this.correlation_id,
+    this.causation_id,
+    required this.event_type,
+    required this.payload_json,
+    required this.recorded_at_unix_ms,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sequence'] = Variable<int>(sequence);
+    map['event_id'] = Variable<String>(event_id);
+    map['workflow_id'] = Variable<String>(workflow_id);
+    map['version'] = Variable<int>(version);
+    map['correlation_id'] = Variable<String>(correlation_id);
+    if (!nullToAbsent || causation_id != null) {
+      map['causation_id'] = Variable<String>(causation_id);
+    }
+    map['event_type'] = Variable<String>(event_type);
+    map['payload_json'] = Variable<String>(payload_json);
+    map['recorded_at_unix_ms'] = Variable<int>(recorded_at_unix_ms);
+    return map;
+  }
+
+  WorkflowEventsCompanion toCompanion(bool nullToAbsent) {
+    return WorkflowEventsCompanion(
+      sequence: Value(sequence),
+      event_id: Value(event_id),
+      workflow_id: Value(workflow_id),
+      version: Value(version),
+      correlation_id: Value(correlation_id),
+      causation_id: causation_id == null && nullToAbsent
+          ? const Value.absent()
+          : Value(causation_id),
+      event_type: Value(event_type),
+      payload_json: Value(payload_json),
+      recorded_at_unix_ms: Value(recorded_at_unix_ms),
+    );
+  }
+
+  factory WorkflowEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkflowEvent(
+      sequence: serializer.fromJson<int>(json['sequence']),
+      event_id: serializer.fromJson<String>(json['event_id']),
+      workflow_id: serializer.fromJson<String>(json['workflow_id']),
+      version: serializer.fromJson<int>(json['version']),
+      correlation_id: serializer.fromJson<String>(json['correlation_id']),
+      causation_id: serializer.fromJson<String?>(json['causation_id']),
+      event_type: serializer.fromJson<String>(json['event_type']),
+      payload_json: serializer.fromJson<String>(json['payload_json']),
+      recorded_at_unix_ms: serializer.fromJson<int>(
+        json['recorded_at_unix_ms'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sequence': serializer.toJson<int>(sequence),
+      'event_id': serializer.toJson<String>(event_id),
+      'workflow_id': serializer.toJson<String>(workflow_id),
+      'version': serializer.toJson<int>(version),
+      'correlation_id': serializer.toJson<String>(correlation_id),
+      'causation_id': serializer.toJson<String?>(causation_id),
+      'event_type': serializer.toJson<String>(event_type),
+      'payload_json': serializer.toJson<String>(payload_json),
+      'recorded_at_unix_ms': serializer.toJson<int>(recorded_at_unix_ms),
+    };
+  }
+
+  WorkflowEvent copyWith({
+    int? sequence,
+    String? event_id,
+    String? workflow_id,
+    int? version,
+    String? correlation_id,
+    Value<String?> causation_id = const Value.absent(),
+    String? event_type,
+    String? payload_json,
+    int? recorded_at_unix_ms,
+  }) => WorkflowEvent(
+    sequence: sequence ?? this.sequence,
+    event_id: event_id ?? this.event_id,
+    workflow_id: workflow_id ?? this.workflow_id,
+    version: version ?? this.version,
+    correlation_id: correlation_id ?? this.correlation_id,
+    causation_id: causation_id.present ? causation_id.value : this.causation_id,
+    event_type: event_type ?? this.event_type,
+    payload_json: payload_json ?? this.payload_json,
+    recorded_at_unix_ms: recorded_at_unix_ms ?? this.recorded_at_unix_ms,
+  );
+  WorkflowEvent copyWithCompanion(WorkflowEventsCompanion data) {
+    return WorkflowEvent(
+      sequence: data.sequence.present ? data.sequence.value : this.sequence,
+      event_id: data.event_id.present ? data.event_id.value : this.event_id,
+      workflow_id: data.workflow_id.present
+          ? data.workflow_id.value
+          : this.workflow_id,
+      version: data.version.present ? data.version.value : this.version,
+      correlation_id: data.correlation_id.present
+          ? data.correlation_id.value
+          : this.correlation_id,
+      causation_id: data.causation_id.present
+          ? data.causation_id.value
+          : this.causation_id,
+      event_type: data.event_type.present
+          ? data.event_type.value
+          : this.event_type,
+      payload_json: data.payload_json.present
+          ? data.payload_json.value
+          : this.payload_json,
+      recorded_at_unix_ms: data.recorded_at_unix_ms.present
+          ? data.recorded_at_unix_ms.value
+          : this.recorded_at_unix_ms,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkflowEvent(')
+          ..write('sequence: $sequence, ')
+          ..write('event_id: $event_id, ')
+          ..write('workflow_id: $workflow_id, ')
+          ..write('version: $version, ')
+          ..write('correlation_id: $correlation_id, ')
+          ..write('causation_id: $causation_id, ')
+          ..write('event_type: $event_type, ')
+          ..write('payload_json: $payload_json, ')
+          ..write('recorded_at_unix_ms: $recorded_at_unix_ms')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    sequence,
+    event_id,
+    workflow_id,
+    version,
+    correlation_id,
+    causation_id,
+    event_type,
+    payload_json,
+    recorded_at_unix_ms,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkflowEvent &&
+          other.sequence == this.sequence &&
+          other.event_id == this.event_id &&
+          other.workflow_id == this.workflow_id &&
+          other.version == this.version &&
+          other.correlation_id == this.correlation_id &&
+          other.causation_id == this.causation_id &&
+          other.event_type == this.event_type &&
+          other.payload_json == this.payload_json &&
+          other.recorded_at_unix_ms == this.recorded_at_unix_ms);
+}
+
+class WorkflowEventsCompanion extends UpdateCompanion<WorkflowEvent> {
+  final Value<int> sequence;
+  final Value<String> event_id;
+  final Value<String> workflow_id;
+  final Value<int> version;
+  final Value<String> correlation_id;
+  final Value<String?> causation_id;
+  final Value<String> event_type;
+  final Value<String> payload_json;
+  final Value<int> recorded_at_unix_ms;
+  const WorkflowEventsCompanion({
+    this.sequence = const Value.absent(),
+    this.event_id = const Value.absent(),
+    this.workflow_id = const Value.absent(),
+    this.version = const Value.absent(),
+    this.correlation_id = const Value.absent(),
+    this.causation_id = const Value.absent(),
+    this.event_type = const Value.absent(),
+    this.payload_json = const Value.absent(),
+    this.recorded_at_unix_ms = const Value.absent(),
+  });
+  WorkflowEventsCompanion.insert({
+    this.sequence = const Value.absent(),
+    required String event_id,
+    required String workflow_id,
+    required int version,
+    required String correlation_id,
+    this.causation_id = const Value.absent(),
+    required String event_type,
+    required String payload_json,
+    required int recorded_at_unix_ms,
+  }) : event_id = Value(event_id),
+       workflow_id = Value(workflow_id),
+       version = Value(version),
+       correlation_id = Value(correlation_id),
+       event_type = Value(event_type),
+       payload_json = Value(payload_json),
+       recorded_at_unix_ms = Value(recorded_at_unix_ms);
+  static Insertable<WorkflowEvent> custom({
+    Expression<int>? sequence,
+    Expression<String>? event_id,
+    Expression<String>? workflow_id,
+    Expression<int>? version,
+    Expression<String>? correlation_id,
+    Expression<String>? causation_id,
+    Expression<String>? event_type,
+    Expression<String>? payload_json,
+    Expression<int>? recorded_at_unix_ms,
+  }) {
+    return RawValuesInsertable({
+      if (sequence != null) 'sequence': sequence,
+      if (event_id != null) 'event_id': event_id,
+      if (workflow_id != null) 'workflow_id': workflow_id,
+      if (version != null) 'version': version,
+      if (correlation_id != null) 'correlation_id': correlation_id,
+      if (causation_id != null) 'causation_id': causation_id,
+      if (event_type != null) 'event_type': event_type,
+      if (payload_json != null) 'payload_json': payload_json,
+      if (recorded_at_unix_ms != null)
+        'recorded_at_unix_ms': recorded_at_unix_ms,
+    });
+  }
+
+  WorkflowEventsCompanion copyWith({
+    Value<int>? sequence,
+    Value<String>? event_id,
+    Value<String>? workflow_id,
+    Value<int>? version,
+    Value<String>? correlation_id,
+    Value<String?>? causation_id,
+    Value<String>? event_type,
+    Value<String>? payload_json,
+    Value<int>? recorded_at_unix_ms,
+  }) {
+    return WorkflowEventsCompanion(
+      sequence: sequence ?? this.sequence,
+      event_id: event_id ?? this.event_id,
+      workflow_id: workflow_id ?? this.workflow_id,
+      version: version ?? this.version,
+      correlation_id: correlation_id ?? this.correlation_id,
+      causation_id: causation_id ?? this.causation_id,
+      event_type: event_type ?? this.event_type,
+      payload_json: payload_json ?? this.payload_json,
+      recorded_at_unix_ms: recorded_at_unix_ms ?? this.recorded_at_unix_ms,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sequence.present) {
+      map['sequence'] = Variable<int>(sequence.value);
+    }
+    if (event_id.present) {
+      map['event_id'] = Variable<String>(event_id.value);
+    }
+    if (workflow_id.present) {
+      map['workflow_id'] = Variable<String>(workflow_id.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (correlation_id.present) {
+      map['correlation_id'] = Variable<String>(correlation_id.value);
+    }
+    if (causation_id.present) {
+      map['causation_id'] = Variable<String>(causation_id.value);
+    }
+    if (event_type.present) {
+      map['event_type'] = Variable<String>(event_type.value);
+    }
+    if (payload_json.present) {
+      map['payload_json'] = Variable<String>(payload_json.value);
+    }
+    if (recorded_at_unix_ms.present) {
+      map['recorded_at_unix_ms'] = Variable<int>(recorded_at_unix_ms.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkflowEventsCompanion(')
+          ..write('sequence: $sequence, ')
+          ..write('event_id: $event_id, ')
+          ..write('workflow_id: $workflow_id, ')
+          ..write('version: $version, ')
+          ..write('correlation_id: $correlation_id, ')
+          ..write('causation_id: $causation_id, ')
+          ..write('event_type: $event_type, ')
+          ..write('payload_json: $payload_json, ')
+          ..write('recorded_at_unix_ms: $recorded_at_unix_ms')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $UnfinishedWorkflowsTable extends UnfinishedWorkflows
+    with TableInfo<$UnfinishedWorkflowsTable, UnfinishedWorkflow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UnfinishedWorkflowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _os_user_idMeta = const VerificationMeta(
+    'os_user_id',
+  );
+  @override
+  late final GeneratedColumn<String> os_user_id = GeneratedColumn<String>(
+    'os_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workflow_idMeta = const VerificationMeta(
+    'workflow_id',
+  );
+  @override
+  late final GeneratedColumn<String> workflow_id = GeneratedColumn<String>(
+    'workflow_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _target_idMeta = const VerificationMeta(
+    'target_id',
+  );
+  @override
+  late final GeneratedColumn<String> target_id = GeneratedColumn<String>(
+    'target_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _root_pathMeta = const VerificationMeta(
+    'root_path',
+  );
+  @override
+  late final GeneratedColumn<String> root_path = GeneratedColumn<String>(
+    'root_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    os_user_id,
+    workflow_id,
+    target_id,
+    root_path,
+    version,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'unfinished_workflows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UnfinishedWorkflow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('os_user_id')) {
+      context.handle(
+        _os_user_idMeta,
+        os_user_id.isAcceptableOrUnknown(data['os_user_id']!, _os_user_idMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_os_user_idMeta);
+    }
+    if (data.containsKey('workflow_id')) {
+      context.handle(
+        _workflow_idMeta,
+        workflow_id.isAcceptableOrUnknown(
+          data['workflow_id']!,
+          _workflow_idMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workflow_idMeta);
+    }
+    if (data.containsKey('target_id')) {
+      context.handle(
+        _target_idMeta,
+        target_id.isAcceptableOrUnknown(data['target_id']!, _target_idMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_target_idMeta);
+    }
+    if (data.containsKey('root_path')) {
+      context.handle(
+        _root_pathMeta,
+        root_path.isAcceptableOrUnknown(data['root_path']!, _root_pathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_root_pathMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_versionMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {os_user_id};
+  @override
+  UnfinishedWorkflow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UnfinishedWorkflow(
+      os_user_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}os_user_id'],
+      )!,
+      workflow_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workflow_id'],
+      )!,
+      target_id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_id'],
+      )!,
+      root_path: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}root_path'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+    );
+  }
+
+  @override
+  $UnfinishedWorkflowsTable createAlias(String alias) {
+    return $UnfinishedWorkflowsTable(attachedDatabase, alias);
+  }
+
+  @override
+  bool get isStrict => true;
+}
+
+class UnfinishedWorkflow extends DataClass
+    implements Insertable<UnfinishedWorkflow> {
+  /// Trusted operating-system user identity.
+  final String os_user_id;
+
+  /// Unique identity of the unfinished workflow.
+  final String workflow_id;
+
+  /// Immutable configured filesystem target.
+  final String target_id;
+
+  /// Original target-native inspection root.
+  final String root_path;
+
+  /// Last committed workflow event version.
+  final int version;
+  const UnfinishedWorkflow({
+    required this.os_user_id,
+    required this.workflow_id,
+    required this.target_id,
+    required this.root_path,
+    required this.version,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['os_user_id'] = Variable<String>(os_user_id);
+    map['workflow_id'] = Variable<String>(workflow_id);
+    map['target_id'] = Variable<String>(target_id);
+    map['root_path'] = Variable<String>(root_path);
+    map['version'] = Variable<int>(version);
+    return map;
+  }
+
+  UnfinishedWorkflowsCompanion toCompanion(bool nullToAbsent) {
+    return UnfinishedWorkflowsCompanion(
+      os_user_id: Value(os_user_id),
+      workflow_id: Value(workflow_id),
+      target_id: Value(target_id),
+      root_path: Value(root_path),
+      version: Value(version),
+    );
+  }
+
+  factory UnfinishedWorkflow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UnfinishedWorkflow(
+      os_user_id: serializer.fromJson<String>(json['os_user_id']),
+      workflow_id: serializer.fromJson<String>(json['workflow_id']),
+      target_id: serializer.fromJson<String>(json['target_id']),
+      root_path: serializer.fromJson<String>(json['root_path']),
+      version: serializer.fromJson<int>(json['version']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'os_user_id': serializer.toJson<String>(os_user_id),
+      'workflow_id': serializer.toJson<String>(workflow_id),
+      'target_id': serializer.toJson<String>(target_id),
+      'root_path': serializer.toJson<String>(root_path),
+      'version': serializer.toJson<int>(version),
+    };
+  }
+
+  UnfinishedWorkflow copyWith({
+    String? os_user_id,
+    String? workflow_id,
+    String? target_id,
+    String? root_path,
+    int? version,
+  }) => UnfinishedWorkflow(
+    os_user_id: os_user_id ?? this.os_user_id,
+    workflow_id: workflow_id ?? this.workflow_id,
+    target_id: target_id ?? this.target_id,
+    root_path: root_path ?? this.root_path,
+    version: version ?? this.version,
+  );
+  UnfinishedWorkflow copyWithCompanion(UnfinishedWorkflowsCompanion data) {
+    return UnfinishedWorkflow(
+      os_user_id: data.os_user_id.present
+          ? data.os_user_id.value
+          : this.os_user_id,
+      workflow_id: data.workflow_id.present
+          ? data.workflow_id.value
+          : this.workflow_id,
+      target_id: data.target_id.present ? data.target_id.value : this.target_id,
+      root_path: data.root_path.present ? data.root_path.value : this.root_path,
+      version: data.version.present ? data.version.value : this.version,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnfinishedWorkflow(')
+          ..write('os_user_id: $os_user_id, ')
+          ..write('workflow_id: $workflow_id, ')
+          ..write('target_id: $target_id, ')
+          ..write('root_path: $root_path, ')
+          ..write('version: $version')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(os_user_id, workflow_id, target_id, root_path, version);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UnfinishedWorkflow &&
+          other.os_user_id == this.os_user_id &&
+          other.workflow_id == this.workflow_id &&
+          other.target_id == this.target_id &&
+          other.root_path == this.root_path &&
+          other.version == this.version);
+}
+
+class UnfinishedWorkflowsCompanion extends UpdateCompanion<UnfinishedWorkflow> {
+  final Value<String> os_user_id;
+  final Value<String> workflow_id;
+  final Value<String> target_id;
+  final Value<String> root_path;
+  final Value<int> version;
+  final Value<int> rowid;
+  const UnfinishedWorkflowsCompanion({
+    this.os_user_id = const Value.absent(),
+    this.workflow_id = const Value.absent(),
+    this.target_id = const Value.absent(),
+    this.root_path = const Value.absent(),
+    this.version = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UnfinishedWorkflowsCompanion.insert({
+    required String os_user_id,
+    required String workflow_id,
+    required String target_id,
+    required String root_path,
+    required int version,
+    this.rowid = const Value.absent(),
+  }) : os_user_id = Value(os_user_id),
+       workflow_id = Value(workflow_id),
+       target_id = Value(target_id),
+       root_path = Value(root_path),
+       version = Value(version);
+  static Insertable<UnfinishedWorkflow> custom({
+    Expression<String>? os_user_id,
+    Expression<String>? workflow_id,
+    Expression<String>? target_id,
+    Expression<String>? root_path,
+    Expression<int>? version,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (os_user_id != null) 'os_user_id': os_user_id,
+      if (workflow_id != null) 'workflow_id': workflow_id,
+      if (target_id != null) 'target_id': target_id,
+      if (root_path != null) 'root_path': root_path,
+      if (version != null) 'version': version,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UnfinishedWorkflowsCompanion copyWith({
+    Value<String>? os_user_id,
+    Value<String>? workflow_id,
+    Value<String>? target_id,
+    Value<String>? root_path,
+    Value<int>? version,
+    Value<int>? rowid,
+  }) {
+    return UnfinishedWorkflowsCompanion(
+      os_user_id: os_user_id ?? this.os_user_id,
+      workflow_id: workflow_id ?? this.workflow_id,
+      target_id: target_id ?? this.target_id,
+      root_path: root_path ?? this.root_path,
+      version: version ?? this.version,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (os_user_id.present) {
+      map['os_user_id'] = Variable<String>(os_user_id.value);
+    }
+    if (workflow_id.present) {
+      map['workflow_id'] = Variable<String>(workflow_id.value);
+    }
+    if (target_id.present) {
+      map['target_id'] = Variable<String>(target_id.value);
+    }
+    if (root_path.present) {
+      map['root_path'] = Variable<String>(root_path.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UnfinishedWorkflowsCompanion(')
+          ..write('os_user_id: $os_user_id, ')
+          ..write('workflow_id: $workflow_id, ')
+          ..write('target_id: $target_id, ')
+          ..write('root_path: $root_path, ')
+          ..write('version: $version, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$RudraDatabase extends GeneratedDatabase {
   _$RudraDatabase(QueryExecutor e) : super(e);
   $RudraDatabaseManager get managers => $RudraDatabaseManager(this);
   late final $WorkflowSubmissionsTable workflowSubmissions =
       $WorkflowSubmissionsTable(this);
+  late final $WorkflowEventsTable workflowEvents = $WorkflowEventsTable(this);
+  late final $UnfinishedWorkflowsTable unfinishedWorkflows =
+      $UnfinishedWorkflowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [workflowSubmissions];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    workflowSubmissions,
+    workflowEvents,
+    unfinishedWorkflows,
+  ];
 }
 
 typedef $$WorkflowSubmissionsTableCreateCompanionBuilder =
@@ -935,10 +1941,542 @@ typedef $$WorkflowSubmissionsTableProcessedTableManager =
       WorkflowSubmission,
       PrefetchHooks Function()
     >;
+typedef $$WorkflowEventsTableCreateCompanionBuilder =
+    WorkflowEventsCompanion Function({
+      Value<int> sequence,
+      required String event_id,
+      required String workflow_id,
+      required int version,
+      required String correlation_id,
+      Value<String?> causation_id,
+      required String event_type,
+      required String payload_json,
+      required int recorded_at_unix_ms,
+    });
+typedef $$WorkflowEventsTableUpdateCompanionBuilder =
+    WorkflowEventsCompanion Function({
+      Value<int> sequence,
+      Value<String> event_id,
+      Value<String> workflow_id,
+      Value<int> version,
+      Value<String> correlation_id,
+      Value<String?> causation_id,
+      Value<String> event_type,
+      Value<String> payload_json,
+      Value<int> recorded_at_unix_ms,
+    });
+
+class $$WorkflowEventsTableFilterComposer
+    extends Composer<_$RudraDatabase, $WorkflowEventsTable> {
+  $$WorkflowEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get sequence => $composableBuilder(
+    column: $table.sequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get event_id => $composableBuilder(
+    column: $table.event_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workflow_id => $composableBuilder(
+    column: $table.workflow_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get correlation_id => $composableBuilder(
+    column: $table.correlation_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get causation_id => $composableBuilder(
+    column: $table.causation_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get event_type => $composableBuilder(
+    column: $table.event_type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload_json => $composableBuilder(
+    column: $table.payload_json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get recorded_at_unix_ms => $composableBuilder(
+    column: $table.recorded_at_unix_ms,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WorkflowEventsTableOrderingComposer
+    extends Composer<_$RudraDatabase, $WorkflowEventsTable> {
+  $$WorkflowEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get sequence => $composableBuilder(
+    column: $table.sequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get event_id => $composableBuilder(
+    column: $table.event_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workflow_id => $composableBuilder(
+    column: $table.workflow_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get correlation_id => $composableBuilder(
+    column: $table.correlation_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get causation_id => $composableBuilder(
+    column: $table.causation_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get event_type => $composableBuilder(
+    column: $table.event_type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload_json => $composableBuilder(
+    column: $table.payload_json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get recorded_at_unix_ms => $composableBuilder(
+    column: $table.recorded_at_unix_ms,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WorkflowEventsTableAnnotationComposer
+    extends Composer<_$RudraDatabase, $WorkflowEventsTable> {
+  $$WorkflowEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get sequence =>
+      $composableBuilder(column: $table.sequence, builder: (column) => column);
+
+  GeneratedColumn<String> get event_id =>
+      $composableBuilder(column: $table.event_id, builder: (column) => column);
+
+  GeneratedColumn<String> get workflow_id => $composableBuilder(
+    column: $table.workflow_id,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<String> get correlation_id => $composableBuilder(
+    column: $table.correlation_id,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get causation_id => $composableBuilder(
+    column: $table.causation_id,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get event_type => $composableBuilder(
+    column: $table.event_type,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payload_json => $composableBuilder(
+    column: $table.payload_json,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get recorded_at_unix_ms => $composableBuilder(
+    column: $table.recorded_at_unix_ms,
+    builder: (column) => column,
+  );
+}
+
+class $$WorkflowEventsTableTableManager
+    extends
+        RootTableManager<
+          _$RudraDatabase,
+          $WorkflowEventsTable,
+          WorkflowEvent,
+          $$WorkflowEventsTableFilterComposer,
+          $$WorkflowEventsTableOrderingComposer,
+          $$WorkflowEventsTableAnnotationComposer,
+          $$WorkflowEventsTableCreateCompanionBuilder,
+          $$WorkflowEventsTableUpdateCompanionBuilder,
+          (
+            WorkflowEvent,
+            BaseReferences<
+              _$RudraDatabase,
+              $WorkflowEventsTable,
+              WorkflowEvent
+            >,
+          ),
+          WorkflowEvent,
+          PrefetchHooks Function()
+        > {
+  $$WorkflowEventsTableTableManager(
+    _$RudraDatabase db,
+    $WorkflowEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkflowEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkflowEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WorkflowEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> sequence = const Value.absent(),
+                Value<String> event_id = const Value.absent(),
+                Value<String> workflow_id = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<String> correlation_id = const Value.absent(),
+                Value<String?> causation_id = const Value.absent(),
+                Value<String> event_type = const Value.absent(),
+                Value<String> payload_json = const Value.absent(),
+                Value<int> recorded_at_unix_ms = const Value.absent(),
+              }) => WorkflowEventsCompanion(
+                sequence: sequence,
+                event_id: event_id,
+                workflow_id: workflow_id,
+                version: version,
+                correlation_id: correlation_id,
+                causation_id: causation_id,
+                event_type: event_type,
+                payload_json: payload_json,
+                recorded_at_unix_ms: recorded_at_unix_ms,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> sequence = const Value.absent(),
+                required String event_id,
+                required String workflow_id,
+                required int version,
+                required String correlation_id,
+                Value<String?> causation_id = const Value.absent(),
+                required String event_type,
+                required String payload_json,
+                required int recorded_at_unix_ms,
+              }) => WorkflowEventsCompanion.insert(
+                sequence: sequence,
+                event_id: event_id,
+                workflow_id: workflow_id,
+                version: version,
+                correlation_id: correlation_id,
+                causation_id: causation_id,
+                event_type: event_type,
+                payload_json: payload_json,
+                recorded_at_unix_ms: recorded_at_unix_ms,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WorkflowEventsTable, WorkflowEvent>(table),
+                  BaseReferences<
+                    _$RudraDatabase,
+                    $WorkflowEventsTable,
+                    WorkflowEvent
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WorkflowEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$RudraDatabase,
+      $WorkflowEventsTable,
+      WorkflowEvent,
+      $$WorkflowEventsTableFilterComposer,
+      $$WorkflowEventsTableOrderingComposer,
+      $$WorkflowEventsTableAnnotationComposer,
+      $$WorkflowEventsTableCreateCompanionBuilder,
+      $$WorkflowEventsTableUpdateCompanionBuilder,
+      (
+        WorkflowEvent,
+        BaseReferences<_$RudraDatabase, $WorkflowEventsTable, WorkflowEvent>,
+      ),
+      WorkflowEvent,
+      PrefetchHooks Function()
+    >;
+typedef $$UnfinishedWorkflowsTableCreateCompanionBuilder =
+    UnfinishedWorkflowsCompanion Function({
+      required String os_user_id,
+      required String workflow_id,
+      required String target_id,
+      required String root_path,
+      required int version,
+      Value<int> rowid,
+    });
+typedef $$UnfinishedWorkflowsTableUpdateCompanionBuilder =
+    UnfinishedWorkflowsCompanion Function({
+      Value<String> os_user_id,
+      Value<String> workflow_id,
+      Value<String> target_id,
+      Value<String> root_path,
+      Value<int> version,
+      Value<int> rowid,
+    });
+
+class $$UnfinishedWorkflowsTableFilterComposer
+    extends Composer<_$RudraDatabase, $UnfinishedWorkflowsTable> {
+  $$UnfinishedWorkflowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get os_user_id => $composableBuilder(
+    column: $table.os_user_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get workflow_id => $composableBuilder(
+    column: $table.workflow_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get target_id => $composableBuilder(
+    column: $table.target_id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get root_path => $composableBuilder(
+    column: $table.root_path,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UnfinishedWorkflowsTableOrderingComposer
+    extends Composer<_$RudraDatabase, $UnfinishedWorkflowsTable> {
+  $$UnfinishedWorkflowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get os_user_id => $composableBuilder(
+    column: $table.os_user_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get workflow_id => $composableBuilder(
+    column: $table.workflow_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get target_id => $composableBuilder(
+    column: $table.target_id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get root_path => $composableBuilder(
+    column: $table.root_path,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UnfinishedWorkflowsTableAnnotationComposer
+    extends Composer<_$RudraDatabase, $UnfinishedWorkflowsTable> {
+  $$UnfinishedWorkflowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get os_user_id => $composableBuilder(
+    column: $table.os_user_id,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get workflow_id => $composableBuilder(
+    column: $table.workflow_id,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get target_id =>
+      $composableBuilder(column: $table.target_id, builder: (column) => column);
+
+  GeneratedColumn<String> get root_path =>
+      $composableBuilder(column: $table.root_path, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+}
+
+class $$UnfinishedWorkflowsTableTableManager
+    extends
+        RootTableManager<
+          _$RudraDatabase,
+          $UnfinishedWorkflowsTable,
+          UnfinishedWorkflow,
+          $$UnfinishedWorkflowsTableFilterComposer,
+          $$UnfinishedWorkflowsTableOrderingComposer,
+          $$UnfinishedWorkflowsTableAnnotationComposer,
+          $$UnfinishedWorkflowsTableCreateCompanionBuilder,
+          $$UnfinishedWorkflowsTableUpdateCompanionBuilder,
+          (
+            UnfinishedWorkflow,
+            BaseReferences<
+              _$RudraDatabase,
+              $UnfinishedWorkflowsTable,
+              UnfinishedWorkflow
+            >,
+          ),
+          UnfinishedWorkflow,
+          PrefetchHooks Function()
+        > {
+  $$UnfinishedWorkflowsTableTableManager(
+    _$RudraDatabase db,
+    $UnfinishedWorkflowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UnfinishedWorkflowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UnfinishedWorkflowsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$UnfinishedWorkflowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> os_user_id = const Value.absent(),
+                Value<String> workflow_id = const Value.absent(),
+                Value<String> target_id = const Value.absent(),
+                Value<String> root_path = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UnfinishedWorkflowsCompanion(
+                os_user_id: os_user_id,
+                workflow_id: workflow_id,
+                target_id: target_id,
+                root_path: root_path,
+                version: version,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String os_user_id,
+                required String workflow_id,
+                required String target_id,
+                required String root_path,
+                required int version,
+                Value<int> rowid = const Value.absent(),
+              }) => UnfinishedWorkflowsCompanion.insert(
+                os_user_id: os_user_id,
+                workflow_id: workflow_id,
+                target_id: target_id,
+                root_path: root_path,
+                version: version,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$UnfinishedWorkflowsTable, UnfinishedWorkflow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$RudraDatabase,
+                    $UnfinishedWorkflowsTable,
+                    UnfinishedWorkflow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UnfinishedWorkflowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$RudraDatabase,
+      $UnfinishedWorkflowsTable,
+      UnfinishedWorkflow,
+      $$UnfinishedWorkflowsTableFilterComposer,
+      $$UnfinishedWorkflowsTableOrderingComposer,
+      $$UnfinishedWorkflowsTableAnnotationComposer,
+      $$UnfinishedWorkflowsTableCreateCompanionBuilder,
+      $$UnfinishedWorkflowsTableUpdateCompanionBuilder,
+      (
+        UnfinishedWorkflow,
+        BaseReferences<
+          _$RudraDatabase,
+          $UnfinishedWorkflowsTable,
+          UnfinishedWorkflow
+        >,
+      ),
+      UnfinishedWorkflow,
+      PrefetchHooks Function()
+    >;
 
 class $RudraDatabaseManager {
   final _$RudraDatabase _db;
   $RudraDatabaseManager(this._db);
   $$WorkflowSubmissionsTableTableManager get workflowSubmissions =>
       $$WorkflowSubmissionsTableTableManager(_db, _db.workflowSubmissions);
+  $$WorkflowEventsTableTableManager get workflowEvents =>
+      $$WorkflowEventsTableTableManager(_db, _db.workflowEvents);
+  $$UnfinishedWorkflowsTableTableManager get unfinishedWorkflows =>
+      $$UnfinishedWorkflowsTableTableManager(_db, _db.unfinishedWorkflows);
 }

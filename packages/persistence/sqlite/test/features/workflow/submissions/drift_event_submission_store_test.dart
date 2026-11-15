@@ -15,7 +15,7 @@ void main() {
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('rudra-store-');
 
-    database = RudraDatabase(File('${directory.path}/rudra.db'));
+    database = RudraDatabase.file(File('${directory.path}/rudra.db'));
 
     manager = EventManager(
       store: DriftEventSubmissionStore(
@@ -123,7 +123,7 @@ void main() {
 
     await database.close();
 
-    database = RudraDatabase(File('${directory.path}/rudra.db'));
+    database = RudraDatabase.file(File('${directory.path}/rudra.db'));
 
     manager = EventManager(
       store: DriftEventSubmissionStore(
@@ -154,7 +154,7 @@ void main() {
 /// The database and its dependencies are created and closed
 /// within the worker isolate.
 Future<List<String>> _accept_from_isolate(String database_path) async {
-  final isolated_database = RudraDatabase(File(database_path));
+  final isolated_database = RudraDatabase.file(File(database_path));
 
   try {
     final manager = EventManager(

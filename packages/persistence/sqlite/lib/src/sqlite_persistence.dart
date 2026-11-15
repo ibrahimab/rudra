@@ -39,7 +39,7 @@ final class RudraSqlitePersistence {
     required File database_file,
     required String scope_id,
   }) : _scope_id = _validate_scope(scope_id),
-       _database = RudraDatabase(database_file);
+       _database = RudraDatabase.file(database_file);
 
   final String _scope_id;
   final RudraDatabase _database;

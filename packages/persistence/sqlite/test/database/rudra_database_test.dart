@@ -17,7 +17,7 @@ void main() {
     final database_file = File('${directory.path}/rudra.db');
 
     try {
-      final database = RudraDatabase(database_file);
+      final database = RudraDatabase.file(database_file);
 
       try {
         await database
@@ -42,7 +42,7 @@ void main() {
       }
 
       // A new database connection must recover the committed row.
-      final reopened = RudraDatabase(database_file);
+      final reopened = RudraDatabase.file(database_file);
 
       try {
         final submission = await reopened
