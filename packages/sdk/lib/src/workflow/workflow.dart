@@ -38,3 +38,7 @@ export 'modules/lifecycle_workflow_module.dart';
 
 /// Event serialization.
 export 'serialization/workflow_command_codec.dart';
+
+/// Durable workflow processing contracts.
+export 'workflow_processing_store.dart';
+export 'workflow_processor.dart';
