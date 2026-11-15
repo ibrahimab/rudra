@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
+import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
 import 'package:test/test.dart';
 
 /// Verifies SQLite schema creation, persistence and constraints.

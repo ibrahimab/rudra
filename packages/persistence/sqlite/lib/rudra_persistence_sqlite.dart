@@ -9,4 +9,4 @@
 /// The SDK does not depend on this package.
 library;
 
-export 'src/database/rudra_database.dart';
+export 'src/sqlite_persistence.dart';
