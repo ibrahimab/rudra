@@ -27,12 +27,15 @@ void main() {
   late EventManager manager;
   late DriftWorkflowInbox inbox;
   late DriftWorkflowCommitter committer;
+  late bool fixture_database_closed;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('rudra-committer-test-');
 
     database_file = File('${directory.path}/rudra.db');
+
     database = RudraDatabase.file(database_file);
+    fixture_database_closed = false;
 
     registry = WorkflowModuleRegistry()
       ..register(const LifecycleWorkflowModule());
@@ -61,7 +64,12 @@ void main() {
   });
 
   tearDown(() async {
-    await database.close();
+    // The frontend recovery test closes its unused
+    // fixture database before opening its own persistence.
+    if (!fixture_database_closed) {
+      await database.close();
+    }
+
     await directory.delete(recursive: true);
   });
 
@@ -424,6 +432,12 @@ void main() {
   });
 
   test('frontend can recover submission results after restart', () async {
+    // This test owns its persistence lifecycle independently.
+    // Close the unused database created by the shared fixture
+    // before constructing the frontend persistence instance.
+    await database.close();
+    fixture_database_closed = true;
+
     final frontend_database = File('${directory.path}/frontend.db');
 
     late EventSubmissionReceipt first;
