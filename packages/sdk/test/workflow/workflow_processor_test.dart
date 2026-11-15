@@ -20,6 +20,7 @@ void main() {
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: committer,
       rejector: _FakeWorkflowRejector(),
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     final result = await processor.process_next();
@@ -58,6 +59,7 @@ void main() {
       identity_provider: identity_provider,
       committer: committer,
       rejector: _FakeWorkflowRejector(),
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     expect(await processor.process_next(), isA<WorkflowProcessingIdle>());
@@ -74,6 +76,7 @@ void main() {
       identity_provider: _FakeWorkflowIdentityProvider(root: '/different-root'),
       committer: committer,
       rejector: _FakeWorkflowRejector(),
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     await expectLater(
@@ -99,6 +102,7 @@ void main() {
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: committer,
       rejector: _FakeWorkflowRejector(),
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     await expectLater(processor.process_next(), throwsStateError);
@@ -117,6 +121,7 @@ void main() {
         WorkflowCommitErrorCode.ownership_conflict,
       ),
       rejector: rejector,
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     final result = await processor.process_next();
@@ -145,6 +150,7 @@ void main() {
         WorkflowCommitErrorCode.invalid_plan,
       ),
       rejector: rejector,
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     await expectLater(

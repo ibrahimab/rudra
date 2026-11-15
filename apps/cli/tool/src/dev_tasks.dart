@@ -283,7 +283,6 @@ final class DevTasks {
       'run',
       'build_runner',
       'build',
-      '--delete-conflicting-outputs',
     ], working_directory: sqlite_directory);
 
     if (generation_status != RudraExitCode.success.value) {
