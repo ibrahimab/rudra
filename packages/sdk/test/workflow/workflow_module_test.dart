@@ -1,5 +1,7 @@
-import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_sdk/src/workflow/behaviors/workflow_start_behavior.dart';
 
 /// Verifies composable workflow behavior registration.
 void main() {
@@ -108,6 +110,79 @@ void main() {
     );
 
     expect(registry.transitions, hasLength(1));
+  });
+
+  test('registers command handling through the start behavior', () {
+    final registry = WorkflowModuleRegistry();
+
+    registry.register(const LifecycleWorkflowModule());
+
+    expect(registry.transitions, hasLength(3));
+    expect(registry.command_behaviors, hasLength(1));
+
+    expect(registry.handler_for(command_type: WorkflowStartEvent), isNotNull);
+
+    expect(registry.handler_for(command_type: WorkflowStartedEvent), isNull);
+
+    expect(registry.handler_for(command_type: WorkflowEndedEvent), isNull);
+  });
+
+  test('start handler proposes a valid active workflow', () {
+    final registry = WorkflowModuleRegistry();
+    registry.register(const LifecycleWorkflowModule());
+
+    final command = WorkflowStartEvent(
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final identity = WorkflowIdentity(
+      workflow_id: 'workflow-1',
+      os_user_id: 'user-1',
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final handler = registry.handler_for(command_type: WorkflowStartEvent);
+
+    expect(handler, isNotNull);
+
+    final outcomes = handler!.propose_outcomes(command, identity: identity);
+
+    expect(outcomes, hasLength(1));
+    expect(outcomes.single, isA<WorkflowStartedEvent>());
+
+    expect(() => outcomes.clear(), throwsUnsupportedError);
+
+    final machine = WorkflowStateMachine(
+      flow: WorkflowFlow(transitions: registry.transitions),
+    );
+
+    final state = machine.replay([command, ...outcomes]);
+
+    expect(state, isA<WorkflowActiveState>());
+    expect(state.version, 2);
+
+    expect((state as WorkflowActiveState).identity.workflow_id, 'workflow-1');
+  });
+
+  test('rejects duplicate command handlers atomically', () {
+    final registry = WorkflowModuleRegistry();
+
+    registry.register(const LifecycleWorkflowModule());
+
+    expect(
+      () => registry.register(
+        _TestWorkflowModule(
+          module_id: 'duplicate.handler',
+          behaviors: [const WorkflowStartBehavior()],
+        ),
+      ),
+      throwsStateError,
+    );
+
+    expect(registry.transitions, hasLength(3));
+    expect(registry.command_behaviors, hasLength(1));
   });
 }
 
