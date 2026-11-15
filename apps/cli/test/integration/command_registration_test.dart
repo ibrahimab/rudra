@@ -20,7 +20,14 @@ void main() {
     test('excludes development commands', () {
       final cli = RudraCli.product();
 
-      for (final name in ['test', 'check', 'analyze', 'format', 'build']) {
+      for (final name in [
+        'test',
+        'check',
+        'analyze',
+        'format',
+        'generate',
+        'build',
+      ]) {
         expect(
           cli.command_names.contains(name),
           isFalse,
@@ -140,7 +147,15 @@ void main() {
 
       expect(
         cli.command_names,
-        containsAll(['about', 'test', 'check', 'analyze', 'format', 'build']),
+        containsAll([
+          'about',
+          'test',
+          'check',
+          'analyze',
+          'format',
+          'generate',
+          'build',
+        ]),
       );
 
       expect(cli.module_ids, contains('rudra.development.tools'));

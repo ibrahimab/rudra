@@ -206,6 +206,60 @@ final class DevTasks {
   /// source files. It runs only when explicitly invoked.
   Future<int> format() => _run_dart(['format', '.']);
 
+  /// Generates Drift sources and verifies the complete workspace.
+  ///
+  /// Runs from the repository root, except build_runner, which
+  /// executes in the SQLite persistence package.
+  ///
+  /// Stops immediately on failure and preserves the failing
+  /// command's exit status.
+  ///
+  /// Generated sources are formatted and checked before success
+  /// is reported.
+  ///
+  /// Example:
+  /// ```dart
+  /// final status = await tasks.generate();
+  /// ```
+  Future<int> generate() async {
+    final dependency_status = await _run_dart(['pub', 'get']);
+
+    if (dependency_status != RudraExitCode.success.value) {
+      return dependency_status;
+    }
+
+    final sqlite_directory = Directory(
+      '${repo_root.path}/packages/persistence/sqlite',
+    );
+
+    final generation_status = await _run_dart([
+      'run',
+      'build_runner',
+      'build',
+      '--delete-conflicting-outputs',
+    ], working_directory: sqlite_directory);
+
+    if (generation_status != RudraExitCode.success.value) {
+      return generation_status;
+    }
+
+    final format_status = await format();
+
+    if (format_status != RudraExitCode.success.value) {
+      return format_status;
+    }
+
+    // The existing quality gate performs workspace-wide
+    // analysis and tests, including the SQLite package.
+    final check_status = await check();
+
+    if (check_status != RudraExitCode.success.value) {
+      return check_status;
+    }
+
+    return _run_git(['diff', '--check']);
+  }
+
   /// Runs static analysis across the workspace.
   ///
   /// Returns the analyzer's exit code without modifying source files.
@@ -375,6 +429,7 @@ final class DevTasks {
       'test',
       'analyze',
       'format',
+      'generate',
       'build',
     ];
 
@@ -468,6 +523,31 @@ final class DevTasks {
     } on ProcessException catch (error) {
       stderr.writeln(error);
       return 1;
+    }
+  }
+
+  /// Executes a Git command from the repository root.
+  ///
+  /// Standard output and diagnostics are forwarded to the
+  /// calling terminal.
+  ///
+  /// Returns the original exit status or a software error when
+  /// Git could not be started.
+  Future<int> _run_git(List<String> arguments) async {
+    stdout.writeln('> git ${arguments.join(' ')}');
+
+    try {
+      final process = await Process.start(
+        'git',
+        arguments,
+        workingDirectory: repo_root.path,
+        mode: ProcessStartMode.inheritStdio,
+      );
+
+      return await process.exitCode;
+    } on ProcessException catch (error) {
+      stderr.writeln(error);
+      return RudraExitCode.software_error.value;
     }
   }
 }

@@ -53,6 +53,11 @@ final class DevToolsCliModule implements RudraCliModule {
         action: _tasks.format,
       ),
       DevCommand(
+        name: 'generate',
+        description: 'Generate Drift sources and verify the workspace.',
+        action: _tasks.generate,
+      ),
+      DevCommand(
         name: 'build',
         description: 'Build and verify the production executable.',
         action: _tasks.build,

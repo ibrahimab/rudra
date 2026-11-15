@@ -161,6 +161,25 @@ The production build command is:
 
 Development-only tools must not become production commands accidentally.
 
+### 3.8 Drift code generation
+
+Rudra uses Drift to generate typed SQLite persistence code.
+
+From the repository root:
+
+    ./rudra generate
+
+This command performs dependency resolution, Drift code
+generation, Dart formatting, full workspace verification,
+and Git whitespace validation.
+
+Generated `.g.dart` files belong in version control and
+must not be edited manually.
+
+The regular `./rudra check` command remains read-only
+with respect to code generation. Generation must be
+requested explicitly whenever Drift schemas change.
+
 ## 4. Naming Conventions
 
 ### 4.1 Types
