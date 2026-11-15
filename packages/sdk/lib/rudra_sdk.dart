@@ -73,6 +73,9 @@ export 'src/workflow/transitions/workflow_transition.dart';
 export 'src/workflow/workflow_flow.dart';
 export 'src/workflow/workflow_flow_exception.dart';
 
+/// Versioned serialization of workflow command events.
+export 'src/workflow/serialization/workflow_command_codec.dart';
+
 /// Deterministic execution and typed transition failures.
 export 'src/workflow/workflow_state_machine.dart';
 export 'src/workflow/workflow_transition_exception.dart';

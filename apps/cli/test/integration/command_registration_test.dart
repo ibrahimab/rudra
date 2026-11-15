@@ -27,6 +27,7 @@ void main() {
         'format',
         'generate',
         'build',
+        'verify',
       ]) {
         expect(
           cli.command_names.contains(name),
@@ -155,6 +156,7 @@ void main() {
           'format',
           'generate',
           'build',
+          'verify',
         ]),
       );
 

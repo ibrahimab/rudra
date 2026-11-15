@@ -143,6 +143,29 @@ It verifies dependency resolution, formatting, static analysis, and applicable w
 
 A development block is not complete until this command passes.
 
+### 3.5.1 Convenient verification
+
+The development-only `verify` command formats source files
+before running the existing repository quality gate.
+
+Examples:
+
+    ./rudra verify
+    ./rudra verify all
+    ./rudra verify sqlite
+    ./rudra verify sdk
+    ./rudra verify cli
+    ./rudra verify contracts
+    ./rudra verify macos
+
+Full workspace package names are also accepted.
+
+Verification stops on the first failure and preserves its
+exit status.
+
+Unlike `check`, `verify` applies Dart formatting automatically.
+Neither command performs Git diff validation.
+
 ### 3.6 Selective testing
 
 The root development launcher supports:
@@ -754,6 +777,7 @@ Do not automatically continue destructive work from a saved checkpoint.
 Persistence must enforce one unfinished session per Rudra user profile.
 
 Process-level coordination and durable session uniqueness must be tested independently.
+
 
 ### 13.6 Audit records
 

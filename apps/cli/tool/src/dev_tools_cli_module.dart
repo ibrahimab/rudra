@@ -5,6 +5,7 @@ import 'check_command.dart';
 import 'dev_command.dart';
 import 'dev_tasks.dart';
 import 'test_command.dart';
+import 'verify_command.dart';
 
 /// Integrates repository development tools into the Rudra CLI.
 ///
@@ -41,6 +42,7 @@ final class DevToolsCliModule implements RudraCliModule {
   Iterable<Command<int>> create_commands() {
     return [
       CheckCommand(_tasks),
+      VerifyCommand(_tasks),
       TestCommand(_tasks),
       DevCommand(
         name: 'analyze',
@@ -50,7 +52,7 @@ final class DevToolsCliModule implements RudraCliModule {
       DevCommand(
         name: 'format',
         description: 'Format repository Dart source files.',
-        action: _tasks.format,
+        action: () => _tasks.format(),
       ),
       DevCommand(
         name: 'generate',

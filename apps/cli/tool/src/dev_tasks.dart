@@ -163,26 +163,13 @@ final class DevTasks {
       return dependency_status;
     }
 
-    var target_path = '.';
+    final selection = await _resolve_package_path(package_name);
 
-    if (package_name != null) {
-      final discovery = await _discover_workspace_packages();
-
-      if (discovery.packages == null) {
-        return discovery.exit_code;
-      }
-
-      final matches = discovery.packages!
-          .where((package) => package.name == package_name)
-          .toList();
-
-      if (matches.isEmpty) {
-        stderr.writeln('Unknown workspace package: $package_name');
-        return RudraExitCode.invalid_usage.value;
-      }
-
-      target_path = matches.single.path;
+    if (selection.path == null) {
+      return selection.exit_code;
     }
+
+    final target_path = selection.path!;
 
     final stages = <List<String>>[
       ['format', '--output=none', '--set-exit-if-changed', target_path],
@@ -200,11 +187,40 @@ final class DevTasks {
     return test(package_name: package_name);
   }
 
-  /// Applies Dart formatting to all repository source files.
+  /// Formats the entire workspace or a selected package.
   ///
-  /// Unlike the formatting stage in [check], this command modifies
-  /// source files. It runs only when explicitly invoked.
-  Future<int> format() => _run_dart(['format', '.']);
+  /// Package selection is resolved from the Dart workspace.
+  /// Formatting modifies source files.
+  Future<int> format({String? package_name}) async {
+    final selection = await _resolve_package_path(package_name);
+
+    if (selection.path == null) {
+      return selection.exit_code;
+    }
+
+    return _run_dart(['format', selection.path!]);
+  }
+
+  /// Formats and verifies the selected workspace scope.
+  ///
+  /// Delegates verification to [check], preserving its analysis,
+  /// testing, dependency resolution, and failure behavior.
+  ///
+  /// Stops immediately if formatting fails.
+  ///
+  /// Example:
+  /// ```dart
+  /// await tasks.verify(package_name: 'rudra_persistence_sqlite');
+  /// ```
+  Future<int> verify({String? package_name}) async {
+    final format_status = await format(package_name: package_name);
+
+    if (format_status != RudraExitCode.success.value) {
+      return format_status;
+    }
+
+    return check(package_name: package_name);
+  }
 
   /// Generates Drift sources and verifies the complete workspace.
   ///
@@ -431,6 +447,7 @@ final class DevTasks {
       'format',
       'generate',
       'build',
+      'verify',
     ];
 
     for (final command in developer_commands) {
@@ -448,6 +465,36 @@ final class DevTasks {
 
     stdout.writeln('Production build verified: $binary_path');
     return 0;
+  }
+
+  /// Resolves a workspace package to its repository-relative path.
+  ///
+  /// A null package selects the entire workspace.
+  ///
+  /// Invalid package names return a typed usage error.
+  /// Discovery failures preserve their original exit status.
+  Future<({int exit_code, String? path})> _resolve_package_path(
+    String? package_name,
+  ) async {
+    if (package_name == null) {
+      return (exit_code: RudraExitCode.success.value, path: '.');
+    }
+
+    final discovery = await _discover_workspace_packages();
+
+    if (discovery.packages == null) {
+      return (exit_code: discovery.exit_code, path: null);
+    }
+
+    for (final package in discovery.packages!) {
+      if (package.name == package_name) {
+        return (exit_code: RudraExitCode.success.value, path: package.path);
+      }
+    }
+
+    stderr.writeln('Unknown workspace package: $package_name');
+
+    return (exit_code: RudraExitCode.invalid_usage.value, path: null);
   }
 
   /// Discovers the package names and paths in the current workspace.

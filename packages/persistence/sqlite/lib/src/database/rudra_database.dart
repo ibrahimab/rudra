@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 
-import 'tables/workflow_submissions.dart';
+import '../features/workflow/submissions/workflow_submissions.dart';
 
 part 'rudra_database.g.dart';
 
