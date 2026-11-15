@@ -40,5 +40,9 @@ export 'modules/lifecycle_workflow_module.dart';
 export 'serialization/workflow_command_codec.dart';
 
 /// Durable workflow processing contracts.
-export 'workflow_processing_store.dart';
-export 'workflow_processor.dart';
+/// Workflow processing contracts and orchestration.
+export 'processing/workflow_processing_models.dart';
+export 'processing/workflow_inbox.dart';
+export 'processing/workflow_identity_provider.dart';
+export 'processing/workflow_committer.dart';
+export 'processing/workflow_processor.dart';
