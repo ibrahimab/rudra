@@ -508,6 +508,83 @@ void main() {
       expect(scenario.terminal.restored, isTrue);
       expect(active_state.is_terminal, isFalse);
     });
+
+    test('S starts once, updates the header, and Q preserves state', () async {
+      final identity = WorkflowIdentity(
+        workflow_id: 'started-by-key',
+        os_user_id: 'trusted-user',
+        target_id: 'fixture-target',
+        root: TargetPath('/root'),
+      );
+
+      final active = WorkflowStateMachine().replay([
+        WorkflowStartEvent(
+          target_id: 'fixture-target',
+          root: TargetPath('/root'),
+        ),
+        WorkflowStartedEvent(identity: identity),
+      ]) as WorkflowActiveState;
+
+      var starts = 0;
+
+      final scenario = _Scenario(
+        children: {'/root': []},
+        entries: [],
+        keys: 'ssq',
+        start_workflow: (root) async {
+          starts++;
+          expect(root.value, '/root');
+          return active;
+        },
+      );
+
+      final status = await scenario.runner.run();
+
+      expect(status, RudraExitCode.success.value);
+      expect(starts, 1);
+      expect(scenario.renderer.frames, hasLength(2));
+
+      final before = scenario.renderer.frames.first;
+      final after = scenario.renderer.frames.last;
+
+      expect(before.header.workflow_status, 'NOT LOADED');
+      expect(before.footer.navigation_hints, contains('S Start Workflow'));
+
+      expect(after.header.workflow_status, 'ACTIVE');
+      expect(after.header.workflow_id, 'started-by-key');
+      expect(after.header.workflow_version, 2);
+      expect(
+        after.footer.navigation_hints,
+        isNot(contains('S Start Workflow')),
+      );
+
+      expect(scenario.inspector.listed, ['/root']);
+      expect(scenario.controller.model?.is_closed, isTrue);
+      expect(scenario.terminal.restored, isTrue);
+      expect(active.is_terminal, isFalse);
+    });
+
+    test('failed workflow start restores terminal modes', () async {
+      final scenario = _Scenario(
+        children: {'/root': []},
+        entries: [],
+        keys: 'sq',
+        start_workflow: (root) async {
+          throw StateError('Injected persistence failure.');
+        },
+      );
+
+      await expectLater(scenario.runner.run(), throwsStateError);
+
+      expect(scenario.terminal.restored, isTrue);
+      expect(scenario.controller.model?.is_closed, isTrue);
+
+      // A failed command must not be presented as active.
+      expect(
+        scenario.renderer.frames.last.header.workflow_status,
+        'NOT LOADED',
+      );
+    });
   });
 }
 
@@ -526,6 +603,7 @@ final class _Scenario {
     int rows = 24,
     WorkflowActiveState? active_workflow,
     EventSubmissionReceipt? pending_submission,
+    Future<WorkflowActiveState> Function(TargetPath)? start_workflow,
   }) {
     inspector = _Inspector(
       children: children,
@@ -553,6 +631,7 @@ final class _Scenario {
       error_output: errors,
       active_workflow: active_workflow,
       pending_submission: pending_submission,
+      start_workflow: start_workflow,
     );
   }
 

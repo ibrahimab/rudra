@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
@@ -322,6 +323,130 @@ void main() {
         await directory.delete(recursive: true);
       }
     });
+
+    test(
+      'S commits workflow and Q preserves it across Explorer launches',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'rudra-explorer-start-key-',
+        );
+
+        try {
+          final database_file = File('${directory.path}/rudra.sqlite');
+
+          final workflows = ProductWorkflowComposition(
+            database_file: database_file,
+            os_user_id_provider: () async => 'test-os-user',
+          );
+
+          // This is a fresh database, with no existing workflow.
+          final first = _Fixture(children: {'/fixture': []}, keys: 'sq')
+            ..workflow_composition = workflows;
+
+          expect(database_file.existsSync(), isFalse);
+
+          expect(
+            await first.create_cli().run(['explore']),
+            RudraExitCode.success.value,
+          );
+
+          // Pressing S must commit, not merely accept a submission.
+          final committed = await workflows.current();
+
+          expect(database_file.existsSync(), isTrue);
+          expect(committed, isNotNull);
+          expect(committed!.version, 2);
+          expect(committed.identity.target_id, 'fixture-target');
+          expect(committed.identity.root.value, '/fixture');
+
+          final first_screen = first.terminal.output_buffer.toString();
+
+          expect(first_screen, contains('Workflow: NOT LOADED'));
+          expect(first_screen, contains('Workflow: ACTIVE'));
+          expect(
+            first_screen,
+            contains('ID: ${committed.identity.workflow_id}'),
+          );
+          expect(first.terminal.restored, isTrue);
+
+          // Start an entirely new CLI invocation with the same
+          // persistence location. S must not create a second workflow.
+          final second = _Fixture(children: {'/fixture': []}, keys: 'sq')
+            ..workflow_composition = workflows;
+
+          expect(
+            await second.create_cli().run(['explore']),
+            RudraExitCode.success.value,
+          );
+
+          final second_screen = second.terminal.output_buffer.toString();
+
+          expect(second_screen, contains('Workflow: ACTIVE'));
+          expect(
+            second_screen,
+            contains('ID: ${committed.identity.workflow_id}'),
+          );
+          expect(second.terminal.restored, isTrue);
+
+          final restored = await workflows.current();
+
+          expect(restored, isNotNull);
+          expect(
+            restored!.identity.workflow_id,
+            committed.identity.workflow_id,
+          );
+          expect(restored.version, committed.version);
+          expect(restored.identity.root.value, committed.identity.root.value);
+        } finally {
+          await directory.delete(recursive: true);
+        }
+      },
+    );
+
+    test('S starts the workflow at the currently opened directory', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rudra-explorer-current-root-',
+      );
+
+      try {
+        final workflows = ProductWorkflowComposition(
+          database_file: File('${directory.path}/rudra.sqlite'),
+          os_user_id_provider: () async => 'test-os-user',
+        );
+
+        final fixture = _Fixture(
+          children: {
+            '/fixture': ['/fixture/docs'],
+            '/fixture/docs': [],
+          },
+          entries: {
+            '/fixture/docs': _entry(
+              '/fixture/docs',
+              FilesystemEntryKind.directory,
+            ),
+          },
+          // Enter directory, start workflow, then quit.
+          keys: '\rsq',
+        )..workflow_composition = workflows;
+
+        expect(
+          await fixture.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
+
+        final active = await workflows.current();
+
+        expect(active, isNotNull);
+        expect(active!.identity.root.value, '/fixture/docs');
+        expect(
+          fixture.terminal.output_buffer.toString(),
+          contains('Directory: /fixture/docs'),
+        );
+        expect(fixture.terminal.restored, isTrue);
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    });
   });
 }
 
@@ -339,6 +464,7 @@ final class _Fixture {
     Map<String, TargetInspectionException> failures = const {},
     String? unexpected_directory,
     bool interactive = true,
+    String keys = 'q',
   }) {
     inspector = _TestInspector(
       children: children,
@@ -347,7 +473,7 @@ final class _Fixture {
       unexpected_directory: unexpected_directory,
     );
 
-    terminal = _TestTerminalHost(interactive: interactive);
+    terminal = _TestTerminalHost(interactive: interactive, keys: keys);
   }
 
   /// In-memory target inspector.
@@ -476,10 +602,13 @@ final class _TestInspector implements TargetInspector {
 /// to terminate through its normal navigation workflow.
 final class _TestTerminalHost implements ExplorerTerminalHost {
   /// Creates a deterministic terminal host.
-  _TestTerminalHost({required this.interactive});
+  _TestTerminalHost({required this.interactive, this.keys = 'q'});
 
   /// Whether interactive operation is supported.
   final bool interactive;
+
+  /// Simulated explicit user keypresses.
+  final String keys;
 
   /// Whether terminal interaction was entered.
   bool entered = false;
@@ -511,9 +640,7 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
       throw StateError('No active terminal interaction.');
     }
 
-    return Stream<List<int>>.fromIterable(const [
-      [0x71],
-    ]);
+    return Stream<List<int>>.fromIterable([ascii.encode(keys)]);
   }
 
   /// Runs the interaction and guarantees restoration signaling.

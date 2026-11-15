@@ -48,7 +48,7 @@ void main() {
 
       expect(lines, hasLength(screen.height));
 
-      expect(lines[0].text, 'RUDRA / EXPLORER  |  READ ONLY');
+      expect(lines[0].text, 'RUDRA / EXPLORER  |  FILESYSTEM READ ONLY');
       expect(lines[1].text, 'Directory: /fixture');
       expect(lines[2].text, 'Workflow: NOT LOADED');
 

@@ -1,5 +1,5 @@
 import 'package:rudra_sdk/rudra_sdk.dart'
-    show WorkflowActiveState, EventSubmissionReceipt;
+    show WorkflowActiveState, EventSubmissionReceipt, TargetPath;
 
 import '../../../core/cli/rudra_exit_code.dart';
 import '../../../core/rendering/renderer.dart';
@@ -69,13 +69,15 @@ final class ExplorerRunner {
     ExplorerPresenter presenter = const ExplorerPresenter(),
     WorkflowActiveState? active_workflow,
     EventSubmissionReceipt? pending_submission,
+    Future<WorkflowActiveState> Function(TargetPath)? start_workflow,
   }) : _controller = controller,
        _terminal = terminal,
        _renderer = renderer,
        _error_output = error_output,
        _presenter = presenter,
        _active_workflow = active_workflow,
-       _pending_submission = pending_submission;
+       _pending_submission = pending_submission,
+       _start_workflow = start_workflow;
 
   /// Read-only navigation coordinator.
   final ExplorerController _controller;
@@ -92,10 +94,11 @@ final class ExplorerRunner {
   /// Stateless Explorer presentation coordinator.
   final ExplorerPresenter _presenter;
 
-  /// Committed workflow snapshot supplied by application composition.
+  /// Last committed workflow snapshot displayed by Explorer.
   ///
-  /// The runner does not establish or terminate this workflow.
-  final WorkflowActiveState? _active_workflow;
+  /// Starts as the restored persisted state. Only a successful,
+  /// explicit workflow-start action may update this snapshot.
+  WorkflowActiveState? _active_workflow;
 
   /// Receipt of an accepted but unresolved workflow-start request.
   ///
@@ -109,6 +112,23 @@ final class ExplorerRunner {
   /// Spare row preventing the final newline from scrolling
   /// the terminal's alternate screen.
   static const int _terminal_safety_rows = 1;
+
+  /// Explicit workflow-start action supplied by composition.
+  ///
+  /// The runner never creates SDK processing infrastructure,
+  /// generates workflow events, or owns database connections.
+  ///
+  /// Null means workflow creation is unavailable in this frontend.
+  final Future<WorkflowActiveState> Function(TargetPath)? _start_workflow;
+
+  /// Whether Explorer can currently offer workflow creation.
+  ///
+  /// An existing active workflow or pending submission prevents
+  /// accidental duplicate starts.
+  bool get _can_start_workflow =>
+      _start_workflow != null &&
+      _active_workflow == null &&
+      _pending_submission == null;
 
   /// Terminal rows reserved outside the scrollable viewport.
   ///
@@ -231,6 +251,7 @@ final class ExplorerRunner {
             first_visible_index: first_visible_index,
             active_workflow: _active_workflow,
             pending_submission: _pending_submission,
+            can_start_workflow: _can_start_workflow,
           );
 
           _renderer.render(view_model);
@@ -250,6 +271,35 @@ final class ExplorerRunner {
             break;
           }
 
+          // Workflow creation is permitted only through an explicit
+          // S keypress while no unfinished workflow is loaded.
+          //
+          // All processing is delegated to the same application action
+          // used by `rudra workflow start`.
+          //
+          // The current directory becomes the requested workflow root.
+          // Navigation state and selection are not modified.
+          if (key == ExplorerKey.start_workflow) {
+            if (!_can_start_workflow) {
+              continue;
+            }
+
+            final start = _start_workflow!;
+
+            // A successful return means the SDK has committed the
+            // workflow and restored its authoritative state.
+            //
+            // Unexpected failures propagate through the guarded
+            // terminal lifecycle, which restores terminal modes.
+            final committed = await start(current_model.current_directory);
+
+            _active_workflow = committed;
+
+            // Re-render immediately, retaining the directory viewport.
+            render_current();
+            continue;
+          }
+
           final previous_model = current_model;
 
           // Only ExplorerController may change navigation state.
@@ -266,6 +316,10 @@ final class ExplorerRunner {
 
             case ExplorerKey.back:
               current_model = await _controller.back();
+
+            case ExplorerKey.start_workflow:
+              // Handled before the switch.
+              break;
 
             case ExplorerKey.quit:
               // Handled before the switch.

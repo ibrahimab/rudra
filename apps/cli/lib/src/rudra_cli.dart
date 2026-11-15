@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
+
+import 'package:rudra_sdk/rudra_sdk.dart'
+    show application_name, WorkflowActiveState, TargetPath;
 
 import 'composition/product_sdk_composition.dart';
 
@@ -31,6 +33,7 @@ import 'features/explorer/cli/explorer_cli_module.dart';
 
 import 'features/explorer/application/explorer_controller.dart';
 import 'features/explorer/application/explorer_runner.dart';
+import 'features/workflow/application/workflow_start_exception.dart';
 
 import 'features/workflow/cli/workflow_cli_module.dart';
 
@@ -229,6 +232,33 @@ final class RudraCli {
             // propagates before entering interactive terminal mode.
             final active_workflow = await workflows?.current();
 
+            // Explicit Explorer workflow creation uses the same
+            // application action as the `workflow start` CLI command.
+            //
+            // If another process established the workflow first,
+            // restore that authoritative state rather than attempting
+            // to create a competing workflow.
+            Future<WorkflowActiveState> start_from_explorer(
+              TargetPath root,
+            ) async {
+              final service = workflows!;
+
+              try {
+                return await service.start(
+                  target_id: composition.sdk.target_id,
+                  root: root,
+                );
+              } on WorkflowAlreadyActiveException {
+                final existing = await service.current();
+
+                if (existing == null) {
+                  rethrow;
+                }
+
+                return existing;
+              }
+            }
+
             final terminal = create_terminal_host();
 
             // All filesystem observations pass through the
@@ -258,6 +288,7 @@ final class RudraCli {
               renderer: renderer,
               error_output: diagnostic_output,
               active_workflow: active_workflow,
+              start_workflow: workflows == null ? null : start_from_explorer,
             );
           },
         ),

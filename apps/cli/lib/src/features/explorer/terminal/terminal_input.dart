@@ -21,6 +21,12 @@ enum ExplorerKey {
   /// Returns to the previously visited directory.
   back,
 
+  /// Explicitly requests creation of a persistent workflow.
+  ///
+  /// This is a user action, not a navigation or view event.
+  /// Authorization and processing belong to application services.
+  start_workflow,
+
   /// Ends the current interactive explorer.
   quit,
 }
@@ -34,7 +40,7 @@ enum ExplorerKey {
 /// - ANSI CSI and SS3 up, down, and left arrows.
 /// - Enter (CR or LF).
 /// - Backspace (BS or DEL).
-/// - Lowercase and uppercase Q.
+/// - Lowercase and uppercase S.
 /// - Lowercase and uppercase Q.
 /// - Ctrl+C (ETX, 0x03), treated as a quit request.
 ///
@@ -204,6 +210,7 @@ final class TerminalInput {
     return switch (byte) {
       0x0A || 0x0D => ExplorerKey.open,
       0x08 || 0x7F => ExplorerKey.back,
+      0x73 || 0x53 => ExplorerKey.start_workflow,
       0x03 || 0x71 || 0x51 => ExplorerKey.quit,
       _ => null,
     };

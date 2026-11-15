@@ -30,7 +30,7 @@ final class ExplorerHeader implements TerminalWidget {
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine(
-      'RUDRA / EXPLORER  |  READ ONLY',
+      'RUDRA / EXPLORER  |  FILESYSTEM READ ONLY',
       role: TerminalRole.title,
     );
 
