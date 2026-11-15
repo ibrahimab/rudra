@@ -74,26 +74,3 @@ abstract interface class WorkflowSubmissionRejector {
     required WorkflowRejectionCode code,
   });
 }
-
-/// Indicates a submission was durably rejected.
-///
-/// This exception is raised only after rejection persistence
-/// succeeds. It is not used for transient infrastructure errors.
-final class WorkflowSubmissionRejectedException implements Exception {
-  /// Creates a typed rejection notification.
-  const WorkflowSubmissionRejectedException({
-    required this.receipt,
-    required this.code,
-  });
-
-  /// Accepted request that was rejected.
-  final EventSubmissionReceipt receipt;
-
-  /// Persisted business rejection reason.
-  final WorkflowRejectionCode code;
-
-  @override
-  String toString() =>
-      'WorkflowSubmissionRejectedException(${code.name}): '
-      '${receipt.event_id}';
-}

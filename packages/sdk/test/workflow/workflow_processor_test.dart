@@ -22,12 +22,15 @@ void main() {
       rejector: _FakeWorkflowRejector(),
     );
 
-    final plan = await processor.process_next();
+    final result = await processor.process_next();
 
-    expect(plan, isNotNull);
+    expect(result, isA<WorkflowProcessingCommitted>());
+
+    final plan = (result as WorkflowProcessingCommitted).plan;
+
     expect(committer.committed, same(plan));
 
-    expect(plan!.previous_state, isA<WorkflowInitialState>());
+    expect(plan.previous_state, isA<WorkflowInitialState>());
     expect(plan.resulting_state, isA<WorkflowActiveState>());
 
     expect(plan.previous_state.version, 0);
@@ -57,7 +60,7 @@ void main() {
       rejector: _FakeWorkflowRejector(),
     );
 
-    expect(await processor.process_next(), isNull);
+    expect(await processor.process_next(), isA<WorkflowProcessingIdle>());
     expect(identity_provider.calls, 0);
     expect(committer.committed, isNull);
   });
@@ -116,16 +119,16 @@ void main() {
       rejector: rejector,
     );
 
-    await expectLater(
-      processor.process_next(),
-      throwsA(
-        isA<WorkflowSubmissionRejectedException>().having(
-          (error) => error.code,
-          'code',
-          WorkflowRejectionCode.ownership_conflict,
-        ),
-      ),
-    );
+    final result = await processor.process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
+
+    final rejected = result as WorkflowProcessingRejected;
+
+    expect(rejected.code, WorkflowRejectionCode.ownership_conflict);
+
+    expect(rejected.receipt.event_id, 'event-1');
+    expect(rejected.receipt.correlation_id, 'correlation-1');
 
     expect(rejector.calls, 1);
     expect(rejector.last_code, WorkflowRejectionCode.ownership_conflict);
@@ -156,6 +159,24 @@ void main() {
     );
 
     expect(rejector.calls, 0);
+  });
+
+  test('does not report rejection when persistence fails', () async {
+    final rejector = _FakeWorkflowRejector(fail_rejection: true);
+
+    final processor = WorkflowProcessor(
+      registry: registry,
+      inbox: _FakeWorkflowInbox(_pending()),
+      identity_provider: _FakeWorkflowIdentityProvider(),
+      committer: _RejectingWorkflowCommitter(
+        WorkflowCommitErrorCode.ownership_conflict,
+      ),
+      rejector: rejector,
+    );
+
+    await expectLater(processor.process_next(), throwsStateError);
+
+    expect(rejector.calls, 1);
   });
 }
 
@@ -291,20 +312,148 @@ final class _RejectingWorkflowCommitter implements WorkflowCommitter {
   }
 }
 
-/// Tracks rejected submissions without performing persistence.
+/// Test double for the durable workflow submission rejection boundary.
+///
+/// Implements [WorkflowSubmissionRejector] without accessing a database,
+/// writing submission records, or performing actual persistence.
+///
+/// This class allows tests to verify how [WorkflowProcessor] interacts
+/// with the rejection boundary when a workflow command cannot be
+/// committed because of a recognized business conflict.
+///
+/// It supports two distinct scenarios:
+///
+/// - **Successful rejection:** Records the rejection attempt and
+///   completes normally, simulating a successfully persisted rejection.
+/// - **Failed rejection:** Records the rejection attempt and throws
+///   [StateError], simulating a persistence failure.
+///
+/// In both scenarios, [calls] and [last_code] record the attempted
+/// operation. They do not prove that the rejection was persisted.
+///
+/// The processor must only return [WorkflowProcessingRejected] when
+/// this implementation completes successfully. If rejection fails,
+/// the exception must propagate to the caller.
+///
+/// This distinction prevents a frontend from being informed that a
+/// command was rejected when its durable processing status may
+/// still be pending.
+///
+/// Example:
+/// ```dart
+/// final rejector = _FakeWorkflowRejector();
+///
+/// await rejector.reject(
+///   submission: _pending(),
+///   code: WorkflowRejectionCode.ownership_conflict,
+/// );
+///
+/// expect(rejector.calls, 1);
+/// expect(
+///   rejector.last_code,
+///   WorkflowRejectionCode.ownership_conflict,
+/// );
+/// ```
+///
+/// Example simulating a persistence failure:
+/// ```dart
+/// final rejector = _FakeWorkflowRejector(
+///   fail_rejection: true,
+/// );
+///
+/// await expectLater(
+///   rejector.reject(
+///     submission: _pending(),
+///     code: WorkflowRejectionCode.ownership_conflict,
+///   ),
+///   throwsStateError,
+/// );
+///
+/// // The attempted rejection is still observable.
+/// expect(rejector.calls, 1);
+/// ```
 final class _FakeWorkflowRejector implements WorkflowSubmissionRejector {
-  /// Number of rejections submitted to this test double.
+  /// Creates a configurable rejection persistence test double.
+  ///
+  /// When [fail_rejection] is false, calls to [reject] complete
+  /// successfully without writing anything to persistent storage.
+  ///
+  /// When [fail_rejection] is true, [reject] throws [StateError]
+  /// after recording the attempted operation.
+  ///
+  /// Defaults to successful rejection behavior.
+  ///
+  /// Each instance starts with zero recorded calls and no
+  /// previously observed rejection code.
+  _FakeWorkflowRejector({this.fail_rejection = false});
+
+  /// Whether rejection attempts should simulate persistence failure.
+  ///
+  /// This setting is immutable for the lifetime of the test double.
+  ///
+  /// A value of true causes every invocation of [reject] to throw
+  /// [StateError] instead of completing successfully.
+  final bool fail_rejection;
+
+  /// Total number of rejection attempts received.
+  ///
+  /// Incremented once for every invocation of [reject],
+  /// regardless of whether the simulated operation succeeds.
+  ///
+  /// Tests use this counter to verify that the processor invokes
+  /// the rejection boundary exactly when required.
+  ///
+  /// A value of zero indicates that no rejection was attempted.
   int calls = 0;
 
-  /// Last rejection code, if a rejection was recorded.
+  /// Business rejection code supplied by the most recent attempt.
+  ///
+  /// Initially null until [reject] is called.
+  ///
+  /// Updated even when [fail_rejection] is true, allowing tests
+  /// to inspect which business reason the processor attempted
+  /// to persist.
+  ///
+  /// This field describes an attempted rejection, not necessarily
+  /// a successfully committed rejection.
   WorkflowRejectionCode? last_code;
 
+  /// Simulates durably rejecting an accepted workflow submission.
+  ///
+  /// [submission] identifies the pending command being rejected.
+  /// The test double does not inspect or modify its contents.
+  ///
+  /// [code] identifies the business reason supplied by the processor.
+  ///
+  /// The method records the attempt before checking [fail_rejection].
+  /// Consequently, failed operations remain observable through
+  /// [calls] and [last_code].
+  ///
+  /// If failure simulation is disabled, the returned future completes
+  /// normally. The processor may interpret that completion as a
+  /// successful rejection for the purposes of its unit tests.
+  ///
+  /// If failure simulation is enabled, throws [StateError] to verify
+  /// that [WorkflowProcessor] propagates infrastructure failures
+  /// instead of returning [WorkflowProcessingRejected].
+  ///
+  /// No actual submission state is changed, and no workflow events
+  /// or filesystem operations are performed.
   @override
   Future<void> reject({
     required PendingWorkflowCommand submission,
     required WorkflowRejectionCode code,
   }) async {
+    // Count the attempted operation, including failed attempts.
     calls++;
+
+    // Retain the requested business reason for test assertions.
     last_code = code;
+
+    // Simulate a failed persistence operation after the request
+    // has reached the rejection boundary.
+    if (fail_rejection) {
+      throw StateError('Simulated rejection persistence failure.');
+    }
   }
 }

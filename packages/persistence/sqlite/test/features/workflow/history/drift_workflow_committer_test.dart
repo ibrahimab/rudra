@@ -10,6 +10,7 @@ import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_rejection_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_status_reader.dart';
+import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 
 import 'package:test/test.dart';
 
@@ -92,10 +93,13 @@ void main() {
   test('atomically establishes a workflow', () async {
     final receipt = await submit('/workspace');
 
-    final plan = await processor('workflow-1').process_next();
+    final result = await processor('workflow-1').process_next();
 
-    expect(plan, isNotNull);
-    expect(plan!.resulting_state, isA<WorkflowActiveState>());
+    expect(result, isA<WorkflowProcessingCommitted>());
+
+    final plan = (result as WorkflowProcessingCommitted).plan;
+
+    expect(plan.resulting_state, isA<WorkflowActiveState>());
 
     final submissions = await database
         .select(database.workflowSubmissions)
@@ -151,12 +155,14 @@ void main() {
   test('rejects repeat commitment of a completed submission', () async {
     await submit('/workspace');
 
-    final plan = await processor('workflow-1').process_next();
+    final result = await processor('workflow-1').process_next();
 
-    expect(plan, isNotNull);
+    expect(result, isA<WorkflowProcessingCommitted>());
+
+    final plan = (result as WorkflowProcessingCommitted).plan;
 
     await expectLater(
-      committer.commit(plan!),
+      committer.commit(plan),
       throwsA(
         isA<WorkflowCommitException>().having(
           (error) => error.code,
@@ -182,16 +188,14 @@ void main() {
 
     // The competing start must be durably rejected rather
     // than repeatedly returned as pending.
-    await expectLater(
-      processor('workflow-2').process_next(),
-      throwsA(
-        isA<WorkflowSubmissionRejectedException>().having(
-          (error) => error.code,
-          'code',
-          WorkflowRejectionCode.ownership_conflict,
-        ),
-      ),
-    );
+    final result = await processor('workflow-2').process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
+
+    final rejected = result as WorkflowProcessingRejected;
+
+    expect(rejected.receipt.event_id, second.event_id);
+    expect(rejected.code, WorkflowRejectionCode.ownership_conflict);
 
     final reader = DriftWorkflowStatusReader(
       database: database,
@@ -241,10 +245,9 @@ void main() {
 
     await processor('workflow-1').process_next();
 
-    await expectLater(
-      processor('workflow-2').process_next(),
-      throwsA(isA<WorkflowSubmissionRejectedException>()),
-    );
+    final result = await processor('workflow-2').process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
 
     await database.close();
     database = RudraDatabase.file(database_file);
@@ -418,6 +421,112 @@ void main() {
         .getSingle();
 
     expect(submission.processing_state, 'pending');
+  });
+
+  test('frontend can recover submission results after restart', () async {
+    final frontend_database = File('${directory.path}/frontend.db');
+
+    late EventSubmissionReceipt first;
+    late EventSubmissionReceipt second;
+
+    final persistence = RudraSqlitePersistence(
+      database_file: frontend_database,
+      scope_id: scope_id,
+      codec: codec,
+    );
+
+    try {
+      // The frontend submits commands through the SDK API.
+      final events = EventManager(store: persistence.event_submission_store);
+
+      first = await events.trigger(
+        WorkflowStartEvent(
+          target_id: 'local-macos',
+          root: TargetPath('/first'),
+        ),
+      );
+
+      second = await events.trigger(
+        WorkflowStartEvent(
+          target_id: 'local-macos',
+          root: TargetPath('/second'),
+        ),
+      );
+
+      // Durable acceptance does not imply completed processing.
+      final initial_status = await persistence.workflow_status_reader
+          .status_for(first);
+
+      expect(initial_status!.state, WorkflowSubmissionState.pending);
+
+      /// Creates a processor using only SDK contracts.
+      WorkflowProcessor make_processor(String workflow_id) {
+        return WorkflowProcessor(
+          registry: registry,
+          inbox: persistence.workflow_inbox,
+          identity_provider: _TestIdentityProvider(
+            workflow_id: workflow_id,
+            os_user_id: os_user_id,
+          ),
+          committer: persistence.workflow_committer,
+          rejector: persistence.workflow_rejector,
+        );
+      }
+
+      final committed = await make_processor('frontend-workflow-1')
+          .process_next();
+
+      expect(committed, isA<WorkflowProcessingCommitted>());
+
+      final rejected = await make_processor('frontend-workflow-2')
+          .process_next();
+
+      expect(rejected, isA<WorkflowProcessingRejected>());
+
+      // Query the durable result, rather than trusting the
+      // processor's transient return value.
+      final completed_status = await persistence.workflow_status_reader
+          .status_for(first);
+
+      final rejected_status = await persistence.workflow_status_reader
+          .status_for(second);
+
+      expect(completed_status!.state, WorkflowSubmissionState.completed);
+      expect(rejected_status!.state, WorkflowSubmissionState.rejected);
+      expect(
+        rejected_status.rejection_code,
+        WorkflowRejectionCode.ownership_conflict,
+      );
+    } finally {
+      await persistence.close();
+    }
+
+    // Simulate a disconnected frontend returning after restart.
+    final reopened = RudraSqlitePersistence(
+      database_file: frontend_database,
+      scope_id: scope_id,
+      codec: codec,
+    );
+
+    try {
+      final first_status = await reopened.workflow_status_reader.status_for(
+        first,
+      );
+
+      final second_status = await reopened.workflow_status_reader.status_for(
+        second,
+      );
+
+      expect(first_status!.state, WorkflowSubmissionState.completed);
+      expect(second_status!.state, WorkflowSubmissionState.rejected);
+
+      expect(
+        second_status.rejection_code,
+        WorkflowRejectionCode.ownership_conflict,
+      );
+    } finally {
+      await reopened.close();
+    }
   });
 }
 

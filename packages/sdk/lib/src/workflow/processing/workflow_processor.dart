@@ -10,6 +10,7 @@ import 'workflow_inbox.dart';
 import 'workflow_processing_models.dart';
 import 'workflow_commit_exception.dart';
 import 'workflow_submission_resolution.dart';
+import 'workflow_processing_result.dart';
 
 /// Orchestrates durable workflow command processing.
 ///
@@ -49,18 +50,23 @@ final class WorkflowProcessor {
   final Map<Type, WorkflowCommandBehavior<dynamic>> _handlers;
   final WorkflowStateMachine _machine;
 
-  /// Processes one pending workflow command, if available.
+  /// Processes at most one pending workflow command.
   ///
-  /// Returns null when the inbox is empty.
+  /// Returns [WorkflowProcessingIdle] when the inbox is empty.
   ///
-  /// Domain validation runs before committing. Successful
-  /// completion means the committer has durably persisted
-  /// the resulting workflow changes.
-  Future<WorkflowProcessingPlan?> process_next() async {
+  /// Returns [WorkflowProcessingCommitted] after authoritative
+  /// workflow changes have been durably committed.
+  ///
+  /// Returns [WorkflowProcessingRejected] only after a
+  /// recognized business rejection has been durably recorded.
+  ///
+  /// Unexpected domain, concurrency, and infrastructure
+  /// failures propagate instead of producing success results.
+  Future<WorkflowProcessingResult> process_next() async {
     final pending = await _inbox.next_pending();
 
     if (pending == null) {
-      return null;
+      return const WorkflowProcessingIdle();
     }
 
     final behavior = _handlers[pending.command.runtimeType];
@@ -117,27 +123,26 @@ final class WorkflowProcessor {
     try {
       await _committer.commit(plan);
     } on WorkflowCommitException catch (error) {
-      // Only a confirmed ownership conflict is a business
-      // rejection in the currently implemented lifecycle.
-      //
-      // Stale plans and unexpected failures must not be
-      // silently converted into rejected submissions.
+      // Only a confirmed ownership conflict is currently
+      // classified as a durable business rejection.
       if (error.code != WorkflowCommitErrorCode.ownership_conflict) {
         rethrow;
       }
 
       const rejection_code = WorkflowRejectionCode.ownership_conflict;
 
-      // This must finish successfully before we report that
-      // the request was rejected.
+      // If rejection persistence fails, the exception propagates.
+      // Never report a rejected result before durable commitment.
       await _rejector.reject(submission: pending, code: rejection_code);
 
-      throw WorkflowSubmissionRejectedException(
+      return WorkflowProcessingRejected(
         receipt: pending.receipt,
         code: rejection_code,
       );
     }
 
-    return plan;
+    // A committed result is returned only after the
+    // authoritative persistence transaction succeeds.
+    return WorkflowProcessingCommitted(plan: plan);
   }
 }
