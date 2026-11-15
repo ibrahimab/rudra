@@ -25,7 +25,7 @@ import '../../../database/rudra_database.dart';
 ///   database: database,
 /// );
 ///
-/// final snapshot = await store.load_unfinished(
+/// final snapshot = await store.load_restoration_evidence(
 ///   os_user_id: 'trusted-os-user',
 /// );
 /// ```
@@ -40,22 +40,20 @@ final class DriftWorkflowHistoryStore implements WorkflowHistoryStore {
   /// Shared persistence connection.
   final RudraDatabase _database;
 
-  /// Loads a consistent history snapshot for [os_user_id].
+  /// Loads a consistent ownership projection and committed histories.
   ///
-  /// Returns null if no unfinished-workflow projection exists
-  /// for the requested user.
+  /// The current schema does not index OS-user identity directly
+  /// in the event journal. Therefore this implementation reads
+  /// committed history across workflows for SDK-side verification.
   ///
-  /// Journal rows are ordered by workflow-local version.
-  /// Database-global sequence numbers are retained for
-  /// independent ordering validation by the SDK.
+  /// This is a correctness-first implementation. An indexed,
+  /// immutable owner reference will be needed before production
+  /// deployment to avoid scanning all historical events.
   ///
-  /// No filtering of invalid history is performed.
-  /// Missing events, version gaps, and contradictory metadata
-  /// must remain visible to the SDK's integrity checks.
-  ///
-  /// An invalid or blank trusted identity is rejected.
+  /// All SELECT operations share one database transaction.
+  /// No lifecycle rules are interpreted by this adapter.
   @override
-  Future<WorkflowHistorySnapshot?> load_unfinished({
+  Future<WorkflowRestorationEvidence> load_restoration_evidence({
     required String os_user_id,
   }) async {
     if (os_user_id.trim().isEmpty) {
@@ -67,46 +65,64 @@ final class DriftWorkflowHistoryStore implements WorkflowHistoryStore {
     }
 
     return _database.transaction(() async {
-      // The projection locates the unfinished workflow.
-      // It is not the authoritative lifecycle state.
       final projection = await (_database.select(
         _database.unfinishedWorkflows,
       )..where((row) => row.os_user_id.equals(os_user_id))).getSingleOrNull();
 
-      if (projection == null) {
-        return null;
+      // All journal evidence comes from the same SQLite snapshot.
+      //
+      // Ordering by workflow and version allows deterministic
+      // reconstruction while preserving original global sequences.
+      final rows =
+          await (_database.select(_database.workflowEvents)..orderBy([
+                (row) => OrderingTerm.asc(row.workflow_id),
+                (row) => OrderingTerm.asc(row.version),
+              ]))
+              .get();
+
+      final histories = <String, List<WorkflowJournalEntry>>{};
+
+      for (final row in rows) {
+        histories
+            .putIfAbsent(row.workflow_id, () => [])
+            .add(
+              WorkflowJournalEntry(
+                sequence: row.sequence,
+                event_id: row.event_id,
+                workflow_id: row.workflow_id,
+                version: row.version,
+                event_type: row.event_type,
+                payload_json: row.payload_json,
+              ),
+            );
       }
 
-      // Read all committed events from the same transaction.
-      // Do not use LIMIT, the projection version, or an
-      // event-type filter to hide contradictory history.
-      final journal_query = _database.select(_database.workflowEvents)
-        ..where((row) => row.workflow_id.equals(projection.workflow_id))
-        ..orderBy([(row) => OrderingTerm.asc(row.version)]);
+      WorkflowHistorySnapshot? projected;
 
-      final rows = await journal_query.get();
+      if (projection != null) {
+        final identity = WorkflowIdentity(
+          workflow_id: projection.workflow_id,
+          os_user_id: projection.os_user_id,
+          target_id: projection.target_id,
+          root: TargetPath(projection.root_path),
+        );
 
-      // Preserve the exact persisted identity bindings.
-      // Do not normalize or reinterpret the target-native root.
-      final identity = WorkflowIdentity(
-        workflow_id: projection.workflow_id,
-        os_user_id: projection.os_user_id,
-        target_id: projection.target_id,
-        root: TargetPath(projection.root_path),
-      );
+        projected = WorkflowHistorySnapshot(
+          projected_identity: identity,
+          projected_version: projection.version,
+          journal:
+              histories.remove(projection.workflow_id) ??
+              <WorkflowJournalEntry>[],
+        );
+      }
 
-      return WorkflowHistorySnapshot(
-        projected_identity: identity,
-        projected_version: projection.version,
-        journal: [
-          for (final row in rows)
-            WorkflowJournalEntry(
-              sequence: row.sequence,
-              event_id: row.event_id,
-              workflow_id: row.workflow_id,
-              version: row.version,
-              event_type: row.event_type,
-              payload_json: row.payload_json,
+      return WorkflowRestorationEvidence(
+        projected: projected,
+        other_histories: [
+          for (final history in histories.entries)
+            WorkflowHistoryJournal(
+              workflow_id: history.key,
+              journal: history.value,
             ),
         ],
       );

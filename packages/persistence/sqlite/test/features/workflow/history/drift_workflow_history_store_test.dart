@@ -161,7 +161,9 @@ void main() {
     test('restores authoritative committed workflow state', () async {
       await establish_workflow();
 
-      final snapshot = await store.load_unfinished(os_user_id: os_user_id);
+      final snapshot = (await store.load_restoration_evidence(
+        os_user_id: os_user_id,
+      )).projected;
 
       expect(snapshot, isNotNull);
       expect(snapshot!.projected_version, 2);
@@ -367,9 +369,110 @@ void main() {
 
     test('rejects blank OS-user identifiers', () async {
       await expectLater(
-        store.load_unfinished(os_user_id: ' '),
+        store.load_restoration_evidence(os_user_id: ' '),
         throwsArgumentError,
       );
+    });
+
+    test('detects orphaned active workflow after restart', () async {
+      await establish_workflow();
+
+      // Simulate corruption by removing only the derived projection.
+      // The authoritative committed journal remains unchanged.
+      await database.delete(database.unfinishedWorkflows).go();
+
+      await database.close();
+
+      // Reopen only after releasing the previous database owner.
+      database = RudraDatabase.file(database_file);
+      store = DriftWorkflowHistoryStore(database: database);
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.orphaned_workflow,
+      );
+
+      // Failed restoration must never recreate the missing projection.
+      expect(
+        await database.select(database.unfinishedWorkflows).get(),
+        isEmpty,
+      );
+
+      expect(
+        await database.select(database.workflowEvents).get(),
+        hasLength(2),
+      );
+    });
+
+    test('detects a workflow projected under another OS user', () async {
+      await establish_workflow();
+
+      // Simulate a corrupted ownership projection.
+      await database
+          .update(database.unfinishedWorkflows)
+          .write(
+            const UnfinishedWorkflowsCompanion(
+              os_user_id: Value('incorrect-os-user'),
+            ),
+          );
+
+      // The original owner must not be told that no workflow exists.
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.orphaned_workflow,
+      );
+    });
+
+    test('does not expose a foreign orphan as the current workflow', () async {
+      await establish_workflow();
+
+      await database.delete(database.unfinishedWorkflows).go();
+
+      final foreign = await state_reader(trusted_user: 'another-os-user')
+          .current();
+
+      expect(foreign, isNull);
+
+      // The actual owner still receives the integrity failure.
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.orphaned_workflow,
+      );
+    });
+
+    test('accepts terminal history with no unfinished projection', () async {
+      await establish_workflow();
+
+      final committed = await database.select(database.workflowEvents).get();
+
+      final correlation_id = committed.first.correlation_id;
+
+      // Simulate a future valid terminal commitment.
+      // Production terminal processing is not implemented yet.
+      await database.transaction(() async {
+        await database
+            .into(database.workflowEvents)
+            .insert(
+              WorkflowEventsCompanion.insert(
+                event_id: 'terminal-event-1',
+                workflow_id: workflow_id,
+                version: 3,
+                correlation_id: correlation_id,
+                event_type: WorkflowEndedEvent.type_id,
+                payload_json: runtime.codec.encode(
+                  WorkflowEndedEvent(workflow_id: workflow_id),
+                ),
+                recorded_at_unix_ms: DateTime.now()
+                    .toUtc()
+                    .millisecondsSinceEpoch,
+              ),
+            );
+
+        await database.delete(database.unfinishedWorkflows).go();
+      });
+
+      expect(await state_reader().current(), isNull);
+
+      final journal = await database.select(database.workflowEvents).get();
+
+      expect(journal, hasLength(3));
     });
   });
 }

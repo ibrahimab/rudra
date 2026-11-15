@@ -66,29 +66,78 @@ final class WorkflowHistorySnapshot {
   final List<WorkflowJournalEntry> journal;
 }
 
+/// Complete committed history belonging to one workflow.
+///
+/// The journal may represent an active, terminal, or
+/// inconsistent workflow. Its lifecycle is determined only
+/// by replaying events through the SDK state machine.
+final class WorkflowHistoryJournal {
+  /// Creates an immutable journal snapshot.
+  WorkflowHistoryJournal({
+    required this.workflow_id,
+    required Iterable<WorkflowJournalEntry> journal,
+  }) : journal = List<WorkflowJournalEntry>.unmodifiable(journal);
+
+  /// Workflow identifier associated with the journal.
+  final String workflow_id;
+
+  /// Committed events in ascending workflow-version order.
+  final List<WorkflowJournalEntry> journal;
+}
+
+/// Consistent persisted evidence for workflow restoration.
+///
+/// [projected] identifies the workflow currently reserved for
+/// the requested OS user, if one exists.
+///
+/// [other_histories] contains journal histories not associated
+/// with that projection. The SDK checks these histories to
+/// detect active workflows whose ownership projection is
+/// missing, incorrect, or duplicated.
+///
+/// All data must originate from one consistent persistence
+/// snapshot. This contract is intended for trusted application
+/// composition, not direct frontend access.
+///
+/// The store does not determine lifecycle state.
+final class WorkflowRestorationEvidence {
+  /// Creates immutable restoration evidence.
+  WorkflowRestorationEvidence({
+    required this.projected,
+    required Iterable<WorkflowHistoryJournal> other_histories,
+  }) : other_histories = List<WorkflowHistoryJournal>.unmodifiable(
+         other_histories,
+       );
+
+  /// User's projected unfinished workflow, if present.
+  final WorkflowHistorySnapshot? projected;
+
+  /// Other committed histories requiring integrity inspection.
+  final List<WorkflowHistoryJournal> other_histories;
+}
+
 /// Read-only persistence contract for workflow restoration.
 ///
-/// Implementations retrieve a consistent snapshot associated
-/// with a trusted operating-system user identity.
+/// A trusted persistence implementation returns all relevant
+/// journal evidence from one consistent snapshot.
 ///
-/// The caller must obtain this identity through a trusted
-/// platform or application composition boundary.
+/// The SDK determines lifecycle state and detects an active
+/// workflow missing its expected ownership projection.
 ///
-/// Submission scopes, terminal input, environment usernames,
-/// and frontend-provided strings are not authentication.
+/// Implementations must not process commands, commit events,
+/// repair projections, or perform filesystem operations.
 ///
-/// Reading must never submit events, process commands, repair
-/// projections, or modify workflow lifecycle state.
-///
-/// An absent unfinished workflow returns null.
+/// The identity is supplied by trusted application composition.
+/// Submission scopes are not authenticated OS-user identities.
 abstract interface class WorkflowHistoryStore {
-  /// Loads the unfinished workflow associated with [os_user_id].
+  /// Loads consistent restoration evidence for [os_user_id].
   ///
-  /// The returned journal must include all committed events,
-  /// starting at workflow version one.
+  /// Returns an evidence object even when no unfinished
+  /// workflow projection is present.
   ///
-  /// Contradictory persisted data must not be silently repaired.
-  Future<WorkflowHistorySnapshot?> load_unfinished({
+  /// Other histories must not be omitted merely because
+  /// their current ownership projection is absent.
+  Future<WorkflowRestorationEvidence> load_restoration_evidence({
     required String os_user_id,
   });
 }

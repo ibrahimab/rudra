@@ -264,6 +264,127 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('detects active history without its projection', () async {
+      final store = _FixtureHistoryStore(
+        null,
+        other_histories: [
+          WorkflowHistoryJournal(
+            workflow_id: 'workflow-1',
+            journal: _journal(runtime),
+          ),
+        ],
+      );
+
+      final reader = WorkflowStateReader(
+        runtime: runtime,
+        history_store: store,
+        os_user_id: 'os-user-1',
+      );
+
+      await expectLater(
+        reader.current(),
+        throwsA(
+          isA<WorkflowStateReadException>().having(
+            (error) => error.code,
+            'code',
+            WorkflowStateReadErrorCode.orphaned_workflow,
+          ),
+        ),
+      );
+    });
+
+    test('ignores another users valid active history', () async {
+      final store = _FixtureHistoryStore(
+        null,
+        other_histories: [
+          WorkflowHistoryJournal(
+            workflow_id: 'workflow-1',
+            journal: _journal(
+              runtime,
+              outcome_identity: _identity(os_user_id: 'os-user-2'),
+            ),
+          ),
+        ],
+      );
+
+      final reader = WorkflowStateReader(
+        runtime: runtime,
+        history_store: store,
+        os_user_id: 'os-user-1',
+      );
+
+      expect(await reader.current(), isNull);
+    });
+
+    test('accepts terminal history without a projection', () async {
+      final journal = _journal(runtime);
+
+      journal.add(
+        _entry(
+          runtime,
+          sequence: 13,
+          version: 3,
+          event_id: 'event-3',
+          event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
+        ),
+      );
+
+      final store = _FixtureHistoryStore(
+        null,
+        other_histories: [
+          WorkflowHistoryJournal(workflow_id: 'workflow-1', journal: journal),
+        ],
+      );
+
+      final reader = WorkflowStateReader(
+        runtime: runtime,
+        history_store: store,
+        os_user_id: 'os-user-1',
+      );
+
+      expect(await reader.current(), isNull);
+    });
+
+    test('rejects malformed unprojected history', () async {
+      final journal = _journal(runtime);
+
+      final invalid = [
+        journal.first,
+        WorkflowJournalEntry(
+          sequence: 12,
+          event_id: 'event-2',
+          workflow_id: 'workflow-1',
+          version: 3,
+          event_type: journal.last.event_type,
+          payload_json: journal.last.payload_json,
+        ),
+      ];
+
+      final store = _FixtureHistoryStore(
+        null,
+        other_histories: [
+          WorkflowHistoryJournal(workflow_id: 'workflow-1', journal: invalid),
+        ],
+      );
+
+      final reader = WorkflowStateReader(
+        runtime: runtime,
+        history_store: store,
+        os_user_id: 'os-user-1',
+      );
+
+      await expectLater(
+        reader.current(),
+        throwsA(
+          isA<WorkflowStateReadException>().having(
+            (error) => error.code,
+            'code',
+            WorkflowStateReadErrorCode.invalid_journal,
+          ),
+        ),
+      );
+    });
   });
 }
 
@@ -343,28 +464,35 @@ WorkflowHistorySnapshot _snapshot(
   );
 }
 
-/// Read-only in-memory implementation of the history contract.
+/// In-memory read-only restoration evidence provider.
 ///
-/// Records read requests to verify the identity boundary.
+/// Records the requested OS-user identity and read count.
 final class _FixtureHistoryStore implements WorkflowHistoryStore {
-  /// Creates a store with an optional persisted snapshot.
-  _FixtureHistoryStore(this.snapshot);
+  /// Creates a fixture with optional projected history.
+  _FixtureHistoryStore(this.snapshot, {this.other_histories = const []});
 
-  /// Snapshot returned to the SDK.
+  /// Existing projected workflow, if any.
   final WorkflowHistorySnapshot? snapshot;
 
-  /// Number of read operations performed.
+  /// Other committed histories in the same logical snapshot.
+  final List<WorkflowHistoryJournal> other_histories;
+
+  /// Number of reads.
   int reads = 0;
 
-  /// Last requested OS-user identity.
+  /// Last trusted OS-user identity requested.
   String? requested_user;
 
   @override
-  Future<WorkflowHistorySnapshot?> load_unfinished({
+  Future<WorkflowRestorationEvidence> load_restoration_evidence({
     required String os_user_id,
   }) async {
     reads++;
     requested_user = os_user_id;
-    return snapshot;
+
+    return WorkflowRestorationEvidence(
+      projected: snapshot,
+      other_histories: other_histories,
+    );
   }
 }
