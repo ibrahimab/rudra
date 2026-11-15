@@ -36,7 +36,7 @@ export 'modules/workflow_module.dart';
 export 'modules/workflow_module_registry.dart';
 export 'modules/lifecycle_workflow_module.dart';
 
-/// /// Registry-driven event serialization.
+/// Registry-driven event serialization.
 export 'serialization/workflow_event_serializer.dart';
 export 'serialization/workflow_event_codec.dart';
 

@@ -164,6 +164,21 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('typed serializer rejects incompatible event instances', () {
+    const serializer = WorkflowStartSerializer();
+
+    final wrong_event = WorkflowEndedEvent(workflow_id: 'workflow-1');
+
+    // The non-generic interface accepts WorkflowEvent,
+    // but the typed implementation must still enforce
+    // its own concrete event type at runtime.
+    expect(() => serializer.encode_event(wrong_event), throwsArgumentError);
+
+    // The serializer's concrete type remains available
+    // to the registry without using dynamic.
+    expect(serializer.dart_type, WorkflowStartEvent);
+  });
 }
 
 /// Test-only version 2 encoding for WorkflowStartEvent.
@@ -171,7 +186,7 @@ void main() {
 /// Demonstrates adding a version without modifying the
 /// central codec or the existing version 1 serializer.
 final class _WorkflowStartV2Serializer
-    extends WorkflowEventSerializer<WorkflowStartEvent> {
+    extends WorkflowTypedEventSerializer<WorkflowStartEvent> {
   const _WorkflowStartV2Serializer();
 
   @override

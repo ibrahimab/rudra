@@ -3,7 +3,7 @@ import '../../../serialization/workflow_event_serializer.dart';
 
 /// Version 1 serializer for terminal workflow outcomes.
 final class WorkflowEndedSerializer
-    extends WorkflowEventSerializer<WorkflowEndedEvent> {
+    extends WorkflowTypedEventSerializer<WorkflowEndedEvent> {
   /// Creates the stateless serializer.
   const WorkflowEndedSerializer();
 

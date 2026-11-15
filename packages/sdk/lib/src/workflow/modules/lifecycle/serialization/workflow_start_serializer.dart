@@ -8,7 +8,7 @@ import '../../../serialization/workflow_event_serializer.dart';
 /// Preserves the original target identifier and target-native
 /// filesystem path without normalization.
 final class WorkflowStartSerializer
-    extends WorkflowEventSerializer<WorkflowStartEvent> {
+    extends WorkflowTypedEventSerializer<WorkflowStartEvent> {
   /// Creates the stateless serializer.
   const WorkflowStartSerializer();
 

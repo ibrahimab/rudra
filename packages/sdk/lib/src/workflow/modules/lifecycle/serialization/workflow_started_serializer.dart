@@ -10,7 +10,7 @@ import '../../../workflow_identity.dart';
 /// Trust in the owner identity is established by the processor
 /// and commit boundary, not by deserialization.
 final class WorkflowStartedSerializer
-    extends WorkflowEventSerializer<WorkflowStartedEvent> {
+    extends WorkflowTypedEventSerializer<WorkflowStartedEvent> {
   /// Creates the stateless serializer.
   const WorkflowStartedSerializer();
 

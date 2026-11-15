@@ -21,11 +21,11 @@ final class WorkflowEventCodec {
   /// Rejects duplicate version registrations and inconsistent
   /// mappings between stable event IDs and Dart event types.
   factory WorkflowEventCodec({
-    required Iterable<WorkflowEventSerializer<WorkflowEvent>> serializers,
+    required Iterable<WorkflowEventSerializer> serializers,
   }) {
-    final readers = <(String, int), WorkflowEventSerializer<WorkflowEvent>>{};
+    final readers = <(String, int), WorkflowEventSerializer>{};
 
-    final writers = <Type, WorkflowEventSerializer<WorkflowEvent>>{};
+    final writers = <Type, WorkflowEventSerializer>{};
 
     final known_types = <String, Type>{};
     final known_ids = <Type, String>{};
@@ -102,10 +102,10 @@ final class WorkflowEventCodec {
   WorkflowEventCodec._(this._readers, this._writers);
 
   /// Read strategies indexed by event ID and schema version.
-  final Map<(String, int), WorkflowEventSerializer<WorkflowEvent>> _readers;
+  final Map<(String, int), WorkflowEventSerializer> _readers;
 
   /// Latest write strategy indexed by concrete Dart type.
-  final Map<Type, WorkflowEventSerializer<WorkflowEvent>> _writers;
+  final Map<Type, WorkflowEventSerializer> _writers;
 
   /// Serializes a supported workflow event into versioned JSON.
   ///
@@ -170,7 +170,7 @@ final class WorkflowEventCodec {
       );
     }
 
-    final WorkflowEvent event = serializer.decode(payload);
+    final WorkflowEvent event = serializer.decode_event(payload);
 
     // A serializer must reconstruct precisely the event
     // type declared by its registration.

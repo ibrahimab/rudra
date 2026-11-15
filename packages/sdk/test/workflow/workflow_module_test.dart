@@ -252,7 +252,7 @@ final class _TestWorkflowModule implements WorkflowModule {
   _TestWorkflowModule({
     required this.module_id,
     required Iterable<WorkflowBehavior> behaviors,
-    Iterable<WorkflowEventSerializer<WorkflowEvent>> serializers = const [],
+    Iterable<WorkflowEventSerializer> serializers = const [],
   }) : _behaviors = List.of(behaviors),
        _serializers = List.of(serializers);
 
@@ -260,7 +260,7 @@ final class _TestWorkflowModule implements WorkflowModule {
   final String module_id;
 
   final List<WorkflowBehavior> _behaviors;
-  final List<WorkflowEventSerializer<WorkflowEvent>> _serializers;
+  final List<WorkflowEventSerializer> _serializers;
 
   @override
   void register(WorkflowModuleRegistration registration) {
