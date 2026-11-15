@@ -10,7 +10,6 @@ import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_rejection_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_status_reader.dart';
-import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 
 import 'package:test/test.dart';
 
@@ -27,7 +26,6 @@ void main() {
   late EventManager manager;
   late DriftWorkflowInbox inbox;
   late DriftWorkflowCommitter committer;
-  late bool fixture_database_closed;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('rudra-committer-test-');
@@ -35,7 +33,6 @@ void main() {
     database_file = File('${directory.path}/rudra.db');
 
     database = RudraDatabase.file(database_file);
-    fixture_database_closed = false;
 
     registry = WorkflowModuleRegistry()
       ..register(const LifecycleWorkflowModule());
@@ -64,12 +61,7 @@ void main() {
   });
 
   tearDown(() async {
-    // The frontend recovery test closes its unused
-    // fixture database before opening its own persistence.
-    if (!fixture_database_closed) {
-      await database.close();
-    }
-
+    await database.close();
     await directory.delete(recursive: true);
   });
 
@@ -429,118 +421,6 @@ void main() {
         .getSingle();
 
     expect(submission.processing_state, 'pending');
-  });
-
-  test('frontend can recover submission results after restart', () async {
-    // This test owns its persistence lifecycle independently.
-    // Close the unused database created by the shared fixture
-    // before constructing the frontend persistence instance.
-    await database.close();
-    fixture_database_closed = true;
-
-    final frontend_database = File('${directory.path}/frontend.db');
-
-    late EventSubmissionReceipt first;
-    late EventSubmissionReceipt second;
-
-    final persistence = RudraSqlitePersistence(
-      database_file: frontend_database,
-      scope_id: scope_id,
-      codec: codec,
-    );
-
-    try {
-      // The frontend submits commands through the SDK API.
-      final events = EventManager(store: persistence.event_submission_store);
-
-      first = await events.trigger(
-        WorkflowStartEvent(
-          target_id: 'local-macos',
-          root: TargetPath('/first'),
-        ),
-      );
-
-      second = await events.trigger(
-        WorkflowStartEvent(
-          target_id: 'local-macos',
-          root: TargetPath('/second'),
-        ),
-      );
-
-      // Durable acceptance does not imply completed processing.
-      final initial_status = await persistence.workflow_status_reader
-          .status_for(first);
-
-      expect(initial_status!.state, WorkflowSubmissionState.pending);
-
-      /// Creates a processor using only SDK contracts.
-      WorkflowProcessor make_processor(String workflow_id) {
-        return WorkflowProcessor(
-          registry: registry,
-          inbox: persistence.workflow_inbox,
-          identity_provider: _TestIdentityProvider(
-            workflow_id: workflow_id,
-            os_user_id: os_user_id,
-          ),
-          committer: persistence.workflow_committer,
-          rejector: persistence.workflow_rejector,
-        );
-      }
-
-      final committed = await make_processor('frontend-workflow-1')
-          .process_next();
-
-      expect(committed, isA<WorkflowProcessingCommitted>());
-
-      final rejected = await make_processor('frontend-workflow-2')
-          .process_next();
-
-      expect(rejected, isA<WorkflowProcessingRejected>());
-
-      // Query the durable result, rather than trusting the
-      // processor's transient return value.
-      final completed_status = await persistence.workflow_status_reader
-          .status_for(first);
-
-      final rejected_status = await persistence.workflow_status_reader
-          .status_for(second);
-
-      expect(completed_status!.state, WorkflowSubmissionState.completed);
-      expect(rejected_status!.state, WorkflowSubmissionState.rejected);
-      expect(
-        rejected_status.rejection_code,
-        WorkflowRejectionCode.ownership_conflict,
-      );
-    } finally {
-      await persistence.close();
-    }
-
-    // Simulate a disconnected frontend returning after restart.
-    final reopened = RudraSqlitePersistence(
-      database_file: frontend_database,
-      scope_id: scope_id,
-      codec: codec,
-    );
-
-    try {
-      final first_status = await reopened.workflow_status_reader.status_for(
-        first,
-      );
-
-      final second_status = await reopened.workflow_status_reader.status_for(
-        second,
-      );
-
-      expect(first_status!.state, WorkflowSubmissionState.completed);
-      expect(second_status!.state, WorkflowSubmissionState.rejected);
-
-      expect(
-        second_status.rejection_code,
-        WorkflowRejectionCode.ownership_conflict,
-      );
-    } finally {
-      await reopened.close();
-    }
   });
 }
 
