@@ -43,6 +43,12 @@ enum RudraExitCode {
   /// The command was invoked with invalid arguments or options.
   invalid_usage(64),
 
+  /// A requested workflow cannot be created because an
+  /// unfinished workflow already occupies the user's slot.
+  ///
+  /// Exit 73 follows BSD EX_CANTCREAT.
+  workflow_conflict(73),
+
   /// A required input file, manifest, or repository resource is missing.
   missing_input(66),
 

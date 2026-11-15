@@ -43,12 +43,12 @@ void main() {
 
   /// Creates a fresh CLI invocation using the same persistence
   /// location and trusted test identity.
-  RudraCli create_cli(StringBuffer output) {
+  RudraCli create_cli(StringBuffer output, {StringBuffer? error_output}) {
     return RudraCli.product(
       target_composition: sdk_composition,
       workflow_composition: workflow_composition,
       output: output,
-      error_output: StringBuffer(),
+      error_output: error_output ?? StringBuffer(),
     );
   }
 
@@ -93,9 +93,14 @@ void main() {
     expect(first, isNotNull);
 
     // A new CLI invocation must not create a second workflow.
-    final second_cli = create_cli(StringBuffer());
+    final errors = StringBuffer();
 
-    await expectLater(second_cli.run(['workflow', 'start']), throwsStateError);
+    final second_cli = create_cli(StringBuffer(), error_output: errors);
+
+    final second_status = await second_cli.run(['workflow', 'start']);
+
+    expect(second_status, RudraExitCode.workflow_conflict.value);
+    expect(errors.toString(), contains('Workflow already active:'));
 
     final restored = await workflow_composition.current();
 

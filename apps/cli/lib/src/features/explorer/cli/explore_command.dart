@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
@@ -53,7 +55,7 @@ final class ExploreCommand extends Command<int> {
   /// any filesystem or terminal operations.
   ExploreCommand({
     required TargetPath working_directory,
-    required ExplorerRunner Function(TargetPath) create_runner,
+    required FutureOr<ExplorerRunner> Function(TargetPath) create_runner,
   }) : _working_directory = working_directory,
        _create_runner = create_runner;
 
@@ -74,7 +76,7 @@ final class ExploreCommand extends Command<int> {
   final TargetPath _working_directory;
 
   /// Factory supplied by the CLI application composition.
-  final ExplorerRunner Function(TargetPath) _create_runner;
+  final FutureOr<ExplorerRunner> Function(TargetPath) _create_runner;
 
   /// Validates arguments and starts one Explorer interaction.
   ///
@@ -128,7 +130,7 @@ final class ExploreCommand extends Command<int> {
     // renderer, and terminal host for this invocation.
     //
     // No SDK or terminal operations occur in this command.
-    final runner = _create_runner(directory);
+    final runner = await _create_runner(directory);
 
     return runner.run();
   }

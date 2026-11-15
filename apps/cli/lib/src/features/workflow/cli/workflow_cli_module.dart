@@ -3,6 +3,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../../../core/cli/rudra_cli_module.dart';
 import '../../../core/cli/rudra_exit_code.dart';
+import '../application/workflow_start_exception.dart';
 
 /// Registers explicit workflow lifecycle commands.
 ///
@@ -17,6 +18,7 @@ final class WorkflowCliModule implements RudraCliModule {
     required this.working_directory,
     required this.start_workflow,
     required this.output,
+    required this.error_output,
   });
 
   /// Default target-native workflow root.
@@ -28,6 +30,9 @@ final class WorkflowCliModule implements RudraCliModule {
   /// Output destination supplied by application composition.
   final StringSink output;
 
+  /// Destination for expected workflow command diagnostics.
+  final StringSink error_output;
+
   @override
   String get module_id => 'rudra.product.workflow';
 
@@ -38,6 +43,7 @@ final class WorkflowCliModule implements RudraCliModule {
         working_directory: working_directory,
         start_workflow: start_workflow,
         output: output,
+        error_output: error_output,
       ),
     ];
   }
@@ -50,12 +56,14 @@ final class _WorkflowCommand extends Command<int> {
     required TargetPath working_directory,
     required Future<WorkflowActiveState> Function(TargetPath) start_workflow,
     required StringSink output,
+    required StringSink error_output,
   }) {
     addSubcommand(
       _WorkflowStartCommand(
         working_directory: working_directory,
         start_workflow: start_workflow,
         output: output,
+        error_output: error_output,
       ),
     );
   }
@@ -78,13 +86,16 @@ final class _WorkflowStartCommand extends Command<int> {
     required TargetPath working_directory,
     required Future<WorkflowActiveState> Function(TargetPath) start_workflow,
     required StringSink output,
+    required StringSink error_output,
   }) : _working_directory = working_directory,
        _start_workflow = start_workflow,
-       _output = output;
+       _output = output,
+       _error_output = error_output;
 
   final TargetPath _working_directory;
   final Future<WorkflowActiveState> Function(TargetPath) _start_workflow;
   final StringSink _output;
+  final StringSink _error_output;
 
   @override
   String get name => 'start';
@@ -121,7 +132,21 @@ final class _WorkflowStartCommand extends Command<int> {
       throw UsageException('Expected an absolute directory.', usage);
     }
 
-    final active = await _start_workflow(root);
+    final WorkflowActiveState active;
+
+    try {
+      active = await _start_workflow(root);
+    } on WorkflowAlreadyActiveException catch (error) {
+      final identifier = error.workflow_id;
+
+      _error_output.writeln(
+        identifier == null
+            ? 'Workflow already active.'
+            : 'Workflow already active: $identifier',
+      );
+
+      return RudraExitCode.workflow_conflict.value;
+    }
 
     _output.writeln(
       'Workflow: ACTIVE'

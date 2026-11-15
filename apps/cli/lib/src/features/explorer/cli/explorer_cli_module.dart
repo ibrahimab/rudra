@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
@@ -49,7 +51,7 @@ final class ExplorerCliModule implements RudraCliModule {
   /// the filesystem, or change terminal settings.
   ExplorerCliModule({
     required TargetPath working_directory,
-    required ExplorerRunner Function(TargetPath) create_runner,
+    required FutureOr<ExplorerRunner> Function(TargetPath) create_runner,
   }) : _working_directory = working_directory,
        _create_runner = create_runner;
 
@@ -57,7 +59,7 @@ final class ExplorerCliModule implements RudraCliModule {
   final TargetPath _working_directory;
 
   /// Injected factory for individual Explorer invocations.
-  final ExplorerRunner Function(TargetPath) _create_runner;
+  final FutureOr<ExplorerRunner> Function(TargetPath) _create_runner;
 
   /// Stable Explorer module identifier.
   @override

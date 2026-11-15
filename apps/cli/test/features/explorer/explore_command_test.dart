@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:async';
 
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
+import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -220,6 +222,106 @@ void main() {
 
       expect(fixture.host_creations, 0);
     });
+
+    test('restores the same workflow after Q and a new invocation', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rudra-explorer-workflow-test-',
+      );
+
+      try {
+        final workflows = ProductWorkflowComposition(
+          database_file: File('${directory.path}/rudra.sqlite'),
+          os_user_id_provider: () async => 'test-os-user',
+        );
+
+        // Establish the workflow through the actual CLI action.
+        final starter = _Fixture(children: {'/fixture': []})
+          ..workflow_composition = workflows;
+
+        expect(
+          await starter.create_cli().run(['workflow', 'start']),
+          RudraExitCode.success.value,
+        );
+
+        final original = await workflows.current();
+
+        expect(original, isNotNull);
+
+        // First Explorer invocation receives a fresh persisted read.
+        final first = _Fixture(children: {'/fixture': []})
+          ..workflow_composition = workflows;
+
+        expect(
+          await first.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
+
+        final first_screen = first.terminal.output_buffer.toString();
+
+        expect(first_screen, contains('Workflow: ACTIVE'));
+        expect(first_screen, contains('ID: ${original!.identity.workflow_id}'));
+        expect(first_screen, contains('Version: 2'));
+        expect(first.terminal.restored, isTrue);
+
+        // The fake terminal sends Q during each invocation.
+        // A completely new CLI now restores the same database.
+        final second = _Fixture(children: {'/fixture': []})
+          ..workflow_composition = workflows;
+
+        expect(
+          await second.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
+
+        final second_screen = second.terminal.output_buffer.toString();
+
+        expect(second_screen, contains('Workflow: ACTIVE'));
+        expect(second_screen, contains('ID: ${original.identity.workflow_id}'));
+        expect(second_screen, contains('Version: 2'));
+        expect(second.terminal.restored, isTrue);
+
+        final restored = await workflows.current();
+
+        expect(restored, isNotNull);
+        expect(restored!.identity.workflow_id, original.identity.workflow_id);
+        expect(restored.version, original.version);
+        expect(restored.identity.root.value, original.identity.root.value);
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    });
+
+    test('opening Explorer without a workflow creates no database', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rudra-explorer-read-only-test-',
+      );
+
+      try {
+        final database_file = File('${directory.path}/rudra.sqlite');
+
+        final fixture = _Fixture(children: {'/fixture': []})
+          ..workflow_composition = ProductWorkflowComposition(
+            database_file: database_file,
+            os_user_id_provider: () async => 'test-os-user',
+          );
+
+        expect(
+          await fixture.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
+
+        expect(database_file.existsSync(), isFalse);
+
+        expect(
+          fixture.terminal.output_buffer.toString(),
+          contains('Workflow: NOT LOADED'),
+        );
+
+        expect(fixture.terminal.restored, isTrue);
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    });
   });
 }
 
@@ -260,6 +362,9 @@ final class _Fixture {
   /// CLI diagnostics.
   final StringBuffer errors = StringBuffer();
 
+  /// Optional persistence composition used by Explorer tests.
+  ProductWorkflowComposition? workflow_composition;
+
   /// Number of Explorer terminal host factory invocations.
   int host_creations = 0;
 
@@ -279,6 +384,7 @@ final class _Fixture {
         host_creations++;
         return terminal;
       },
+      workflow_composition: workflow_composition,
     );
   }
 }

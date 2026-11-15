@@ -205,6 +205,7 @@ final class RudraCli {
               root: root,
             ),
             output: presentation_output,
+            error_output: diagnostic_output,
           ),
         );
       }
@@ -217,7 +218,17 @@ final class RudraCli {
       cli.register_module(
         ExplorerCliModule(
           working_directory: composition.working_directory,
-          create_runner: (directory) {
+          create_runner: (directory) async {
+            // Restore authoritative persisted workflow state on every
+            // Explorer invocation.
+            //
+            // This is a read-only query. It does not submit commands,
+            // process pending requests, or change workflow lifecycle.
+            //
+            // If restoration detects corrupted history, the failure
+            // propagates before entering interactive terminal mode.
+            final active_workflow = await workflows?.current();
+
             final terminal = create_terminal_host();
 
             // All filesystem observations pass through the
@@ -246,6 +257,7 @@ final class RudraCli {
               terminal: terminal,
               renderer: renderer,
               error_output: diagnostic_output,
+              active_workflow: active_workflow,
             );
           },
         ),

@@ -4,6 +4,8 @@ import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:uuid/uuid.dart';
 
+import '../features/workflow/application/workflow_start_exception.dart';
+
 /// Composes persistent workflow services for the product CLI.
 ///
 /// One workflow operation owns one SQLite persistence instance.
@@ -171,9 +173,8 @@ final class ProductWorkflowComposition {
       final existing = await reader.current();
 
       if (existing != null) {
-        throw StateError(
-          'An active workflow already exists: '
-          '${existing.identity.workflow_id}',
+        throw WorkflowAlreadyActiveException(
+          workflow_id: existing.identity.workflow_id,
         );
       }
 
@@ -219,6 +220,17 @@ final class ProductWorkflowComposition {
             return active;
 
           case WorkflowSubmissionState.rejected:
+            if (resolution.rejection_code ==
+                WorkflowRejectionCode.ownership_conflict) {
+              // Another process may have established a workflow
+              // after our initial ownership check.
+              final current_workflow = await reader.current();
+
+              throw WorkflowAlreadyActiveException(
+                workflow_id: current_workflow?.identity.workflow_id,
+              );
+            }
+
             throw StateError(
               'Workflow start rejected: '
               '${resolution.rejection_code?.name ?? "unknown"}.',
