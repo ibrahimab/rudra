@@ -39,59 +39,17 @@
 /// ```
 library;
 
-/// Platform-independent target contracts and filesystem models.
+/// Platform-independent target contracts.
 export 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
-/// Standardized filesystem inspection response models.
-export 'src/filesystem/directory_listing.dart';
-export 'src/filesystem/inspection_issue.dart';
+/// Filesystem inspection API.
+export 'src/filesystem/filesystem.dart';
 
-/// Immutable workflow identity and original bindings.
-export 'src/workflow/workflow_identity.dart';
+/// Workflow engine and domain API.
+export 'src/workflow/workflow.dart';
 
-/// Typed workflow domain events.
-export 'src/workflow/events/workflow_event.dart';
-export 'src/workflow/events/workflow_start_event.dart';
-export 'src/workflow/events/workflow_started_event.dart';
-export 'src/workflow/events/workflow_ended_event.dart';
-
-/// Durable workflow command submission contracts.
-export 'src/workflow/event_manager.dart';
-export 'src/workflow/event_submission_store.dart';
-export 'src/workflow/event_submission_receipt.dart';
-export 'src/workflow/event_submission_exception.dart';
-
-/// Immutable workflow lifecycle states.
-export 'src/workflow/states/workflow_state.dart';
-export 'src/workflow/states/workflow_initial_state.dart';
-export 'src/workflow/states/workflow_start_requested_state.dart';
-export 'src/workflow/states/workflow_active_state.dart';
-export 'src/workflow/states/workflow_ended_state.dart';
-
-/// Typed transition definitions and immutable workflow graph.
-export 'src/workflow/transitions/workflow_transition.dart';
-export 'src/workflow/workflow_flow.dart';
-export 'src/workflow/workflow_flow_exception.dart';
-
-/// Composable workflow feature registration.
-export 'src/workflow/modules/workflow_module.dart';
-export 'src/workflow/modules/workflow_module_registry.dart';
-export 'src/workflow/modules/lifecycle_workflow_module.dart';
-
-/// Extensible workflow behavior definitions.
-export 'src/workflow/behaviors/workflow_behavior.dart';
-
-/// Versioned serialization of workflow command events.
-export 'src/workflow/serialization/workflow_command_codec.dart';
-
-/// Deterministic execution and typed transition failures.
-export 'src/workflow/workflow_state_machine.dart';
-export 'src/workflow/workflow_transition_exception.dart';
-
+/// Main SDK application facade.
 export 'src/rudra_sdk.dart';
-export 'src/filesystem/filesystem_service.dart';
 
-/// Human-readable name of the Rudra application.
-///
-/// This constant is independent of platform and presentation.
+/// Human-readable application name.
 const String application_name = 'Rudra';
