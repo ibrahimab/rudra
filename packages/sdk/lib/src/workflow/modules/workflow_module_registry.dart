@@ -1,27 +1,30 @@
 import '../behaviors/workflow_behavior.dart';
+import '../serialization/workflow_event_serializer.dart';
 import '../transitions/workflow_transition.dart';
 import 'workflow_module.dart';
 
-/// Collects transitions and command-capable behaviors.
+/// Collects workflow capabilities contributed by modules.
 ///
-/// Each module contributes behavior instances through one
-/// registration method. The registry automatically discovers
-/// command handling capabilities from those behaviors.
+/// Supports state transitions, command behaviors, and
+/// event-specific serialization strategies.
 ///
-/// Failed registrations do not modify existing contributions.
+/// Each module's registration is staged and validated before
+/// any of its contributions become visible.
 final class WorkflowModuleRegistry {
   final Set<String> _module_ids = {};
   final List<WorkflowTransitionDefinition> _transitions = [];
 
   final Map<Type, WorkflowCommandBehavior<dynamic>> _command_behaviors = {};
 
-  /// Registers one workflow module.
+  final List<WorkflowEventSerializer<dynamic>> _serializers = [];
+  final Set<(String, int)> _serializer_keys = {};
+
+  /// Registers all contributions from one workflow module.
   ///
-  /// Rejects blank or duplicate module identifiers,
-  /// conflicting command handlers, and mismatched
-  /// command/transition event types.
+  /// Rejects duplicate module IDs, command handlers, serializer
+  /// versions, and inconsistent serializer event identities.
   ///
-  /// Registration is atomic at the configuration level.
+  /// Failed registrations leave existing contributions unchanged.
   void register(WorkflowModule module) {
     final module_id = module.module_id;
 
@@ -34,32 +37,86 @@ final class WorkflowModuleRegistry {
     }
 
     final staging = _ModuleRegistration();
-
     module.register(staging);
 
-    // Validate all handler ownership before committing
-    // any staged contribution.
-    final pending_types = <Type>{};
+    // Validate command handler ownership without changing
+    // the existing registry.
+    final pending_command_types = <Type>{};
 
     for (final behavior in staging.command_behaviors) {
       final command_type = behavior.command_type;
 
-      if (!pending_types.add(command_type) ||
+      if (!pending_command_types.add(command_type) ||
           _command_behaviors.containsKey(command_type)) {
         throw StateError('Duplicate workflow command handler: $command_type');
       }
     }
 
+    // Preserve the mapping between a stable event identifier
+    // and its concrete Dart event type across schema versions.
+    final known_types = <String, Type>{
+      for (final serializer in _serializers)
+        serializer.event_type: serializer.dart_type,
+    };
+
+    final known_ids = <Type, String>{
+      for (final serializer in _serializers)
+        serializer.dart_type: serializer.event_type,
+    };
+
+    final pending_serializer_keys = <(String, int)>{};
+
+    for (final serializer in staging.serializers) {
+      if (serializer.event_type.trim().isEmpty ||
+          serializer.schema_version <= 0) {
+        throw ArgumentError(
+          'Serializer requires a nonblank event type '
+          'and a positive schema version.',
+        );
+      }
+
+      final key = (serializer.event_type, serializer.schema_version);
+
+      if (!pending_serializer_keys.add(key) || _serializer_keys.contains(key)) {
+        throw StateError('Duplicate workflow serializer: $key');
+      }
+
+      final known_type = known_types[serializer.event_type];
+
+      if (known_type != null && known_type != serializer.dart_type) {
+        throw StateError(
+          'Event identifier is registered for another Dart type: '
+          '${serializer.event_type}',
+        );
+      }
+
+      final known_id = known_ids[serializer.dart_type];
+
+      if (known_id != null && known_id != serializer.event_type) {
+        throw StateError(
+          'Dart event type is registered under another event ID: '
+          '${serializer.dart_type}',
+        );
+      }
+
+      known_types[serializer.event_type] = serializer.dart_type;
+      known_ids[serializer.dart_type] = serializer.event_type;
+    }
+
+    // All checks succeeded. Commit the configuration together.
     _transitions.addAll(staging.transitions);
 
     for (final behavior in staging.command_behaviors) {
       _command_behaviors[behavior.command_type] = behavior;
     }
 
+    _serializers.addAll(staging.serializers);
+    _serializer_keys.addAll(pending_serializer_keys);
+
     _module_ids.add(module_id);
   }
 
-  /// Immutable snapshot of registered transitions.
+  /// Immutable snapshot of registered transition definitions.
   List<WorkflowTransitionDefinition> get transitions =>
       List.unmodifiable(_transitions);
 
@@ -67,24 +124,23 @@ final class WorkflowModuleRegistry {
   Map<Type, WorkflowCommandBehavior<dynamic>> get command_behaviors =>
       Map.unmodifiable(_command_behaviors);
 
-  /// Finds the behavior responsible for a concrete command.
-  ///
-  /// Returns null for unregistered commands or outcome-only
-  /// events.
+  /// Immutable snapshot of registered event serializers.
+  List<WorkflowEventSerializer<dynamic>> get serializers =>
+      List.unmodifiable(_serializers);
+
+  /// Finds the handler responsible for an exact command type.
   WorkflowCommandBehavior<dynamic>? handler_for({required Type command_type}) {
     return _command_behaviors[command_type];
   }
 }
 
-/// Stages contributions from a single workflow module.
-///
-/// Each behavior's transition is resolved once, and a
-/// command-capable behavior is registered automatically.
+/// Collects one module's contributions before validation.
 final class _ModuleRegistration implements WorkflowModuleRegistration {
   final List<WorkflowTransitionDefinition> transitions = [];
-
   final List<WorkflowCommandBehavior<dynamic>> command_behaviors = [];
+  final List<WorkflowEventSerializer<dynamic>> serializers = [];
 
+  /// Stages a workflow behavior and its optional command handler.
   @override
   void add(WorkflowBehavior behavior) {
     final transition = behavior.transition;
@@ -102,5 +158,11 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
     }
 
     transitions.add(transition);
+  }
+
+  /// Stages an event serializer without executing it.
+  @override
+  void add_serializer(WorkflowEventSerializer<dynamic> serializer) {
+    serializers.add(serializer);
   }
 }

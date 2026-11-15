@@ -12,21 +12,26 @@ import '../../../database/rudra_database.dart';
 /// The caller owns the database connection and supplies a trusted
 /// submission scope. This store does not authenticate principals.
 final class DriftEventSubmissionStore implements EventSubmissionStore {
-  /// Creates a store bound to a database and trusted scope.
+  /// Creates a durable submission store.
   ///
-  /// The database connection remains owned by its caller.
+  /// [codec] supplies the event serialization configuration.
+  /// When omitted, Rudra's standard workflow modules are used.
   DriftEventSubmissionStore({
     required RudraDatabase database,
     required String scope_id,
+    WorkflowEventCodec? codec,
   }) : _database = database,
-       _scope_id = scope_id {
+       _scope_id = scope_id,
+       _codec = codec ?? WorkflowEventCodec.standard() {
     if (scope_id.trim().isEmpty) {
       throw ArgumentError.value(scope_id, 'scope_id');
     }
   }
 
   static final Uuid _uuid = Uuid();
-  static const WorkflowCommandCodec _codec = WorkflowCommandCodec();
+
+  /// Injected, registry-driven workflow event codec.
+  final WorkflowEventCodec _codec;
 
   final RudraDatabase _database;
   final String _scope_id;

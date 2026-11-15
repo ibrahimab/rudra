@@ -1,6 +1,11 @@
 import '../behaviors/workflow_ended_behavior.dart';
 import '../behaviors/workflow_start_behavior.dart';
 import '../behaviors/workflow_started_behavior.dart';
+
+import 'lifecycle/serialization/workflow_start_serializer.dart';
+import 'lifecycle/serialization/workflow_started_serializer.dart';
+import 'lifecycle/serialization/workflow_ended_serializer.dart';
+
 import 'workflow_module.dart';
 
 /// Registers Rudra's standard workflow lifecycle behaviors.
@@ -15,11 +20,16 @@ final class LifecycleWorkflowModule implements WorkflowModule {
   @override
   String get module_id => 'rudra.workflow.lifecycle';
 
+  /// Contributes lifecycle transitions, command handling,
+  /// and the serializers required to persist lifecycle events.
   @override
   void register(WorkflowModuleRegistration registration) {
     registration
       ..add(const WorkflowStartBehavior())
       ..add(const WorkflowStartedBehavior())
-      ..add(const WorkflowEndedBehavior());
+      ..add(const WorkflowEndedBehavior())
+      ..add_serializer(const WorkflowStartSerializer())
+      ..add_serializer(const WorkflowStartedSerializer())
+      ..add_serializer(const WorkflowEndedSerializer());
   }
 }

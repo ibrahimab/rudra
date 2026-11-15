@@ -10,7 +10,7 @@ import 'workflow_event.dart';
 ///
 /// Future lifecycle rules will determine whether outstanding
 /// operations permit a workflow to reach a terminal state.
-final class WorkflowEndedEvent implements WorkflowEvent {
+final class WorkflowEndedEvent implements WorkflowOutcomeEvent {
   /// Creates a confirmed workflow-ended outcome.
   ///
   /// Throws [ArgumentError] if [workflow_id] is blank.

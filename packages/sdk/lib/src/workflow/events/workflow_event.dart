@@ -44,3 +44,14 @@ abstract interface class WorkflowEvent {
 /// );
 /// ```
 abstract interface class WorkflowCommandEvent implements WorkflowEvent {}
+
+/// A workflow event representing an established domain outcome.
+///
+/// Outcome events are produced by trusted workflow processing.
+/// They describe committed lifecycle changes rather than
+/// requesting operations.
+///
+/// Only command events may be submitted through EventManager.
+/// Outcome events must pass state-machine validation and
+/// durable commitment before becoming authoritative.
+abstract interface class WorkflowOutcomeEvent implements WorkflowEvent {}

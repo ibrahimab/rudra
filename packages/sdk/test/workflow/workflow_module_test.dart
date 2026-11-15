@@ -2,6 +2,7 @@ import 'package:test/test.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:rudra_sdk/src/workflow/behaviors/workflow_start_behavior.dart';
+import 'package:rudra_sdk/src/workflow/modules/lifecycle/serialization/workflow_start_serializer.dart';
 
 /// Verifies composable workflow behavior registration.
 void main() {
@@ -103,7 +104,11 @@ void main() {
       throwsStateError,
     );
 
+    // Failed module registration must not partially commit
+    // any transitions, command handlers, or serializers.
     expect(registry.transitions, isEmpty);
+    expect(registry.command_behaviors, isEmpty);
+    expect(registry.serializers, isEmpty);
 
     registry.register(
       _TestWorkflowModule(module_id: 'test.failure', behaviors: [behavior]),
@@ -184,6 +189,52 @@ void main() {
     expect(registry.transitions, hasLength(3));
     expect(registry.command_behaviors, hasLength(1));
   });
+
+  test('registers serializers through lifecycle module', () {
+    final registry = WorkflowModuleRegistry();
+
+    registry.register(const LifecycleWorkflowModule());
+
+    expect(registry.serializers, hasLength(3));
+
+    final codec = WorkflowEventCodec.from_registry(registry);
+
+    final event = WorkflowStartEvent(
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final restored = codec.decode(
+      event_type: event.event_type,
+      payload_json: codec.encode(event),
+    );
+
+    expect(restored, isA<WorkflowStartEvent>());
+  });
+
+  test('rejects duplicate serializers atomically', () {
+    final registry = WorkflowModuleRegistry();
+    registry.register(const LifecycleWorkflowModule());
+
+    final before = registry.serializers;
+
+    expect(
+      () => registry.register(
+        _TestWorkflowModule(
+          module_id: 'duplicate.serializer',
+          behaviors: [],
+          serializers: [const WorkflowStartSerializer()],
+        ),
+      ),
+      throwsStateError,
+    );
+
+    expect(registry.serializers, hasLength(3));
+    expect(registry.transitions, hasLength(3));
+
+    // The previously retrieved snapshot is unchanged.
+    expect(before, hasLength(3));
+  });
 }
 
 /// Adapts an existing typed transition for registration tests.
@@ -195,23 +246,30 @@ final class _TestWorkflowBehavior implements WorkflowBehavior {
   final WorkflowTransitionDefinition transition;
 }
 
-/// Supplies configurable workflow behaviors to a module registry.
+/// Supplies configurable workflow contributions to registry tests.
 final class _TestWorkflowModule implements WorkflowModule {
-  /// Creates an isolated module fixture.
+  /// Creates an isolated module registration fixture.
   _TestWorkflowModule({
     required this.module_id,
     required Iterable<WorkflowBehavior> behaviors,
-  }) : _behaviors = List<WorkflowBehavior>.of(behaviors);
+    Iterable<WorkflowEventSerializer<dynamic>> serializers = const [],
+  }) : _behaviors = List.of(behaviors),
+       _serializers = List.of(serializers);
 
   @override
   final String module_id;
 
   final List<WorkflowBehavior> _behaviors;
+  final List<WorkflowEventSerializer<dynamic>> _serializers;
 
   @override
   void register(WorkflowModuleRegistration registration) {
     for (final behavior in _behaviors) {
       registration.add(behavior);
+    }
+
+    for (final serializer in _serializers) {
+      registration.add_serializer(serializer);
     }
   }
 }

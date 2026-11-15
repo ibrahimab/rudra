@@ -28,20 +28,20 @@ import '../../../database/rudra_database.dart';
 /// final pending = await inbox.next_pending();
 /// ```
 final class DriftWorkflowInbox implements WorkflowInbox {
-  /// Creates an inbox reader for a trusted submission scope.
+  /// Creates a read-only workflow inbox for one trusted scope.
   ///
-  /// [database] is owned by the application composition boundary.
-  /// [scope_id] must originate from trusted application context.
-  ///
-  /// Throws [ArgumentError] for a blank submission scope.
+  /// The injected codec must recognize every command type
+  /// accepted by the corresponding submission store.
   DriftWorkflowInbox({
     required RudraDatabase database,
     required String scope_id,
+    WorkflowEventCodec? codec,
   }) : _database = database,
-       _scope_id = _require_scope(scope_id);
+       _scope_id = _require_scope(scope_id),
+       _codec = codec ?? WorkflowEventCodec.standard();
 
-  /// Codec responsible for reconstructing typed commands.
-  static const WorkflowCommandCodec _codec = WorkflowCommandCodec();
+  /// Injected event codec shared with submission persistence.
+  final WorkflowEventCodec _codec;
 
   /// Shared SQLite connection.
   final RudraDatabase _database;
@@ -78,13 +78,22 @@ final class DriftWorkflowInbox implements WorkflowInbox {
       return null;
     }
 
-    // Command reconstruction remains delegated to the SDK's
-    // versioned codec rather than implementing JSON parsing
-    // or command-specific logic inside the SQLite adapter.
-    final command = _codec.decode(
+    final event = _codec.decode(
       event_type: submission.event_type,
       payload_json: submission.payload_json,
     );
+
+    // A persisted inbox entry must be a command.
+    // A validly serialized outcome does not become an
+    // executable request merely by appearing in this table.
+    if (event is! WorkflowCommandEvent) {
+      throw FormatException(
+        'Inbox submission contains a non-command event: '
+        '${submission.event_type}',
+      );
+    }
+
+    final command = event;
 
     return PendingWorkflowCommand(
       receipt: EventSubmissionReceipt(

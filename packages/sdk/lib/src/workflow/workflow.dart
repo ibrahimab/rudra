@@ -36,8 +36,9 @@ export 'modules/workflow_module.dart';
 export 'modules/workflow_module_registry.dart';
 export 'modules/lifecycle_workflow_module.dart';
 
-/// Event serialization.
-export 'serialization/workflow_command_codec.dart';
+/// /// Registry-driven event serialization.
+export 'serialization/workflow_event_serializer.dart';
+export 'serialization/workflow_event_codec.dart';
 
 /// Durable workflow processing contracts.
 /// Workflow processing contracts and orchestration.

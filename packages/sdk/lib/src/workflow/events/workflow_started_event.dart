@@ -12,7 +12,7 @@ import 'workflow_start_event.dart';
 ///
 /// This event is an outcome, not an instruction to create a
 /// workflow or perform filesystem operations.
-final class WorkflowStartedEvent implements WorkflowEvent {
+final class WorkflowStartedEvent implements WorkflowOutcomeEvent {
   /// Creates an established workflow-start outcome.
   const WorkflowStartedEvent({required this.identity});
 
