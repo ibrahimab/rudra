@@ -76,6 +76,7 @@ void main() {
             ),
             committer: persistence.workflow_committer,
             rejector: persistence.workflow_rejector,
+            quarantiner: persistence.workflow_quarantiner,
           );
         }
 

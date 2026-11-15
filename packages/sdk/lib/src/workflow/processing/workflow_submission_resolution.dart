@@ -1,5 +1,6 @@
 import '../event_submission_receipt.dart';
 import 'workflow_processing_models.dart';
+import 'workflow_quarantine.dart';
 
 /// Durable processing states of an accepted submission.
 enum WorkflowSubmissionState {
@@ -11,6 +12,10 @@ enum WorkflowSubmissionState {
 
   /// Definitively refused by a business rule.
   rejected,
+
+  /// Preserved for investigation because the command could not
+  /// be interpreted safely by the registered serializers.
+  quarantined,
 }
 
 /// Stable reasons for refusing an accepted workflow command.
@@ -33,6 +38,9 @@ final class WorkflowSubmissionResolution {
     required this.state,
     this.rejection_code,
     this.rejected_at_unix_ms,
+    this.quarantine_code,
+    this.quarantine_diagnostic,
+    this.quarantined_at_unix_ms,
   });
 
   /// Original accepted submission receipt.
@@ -46,6 +54,17 @@ final class WorkflowSubmissionResolution {
 
   /// UTC rejection timestamp in Unix milliseconds.
   final int? rejected_at_unix_ms;
+
+  /// Reason the submission was quarantined.
+  final WorkflowQuarantineCode? quarantine_code;
+
+  /// Diagnostic recorded when quarantine was committed.
+  ///
+  /// This must not contain the original serialized payload.
+  final String? quarantine_diagnostic;
+
+  /// UTC quarantine timestamp in Unix milliseconds.
+  final int? quarantined_at_unix_ms;
 }
 
 /// Read-only access to authoritative submission resolution.

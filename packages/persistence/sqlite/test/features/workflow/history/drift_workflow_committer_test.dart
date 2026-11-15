@@ -10,6 +10,7 @@ import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_rejection_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_status_reader.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_quarantine_store.dart';
 
 import 'package:test/test.dart';
 
@@ -86,6 +87,10 @@ void main() {
         database: database,
         scope_id: scope_id,
         codec: codec,
+      ),
+      quarantiner: DriftWorkflowQuarantineStore(
+        database: database,
+        scope_id: scope_id,
       ),
     );
   }

@@ -10,6 +10,7 @@ import 'features/workflow/submissions/drift_event_submission_store.dart';
 import 'features/workflow/submissions/drift_workflow_inbox.dart';
 import 'features/workflow/submissions/drift_workflow_rejection_store.dart';
 import 'features/workflow/submissions/drift_workflow_status_reader.dart';
+import 'features/workflow/submissions/drift_workflow_quarantine_store.dart';
 
 /// Owns SQLite persistence resources for one Rudra application.
 ///
@@ -86,6 +87,16 @@ final class RudraSqlitePersistence {
         scope_id: _scope_id,
         codec: _codec,
       );
+
+  /// Durable quarantine boundary for unreadable submissions.
+  ///
+  /// Shares the trusted scope and database connection with
+  /// the inbox and other submission persistence adapters.
+  ///
+  /// Quarantine never modifies workflow event history or
+  /// unfinished-workflow ownership.
+  late final WorkflowSubmissionQuarantiner workflow_quarantiner =
+      DriftWorkflowQuarantineStore(database: _database, scope_id: _scope_id);
 
   /// Read-only, durable submission status lookup.
   ///

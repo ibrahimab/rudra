@@ -172,11 +172,80 @@ void main() {
         WorkflowCommitErrorCode.ownership_conflict,
       ),
       rejector: rejector,
+      quarantiner: _FakeWorkflowQuarantiner(),
     );
 
     await expectLater(processor.process_next(), throwsStateError);
 
     expect(rejector.calls, 1);
+  });
+
+  test('quarantines unreadable commands without domain execution', () async {
+    final identity_provider = _FakeWorkflowIdentityProvider();
+    final committer = _FakeWorkflowCommitter();
+    final rejector = _FakeWorkflowRejector();
+    final quarantiner = _FakeWorkflowQuarantiner();
+
+    final issue = WorkflowInboxDecodingException(
+      receipt: _pending().receipt,
+      scope_id: 'submission-scope-1',
+      event_type: WorkflowStartEvent.type_id,
+      payload_json: 'invalid-json',
+      code: WorkflowQuarantineCode.undecodable_command,
+      diagnostic: 'Invalid workflow command payload.',
+    );
+
+    final processor = WorkflowProcessor(
+      registry: registry,
+      inbox: _UnreadableWorkflowInbox(issue),
+      identity_provider: identity_provider,
+      committer: committer,
+      rejector: rejector,
+      quarantiner: quarantiner,
+    );
+
+    final result = await processor.process_next();
+
+    expect(result, isA<WorkflowProcessingQuarantined>());
+
+    final quarantined = result as WorkflowProcessingQuarantined;
+
+    expect(quarantined.receipt.event_id, issue.receipt.event_id);
+    expect(quarantined.code, WorkflowQuarantineCode.undecodable_command);
+
+    expect(quarantiner.calls, 1);
+    expect(quarantiner.last_issue, same(issue));
+
+    // The unreadable data must never reach workflow execution.
+    expect(identity_provider.calls, 0);
+    expect(committer.committed, isNull);
+    expect(rejector.calls, 0);
+  });
+
+  test('does not report quarantine when persistence fails', () async {
+    final quarantiner = _FakeWorkflowQuarantiner(fail_quarantine: true);
+
+    final issue = WorkflowInboxDecodingException(
+      receipt: _pending().receipt,
+      scope_id: 'submission-scope-1',
+      event_type: WorkflowStartEvent.type_id,
+      payload_json: 'invalid-json',
+      code: WorkflowQuarantineCode.undecodable_command,
+      diagnostic: 'Invalid workflow command payload.',
+    );
+
+    final processor = WorkflowProcessor(
+      registry: registry,
+      inbox: _UnreadableWorkflowInbox(issue),
+      identity_provider: _FakeWorkflowIdentityProvider(),
+      committer: _FakeWorkflowCommitter(),
+      rejector: _FakeWorkflowRejector(),
+      quarantiner: quarantiner,
+    );
+
+    await expectLater(processor.process_next(), throwsStateError);
+
+    expect(quarantiner.calls, 1);
   });
 }
 
@@ -455,5 +524,59 @@ final class _FakeWorkflowRejector implements WorkflowSubmissionRejector {
     if (fail_rejection) {
       throw StateError('Simulated rejection persistence failure.');
     }
+  }
+}
+
+/// Test double for durable quarantine persistence.
+///
+/// Records whether the processor attempted to quarantine an
+/// unreadable submission without writing to a real database.
+///
+/// Successful completion simulates a committed quarantine.
+/// A configured failure simulates unsuccessful persistence,
+/// allowing tests to verify that the processor propagates
+/// errors instead of returning a successful quarantine result.
+final class _FakeWorkflowQuarantiner implements WorkflowSubmissionQuarantiner {
+  /// Creates a configurable quarantine test double.
+  _FakeWorkflowQuarantiner({this.fail_quarantine = false});
+
+  /// Whether quarantine operations should fail.
+  final bool fail_quarantine;
+
+  /// Number of attempted quarantine operations.
+  int calls = 0;
+
+  /// Last unreadable submission supplied to this boundary.
+  WorkflowInboxDecodingException? last_issue;
+
+  /// Records an attempted quarantine operation.
+  ///
+  /// This does not actually persist the submission.
+  /// Both successful and failed attempts increment [calls].
+  @override
+  Future<void> quarantine(WorkflowInboxDecodingException issue) async {
+    calls++;
+    last_issue = issue;
+
+    if (fail_quarantine) {
+      throw StateError('Simulated quarantine persistence failure.');
+    }
+  }
+}
+
+/// Simulates an inbox that encounters an unreadable persisted row.
+///
+/// The exception is classified by the inbox boundary, not
+/// constructed or inferred by the processor.
+final class _UnreadableWorkflowInbox implements WorkflowInbox {
+  /// Creates an inbox returning one classified decoding failure.
+  const _UnreadableWorkflowInbox(this.issue);
+
+  /// Original decoding failure to propagate.
+  final WorkflowInboxDecodingException issue;
+
+  @override
+  Future<PendingWorkflowCommand?> next_pending() async {
+    throw issue;
   }
 }

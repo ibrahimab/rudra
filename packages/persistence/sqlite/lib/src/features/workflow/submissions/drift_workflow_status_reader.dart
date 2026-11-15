@@ -45,11 +45,57 @@ final class DriftWorkflowStatusReader
       'pending' => WorkflowSubmissionState.pending,
       'completed' => WorkflowSubmissionState.completed,
       'rejected' => WorkflowSubmissionState.rejected,
+      'quarantined' => WorkflowSubmissionState.quarantined,
       _ => throw FormatException(
         'Unknown submission processing state: '
         '${stored.processing_state}',
       ),
     };
+
+    if (state == WorkflowSubmissionState.quarantined) {
+      // Quarantine and business rejection are mutually exclusive.
+      if (stored.rejection_code != null || stored.rejected_at_unix_ms != null) {
+        throw const FormatException(
+          'Quarantined submission contains rejection metadata.',
+        );
+      }
+
+      final code_name = stored.quarantine_code;
+      final diagnostic = stored.quarantine_diagnostic;
+      final quarantined_at = stored.quarantined_at_unix_ms;
+
+      if (code_name == null || diagnostic == null || quarantined_at == null) {
+        throw const FormatException(
+          'Quarantined submission is missing resolution metadata.',
+        );
+      }
+
+      final WorkflowQuarantineCode code;
+
+      try {
+        code = WorkflowQuarantineCode.values.byName(code_name);
+      } on ArgumentError {
+        throw FormatException('Unsupported quarantine code: $code_name');
+      }
+
+      return WorkflowSubmissionResolution(
+        receipt: receipt,
+        state: state,
+        quarantine_code: code,
+        quarantine_diagnostic: diagnostic,
+        quarantined_at_unix_ms: quarantined_at,
+      );
+    }
+
+    // Non-quarantined submissions must not carry quarantine
+    // metadata, regardless of their other processing state.
+    if (stored.quarantine_code != null ||
+        stored.quarantine_diagnostic != null ||
+        stored.quarantined_at_unix_ms != null) {
+      throw const FormatException(
+        'Non-quarantined submission contains quarantine metadata.',
+      );
+    }
 
     if (state != WorkflowSubmissionState.rejected) {
       if (stored.rejection_code != null || stored.rejected_at_unix_ms != null) {

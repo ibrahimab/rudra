@@ -48,7 +48,7 @@ final class RudraDatabase extends _$RudraDatabase {
 
   /// Version of Rudra's persisted SQLite schema.
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   /// Upgrades existing databases without discarding
   /// previously accepted workflow submissions.
@@ -71,6 +71,25 @@ final class RudraDatabase extends _$RudraDatabase {
         await migrator.addColumn(
           schema.workflowSubmissions,
           schema.workflowSubmissions.rejectedAtUnixMs,
+        );
+      },
+
+      from3To4: (migrator, schema) async {
+        // Existing rows must retain their state and payloads.
+        // All new quarantine columns are nullable.
+        await migrator.addColumn(
+          schema.workflowSubmissions,
+          schema.workflowSubmissions.quarantineCode,
+        );
+
+        await migrator.addColumn(
+          schema.workflowSubmissions,
+          schema.workflowSubmissions.quarantineDiagnostic,
+        );
+
+        await migrator.addColumn(
+          schema.workflowSubmissions,
+          schema.workflowSubmissions.quarantinedAtUnixMs,
         );
       },
     ),

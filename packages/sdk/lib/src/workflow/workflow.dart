@@ -50,3 +50,4 @@ export 'processing/workflow_processor.dart';
 export 'processing/workflow_commit_exception.dart';
 export 'processing/workflow_submission_resolution.dart';
 export 'processing/workflow_processing_result.dart';
+export 'processing/workflow_quarantine.dart';

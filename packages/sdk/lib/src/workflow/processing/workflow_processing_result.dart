@@ -1,6 +1,7 @@
 import '../event_submission_receipt.dart';
 import 'workflow_processing_models.dart';
 import 'workflow_submission_resolution.dart';
+import 'workflow_quarantine.dart';
 
 /// Result of attempting to process one pending workflow command.
 ///
@@ -39,4 +40,26 @@ final class WorkflowProcessingRejected extends WorkflowProcessingResult {
 
   /// Durable business rejection classification.
   final WorkflowRejectionCode code;
+}
+
+/// An unreadable accepted command was durably quarantined.
+///
+/// This result is returned only after quarantine persistence
+/// succeeds. It does not represent a business rejection or
+/// a successfully established workflow.
+///
+/// Frontends should query WorkflowSubmissionStatusReader
+/// for authoritative status after reconnecting.
+final class WorkflowProcessingQuarantined extends WorkflowProcessingResult {
+  /// Creates the result of a committed quarantine operation.
+  const WorkflowProcessingQuarantined({
+    required this.receipt,
+    required this.code,
+  });
+
+  /// Receipt of the preserved, unreadable submission.
+  final EventSubmissionReceipt receipt;
+
+  /// Stable reason for quarantine.
+  final WorkflowQuarantineCode code;
 }

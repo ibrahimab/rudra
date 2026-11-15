@@ -3,6 +3,9 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../../../database/rudra_database.dart';
 
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_quarantine_store.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_status_reader.dart';
+
 /// Reads accepted workflow commands from the SQLite inbox.
 ///
 /// Commands are selected by durable submission sequence,
@@ -61,6 +64,10 @@ final class DriftWorkflowInbox implements WorkflowInbox {
   ///
   /// Malformed or unsupported commands propagate the codec's
   /// failure instead of being silently skipped.
+  ///
+  /// Malformed submissions raise [WorkflowInboxDecodingException]
+  /// but remain pending until the processor's quarantine boundary
+  /// persists its resolution.
   @override
   Future<PendingWorkflowCommand?> next_pending() async {
     final query = _database.select(_database.workflowSubmissions)
@@ -78,30 +85,51 @@ final class DriftWorkflowInbox implements WorkflowInbox {
       return null;
     }
 
-    final event = _codec.decode(
-      event_type: submission.event_type,
-      payload_json: submission.payload_json,
+    final receipt = EventSubmissionReceipt(
+      event_id: submission.event_id,
+      correlation_id: submission.correlation_id,
     );
 
-    // A persisted inbox entry must be a command.
-    // A validly serialized outcome does not become an
-    // executable request merely by appearing in this table.
-    if (event is! WorkflowCommandEvent) {
-      throw FormatException(
-        'Inbox submission contains a non-command event: '
-        '${submission.event_type}',
+    final WorkflowEvent event;
+
+    try {
+      event = _codec.decode(
+        event_type: submission.event_type,
+        payload_json: submission.payload_json,
+      );
+    } on FormatException catch (error) {
+      // Only recognized serialization failures are classified
+      // as unreadable commands. Database failures, StateErrors,
+      // and unexpected programming failures still propagate.
+      throw WorkflowInboxDecodingException(
+        receipt: receipt,
+        scope_id: submission.scope_id,
+        event_type: submission.event_type,
+        payload_json: submission.payload_json,
+        code: WorkflowQuarantineCode.undecodable_command,
+        diagnostic: error.message.isEmpty
+            ? 'Unable to decode persisted workflow command.'
+            : error.message,
       );
     }
 
-    final command = event;
+    // A correctly serialized outcome is still not a command.
+    // Persisted data must not bypass the command/event boundary.
+    if (event is! WorkflowCommandEvent) {
+      throw WorkflowInboxDecodingException(
+        receipt: receipt,
+        scope_id: submission.scope_id,
+        event_type: submission.event_type,
+        payload_json: submission.payload_json,
+        code: WorkflowQuarantineCode.non_command_event,
+        diagnostic: 'Inbox entry contains a non-command event.',
+      );
+    }
 
     return PendingWorkflowCommand(
-      receipt: EventSubmissionReceipt(
-        event_id: submission.event_id,
-        correlation_id: submission.correlation_id,
-      ),
+      receipt: receipt,
       scope_id: submission.scope_id,
-      command: command,
+      command: event,
     );
   }
 

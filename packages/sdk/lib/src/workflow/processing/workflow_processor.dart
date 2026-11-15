@@ -11,6 +11,7 @@ import 'workflow_processing_models.dart';
 import 'workflow_commit_exception.dart';
 import 'workflow_submission_resolution.dart';
 import 'workflow_processing_result.dart';
+import 'workflow_quarantine.dart';
 
 /// Orchestrates durable workflow command processing.
 ///
@@ -30,10 +31,12 @@ final class WorkflowProcessor {
     required WorkflowIdentityProvider identity_provider,
     required WorkflowCommitter committer,
     required WorkflowSubmissionRejector rejector,
+    required WorkflowSubmissionQuarantiner quarantiner,
   }) : _inbox = inbox,
        _identity_provider = identity_provider,
        _committer = committer,
        _rejector = rejector,
+       _quarantiner = quarantiner,
        _handlers = Map.unmodifiable(registry.command_behaviors),
        _machine = WorkflowStateMachine(
          flow: WorkflowFlow(transitions: registry.transitions),
@@ -46,6 +49,10 @@ final class WorkflowProcessor {
   /// Persists confirmed business rejections independently
   /// of the authoritative workflow event journal.
   final WorkflowSubmissionRejector _rejector;
+
+  /// Persists unreadable accepted commands without interpreting
+  /// them as valid domain requests or business rejections.
+  final WorkflowSubmissionQuarantiner _quarantiner;
 
   final Map<Type, WorkflowCommandBehavior<dynamic>> _handlers;
   final WorkflowStateMachine _machine;
@@ -63,7 +70,23 @@ final class WorkflowProcessor {
   /// Unexpected domain, concurrency, and infrastructure
   /// failures propagate instead of producing success results.
   Future<WorkflowProcessingResult> process_next() async {
-    final pending = await _inbox.next_pending();
+    final PendingWorkflowCommand? pending;
+
+    try {
+      pending = await _inbox.next_pending();
+    } on WorkflowInboxDecodingException catch (issue) {
+      // The inbox identified an unreadable persisted row.
+      // It deliberately did not change the database.
+      //
+      // This operation must commit before we return a
+      // quarantined result to the caller.
+      await _quarantiner.quarantine(issue);
+
+      return WorkflowProcessingQuarantined(
+        receipt: issue.receipt,
+        code: issue.code,
+      );
+    }
 
     if (pending == null) {
       return const WorkflowProcessingIdle();

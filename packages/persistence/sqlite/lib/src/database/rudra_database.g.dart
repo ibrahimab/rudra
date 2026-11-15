@@ -124,6 +124,38 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _quarantine_codeMeta = const VerificationMeta(
+    'quarantine_code',
+  );
+  @override
+  late final GeneratedColumn<String> quarantine_code = GeneratedColumn<String>(
+    'quarantine_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _quarantine_diagnosticMeta =
+      const VerificationMeta('quarantine_diagnostic');
+  @override
+  late final GeneratedColumn<String> quarantine_diagnostic =
+      GeneratedColumn<String>(
+        'quarantine_diagnostic',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _quarantined_at_unix_msMeta =
+      const VerificationMeta('quarantined_at_unix_ms');
+  @override
+  late final GeneratedColumn<int> quarantined_at_unix_ms = GeneratedColumn<int>(
+    'quarantined_at_unix_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _accepted_at_unix_msMeta =
       const VerificationMeta('accepted_at_unix_ms');
   @override
@@ -146,6 +178,9 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
     processing_state,
     rejection_code,
     rejected_at_unix_ms,
+    quarantine_code,
+    quarantine_diagnostic,
+    quarantined_at_unix_ms,
     accepted_at_unix_ms,
   ];
   @override
@@ -248,6 +283,33 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
         ),
       );
     }
+    if (data.containsKey('quarantine_code')) {
+      context.handle(
+        _quarantine_codeMeta,
+        quarantine_code.isAcceptableOrUnknown(
+          data['quarantine_code']!,
+          _quarantine_codeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('quarantine_diagnostic')) {
+      context.handle(
+        _quarantine_diagnosticMeta,
+        quarantine_diagnostic.isAcceptableOrUnknown(
+          data['quarantine_diagnostic']!,
+          _quarantine_diagnosticMeta,
+        ),
+      );
+    }
+    if (data.containsKey('quarantined_at_unix_ms')) {
+      context.handle(
+        _quarantined_at_unix_msMeta,
+        quarantined_at_unix_ms.isAcceptableOrUnknown(
+          data['quarantined_at_unix_ms']!,
+          _quarantined_at_unix_msMeta,
+        ),
+      );
+    }
     if (data.containsKey('accepted_at_unix_ms')) {
       context.handle(
         _accepted_at_unix_msMeta,
@@ -312,6 +374,18 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
         DriftSqlType.int,
         data['${effectivePrefix}rejected_at_unix_ms'],
       ),
+      quarantine_code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}quarantine_code'],
+      ),
+      quarantine_diagnostic: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}quarantine_diagnostic'],
+      ),
+      quarantined_at_unix_ms: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quarantined_at_unix_ms'],
+      ),
       accepted_at_unix_ms: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}accepted_at_unix_ms'],
@@ -364,6 +438,22 @@ class WorkflowSubmission extends DataClass
   /// Null for submissions that have not been rejected.
   final int? rejected_at_unix_ms;
 
+  /// Stable reason for quarantining an unreadable submission.
+  ///
+  /// Null unless processing_state is 'quarantined'.
+  final String? quarantine_code;
+
+  /// Diagnostic recorded by the decoding boundary.
+  ///
+  /// The original payload remains in payload_json.
+  /// This column must not be used to duplicate raw payloads.
+  final String? quarantine_diagnostic;
+
+  /// UTC Unix timestamp when quarantine was committed.
+  ///
+  /// Null unless processing_state is 'quarantined'.
+  final int? quarantined_at_unix_ms;
+
   /// UTC acceptance timestamp in Unix milliseconds.
   final int accepted_at_unix_ms;
   const WorkflowSubmission({
@@ -377,6 +467,9 @@ class WorkflowSubmission extends DataClass
     required this.processing_state,
     this.rejection_code,
     this.rejected_at_unix_ms,
+    this.quarantine_code,
+    this.quarantine_diagnostic,
+    this.quarantined_at_unix_ms,
     required this.accepted_at_unix_ms,
   });
   @override
@@ -397,6 +490,15 @@ class WorkflowSubmission extends DataClass
     }
     if (!nullToAbsent || rejected_at_unix_ms != null) {
       map['rejected_at_unix_ms'] = Variable<int>(rejected_at_unix_ms);
+    }
+    if (!nullToAbsent || quarantine_code != null) {
+      map['quarantine_code'] = Variable<String>(quarantine_code);
+    }
+    if (!nullToAbsent || quarantine_diagnostic != null) {
+      map['quarantine_diagnostic'] = Variable<String>(quarantine_diagnostic);
+    }
+    if (!nullToAbsent || quarantined_at_unix_ms != null) {
+      map['quarantined_at_unix_ms'] = Variable<int>(quarantined_at_unix_ms);
     }
     map['accepted_at_unix_ms'] = Variable<int>(accepted_at_unix_ms);
     return map;
@@ -420,6 +522,15 @@ class WorkflowSubmission extends DataClass
       rejected_at_unix_ms: rejected_at_unix_ms == null && nullToAbsent
           ? const Value.absent()
           : Value(rejected_at_unix_ms),
+      quarantine_code: quarantine_code == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quarantine_code),
+      quarantine_diagnostic: quarantine_diagnostic == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quarantine_diagnostic),
+      quarantined_at_unix_ms: quarantined_at_unix_ms == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quarantined_at_unix_ms),
       accepted_at_unix_ms: Value(accepted_at_unix_ms),
     );
   }
@@ -442,6 +553,13 @@ class WorkflowSubmission extends DataClass
       rejected_at_unix_ms: serializer.fromJson<int?>(
         json['rejected_at_unix_ms'],
       ),
+      quarantine_code: serializer.fromJson<String?>(json['quarantine_code']),
+      quarantine_diagnostic: serializer.fromJson<String?>(
+        json['quarantine_diagnostic'],
+      ),
+      quarantined_at_unix_ms: serializer.fromJson<int?>(
+        json['quarantined_at_unix_ms'],
+      ),
       accepted_at_unix_ms: serializer.fromJson<int>(
         json['accepted_at_unix_ms'],
       ),
@@ -461,6 +579,11 @@ class WorkflowSubmission extends DataClass
       'processing_state': serializer.toJson<String>(processing_state),
       'rejection_code': serializer.toJson<String?>(rejection_code),
       'rejected_at_unix_ms': serializer.toJson<int?>(rejected_at_unix_ms),
+      'quarantine_code': serializer.toJson<String?>(quarantine_code),
+      'quarantine_diagnostic': serializer.toJson<String?>(
+        quarantine_diagnostic,
+      ),
+      'quarantined_at_unix_ms': serializer.toJson<int?>(quarantined_at_unix_ms),
       'accepted_at_unix_ms': serializer.toJson<int>(accepted_at_unix_ms),
     };
   }
@@ -476,6 +599,9 @@ class WorkflowSubmission extends DataClass
     String? processing_state,
     Value<String?> rejection_code = const Value.absent(),
     Value<int?> rejected_at_unix_ms = const Value.absent(),
+    Value<String?> quarantine_code = const Value.absent(),
+    Value<String?> quarantine_diagnostic = const Value.absent(),
+    Value<int?> quarantined_at_unix_ms = const Value.absent(),
     int? accepted_at_unix_ms,
   }) => WorkflowSubmission(
     sequence: sequence ?? this.sequence,
@@ -494,6 +620,15 @@ class WorkflowSubmission extends DataClass
     rejected_at_unix_ms: rejected_at_unix_ms.present
         ? rejected_at_unix_ms.value
         : this.rejected_at_unix_ms,
+    quarantine_code: quarantine_code.present
+        ? quarantine_code.value
+        : this.quarantine_code,
+    quarantine_diagnostic: quarantine_diagnostic.present
+        ? quarantine_diagnostic.value
+        : this.quarantine_diagnostic,
+    quarantined_at_unix_ms: quarantined_at_unix_ms.present
+        ? quarantined_at_unix_ms.value
+        : this.quarantined_at_unix_ms,
     accepted_at_unix_ms: accepted_at_unix_ms ?? this.accepted_at_unix_ms,
   );
   WorkflowSubmission copyWithCompanion(WorkflowSubmissionsCompanion data) {
@@ -522,6 +657,15 @@ class WorkflowSubmission extends DataClass
       rejected_at_unix_ms: data.rejected_at_unix_ms.present
           ? data.rejected_at_unix_ms.value
           : this.rejected_at_unix_ms,
+      quarantine_code: data.quarantine_code.present
+          ? data.quarantine_code.value
+          : this.quarantine_code,
+      quarantine_diagnostic: data.quarantine_diagnostic.present
+          ? data.quarantine_diagnostic.value
+          : this.quarantine_diagnostic,
+      quarantined_at_unix_ms: data.quarantined_at_unix_ms.present
+          ? data.quarantined_at_unix_ms.value
+          : this.quarantined_at_unix_ms,
       accepted_at_unix_ms: data.accepted_at_unix_ms.present
           ? data.accepted_at_unix_ms.value
           : this.accepted_at_unix_ms,
@@ -541,6 +685,9 @@ class WorkflowSubmission extends DataClass
           ..write('processing_state: $processing_state, ')
           ..write('rejection_code: $rejection_code, ')
           ..write('rejected_at_unix_ms: $rejected_at_unix_ms, ')
+          ..write('quarantine_code: $quarantine_code, ')
+          ..write('quarantine_diagnostic: $quarantine_diagnostic, ')
+          ..write('quarantined_at_unix_ms: $quarantined_at_unix_ms, ')
           ..write('accepted_at_unix_ms: $accepted_at_unix_ms')
           ..write(')'))
         .toString();
@@ -558,6 +705,9 @@ class WorkflowSubmission extends DataClass
     processing_state,
     rejection_code,
     rejected_at_unix_ms,
+    quarantine_code,
+    quarantine_diagnostic,
+    quarantined_at_unix_ms,
     accepted_at_unix_ms,
   );
   @override
@@ -574,6 +724,9 @@ class WorkflowSubmission extends DataClass
           other.processing_state == this.processing_state &&
           other.rejection_code == this.rejection_code &&
           other.rejected_at_unix_ms == this.rejected_at_unix_ms &&
+          other.quarantine_code == this.quarantine_code &&
+          other.quarantine_diagnostic == this.quarantine_diagnostic &&
+          other.quarantined_at_unix_ms == this.quarantined_at_unix_ms &&
           other.accepted_at_unix_ms == this.accepted_at_unix_ms);
 }
 
@@ -588,6 +741,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
   final Value<String> processing_state;
   final Value<String?> rejection_code;
   final Value<int?> rejected_at_unix_ms;
+  final Value<String?> quarantine_code;
+  final Value<String?> quarantine_diagnostic;
+  final Value<int?> quarantined_at_unix_ms;
   final Value<int> accepted_at_unix_ms;
   const WorkflowSubmissionsCompanion({
     this.sequence = const Value.absent(),
@@ -600,6 +756,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     this.processing_state = const Value.absent(),
     this.rejection_code = const Value.absent(),
     this.rejected_at_unix_ms = const Value.absent(),
+    this.quarantine_code = const Value.absent(),
+    this.quarantine_diagnostic = const Value.absent(),
+    this.quarantined_at_unix_ms = const Value.absent(),
     this.accepted_at_unix_ms = const Value.absent(),
   });
   WorkflowSubmissionsCompanion.insert({
@@ -613,6 +772,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     this.processing_state = const Value.absent(),
     this.rejection_code = const Value.absent(),
     this.rejected_at_unix_ms = const Value.absent(),
+    this.quarantine_code = const Value.absent(),
+    this.quarantine_diagnostic = const Value.absent(),
+    this.quarantined_at_unix_ms = const Value.absent(),
     required int accepted_at_unix_ms,
   }) : event_id = Value(event_id),
        correlation_id = Value(correlation_id),
@@ -631,6 +793,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     Expression<String>? processing_state,
     Expression<String>? rejection_code,
     Expression<int>? rejected_at_unix_ms,
+    Expression<String>? quarantine_code,
+    Expression<String>? quarantine_diagnostic,
+    Expression<int>? quarantined_at_unix_ms,
     Expression<int>? accepted_at_unix_ms,
   }) {
     return RawValuesInsertable({
@@ -645,6 +810,11 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
       if (rejection_code != null) 'rejection_code': rejection_code,
       if (rejected_at_unix_ms != null)
         'rejected_at_unix_ms': rejected_at_unix_ms,
+      if (quarantine_code != null) 'quarantine_code': quarantine_code,
+      if (quarantine_diagnostic != null)
+        'quarantine_diagnostic': quarantine_diagnostic,
+      if (quarantined_at_unix_ms != null)
+        'quarantined_at_unix_ms': quarantined_at_unix_ms,
       if (accepted_at_unix_ms != null)
         'accepted_at_unix_ms': accepted_at_unix_ms,
     });
@@ -661,6 +831,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     Value<String>? processing_state,
     Value<String?>? rejection_code,
     Value<int?>? rejected_at_unix_ms,
+    Value<String?>? quarantine_code,
+    Value<String?>? quarantine_diagnostic,
+    Value<int?>? quarantined_at_unix_ms,
     Value<int>? accepted_at_unix_ms,
   }) {
     return WorkflowSubmissionsCompanion(
@@ -674,6 +847,11 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
       processing_state: processing_state ?? this.processing_state,
       rejection_code: rejection_code ?? this.rejection_code,
       rejected_at_unix_ms: rejected_at_unix_ms ?? this.rejected_at_unix_ms,
+      quarantine_code: quarantine_code ?? this.quarantine_code,
+      quarantine_diagnostic:
+          quarantine_diagnostic ?? this.quarantine_diagnostic,
+      quarantined_at_unix_ms:
+          quarantined_at_unix_ms ?? this.quarantined_at_unix_ms,
       accepted_at_unix_ms: accepted_at_unix_ms ?? this.accepted_at_unix_ms,
     );
   }
@@ -711,6 +889,19 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     if (rejected_at_unix_ms.present) {
       map['rejected_at_unix_ms'] = Variable<int>(rejected_at_unix_ms.value);
     }
+    if (quarantine_code.present) {
+      map['quarantine_code'] = Variable<String>(quarantine_code.value);
+    }
+    if (quarantine_diagnostic.present) {
+      map['quarantine_diagnostic'] = Variable<String>(
+        quarantine_diagnostic.value,
+      );
+    }
+    if (quarantined_at_unix_ms.present) {
+      map['quarantined_at_unix_ms'] = Variable<int>(
+        quarantined_at_unix_ms.value,
+      );
+    }
     if (accepted_at_unix_ms.present) {
       map['accepted_at_unix_ms'] = Variable<int>(accepted_at_unix_ms.value);
     }
@@ -730,6 +921,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
           ..write('processing_state: $processing_state, ')
           ..write('rejection_code: $rejection_code, ')
           ..write('rejected_at_unix_ms: $rejected_at_unix_ms, ')
+          ..write('quarantine_code: $quarantine_code, ')
+          ..write('quarantine_diagnostic: $quarantine_diagnostic, ')
+          ..write('quarantined_at_unix_ms: $quarantined_at_unix_ms, ')
           ..write('accepted_at_unix_ms: $accepted_at_unix_ms')
           ..write(')'))
         .toString();
@@ -1766,6 +1960,9 @@ typedef $$WorkflowSubmissionsTableCreateCompanionBuilder =
       Value<String> processing_state,
       Value<String?> rejection_code,
       Value<int?> rejected_at_unix_ms,
+      Value<String?> quarantine_code,
+      Value<String?> quarantine_diagnostic,
+      Value<int?> quarantined_at_unix_ms,
       required int accepted_at_unix_ms,
     });
 typedef $$WorkflowSubmissionsTableUpdateCompanionBuilder =
@@ -1780,6 +1977,9 @@ typedef $$WorkflowSubmissionsTableUpdateCompanionBuilder =
       Value<String> processing_state,
       Value<String?> rejection_code,
       Value<int?> rejected_at_unix_ms,
+      Value<String?> quarantine_code,
+      Value<String?> quarantine_diagnostic,
+      Value<int?> quarantined_at_unix_ms,
       Value<int> accepted_at_unix_ms,
     });
 
@@ -1839,6 +2039,21 @@ class $$WorkflowSubmissionsTableFilterComposer
 
   ColumnFilters<int> get rejected_at_unix_ms => $composableBuilder(
     column: $table.rejected_at_unix_ms,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get quarantine_code => $composableBuilder(
+    column: $table.quarantine_code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get quarantine_diagnostic => $composableBuilder(
+    column: $table.quarantine_diagnostic,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get quarantined_at_unix_ms => $composableBuilder(
+    column: $table.quarantined_at_unix_ms,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1907,6 +2122,21 @@ class $$WorkflowSubmissionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get quarantine_code => $composableBuilder(
+    column: $table.quarantine_code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get quarantine_diagnostic => $composableBuilder(
+    column: $table.quarantine_diagnostic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get quarantined_at_unix_ms => $composableBuilder(
+    column: $table.quarantined_at_unix_ms,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get accepted_at_unix_ms => $composableBuilder(
     column: $table.accepted_at_unix_ms,
     builder: (column) => ColumnOrderings(column),
@@ -1963,6 +2193,21 @@ class $$WorkflowSubmissionsTableAnnotationComposer
 
   GeneratedColumn<int> get rejected_at_unix_ms => $composableBuilder(
     column: $table.rejected_at_unix_ms,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get quarantine_code => $composableBuilder(
+    column: $table.quarantine_code,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get quarantine_diagnostic => $composableBuilder(
+    column: $table.quarantine_diagnostic,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get quarantined_at_unix_ms => $composableBuilder(
+    column: $table.quarantined_at_unix_ms,
     builder: (column) => column,
   );
 
@@ -2025,6 +2270,9 @@ class $$WorkflowSubmissionsTableTableManager
                 Value<String> processing_state = const Value.absent(),
                 Value<String?> rejection_code = const Value.absent(),
                 Value<int?> rejected_at_unix_ms = const Value.absent(),
+                Value<String?> quarantine_code = const Value.absent(),
+                Value<String?> quarantine_diagnostic = const Value.absent(),
+                Value<int?> quarantined_at_unix_ms = const Value.absent(),
                 Value<int> accepted_at_unix_ms = const Value.absent(),
               }) => WorkflowSubmissionsCompanion(
                 sequence: sequence,
@@ -2037,6 +2285,9 @@ class $$WorkflowSubmissionsTableTableManager
                 processing_state: processing_state,
                 rejection_code: rejection_code,
                 rejected_at_unix_ms: rejected_at_unix_ms,
+                quarantine_code: quarantine_code,
+                quarantine_diagnostic: quarantine_diagnostic,
+                quarantined_at_unix_ms: quarantined_at_unix_ms,
                 accepted_at_unix_ms: accepted_at_unix_ms,
               ),
           createCompanionCallback:
@@ -2051,6 +2302,9 @@ class $$WorkflowSubmissionsTableTableManager
                 Value<String> processing_state = const Value.absent(),
                 Value<String?> rejection_code = const Value.absent(),
                 Value<int?> rejected_at_unix_ms = const Value.absent(),
+                Value<String?> quarantine_code = const Value.absent(),
+                Value<String?> quarantine_diagnostic = const Value.absent(),
+                Value<int?> quarantined_at_unix_ms = const Value.absent(),
                 required int accepted_at_unix_ms,
               }) => WorkflowSubmissionsCompanion.insert(
                 sequence: sequence,
@@ -2063,6 +2317,9 @@ class $$WorkflowSubmissionsTableTableManager
                 processing_state: processing_state,
                 rejection_code: rejection_code,
                 rejected_at_unix_ms: rejected_at_unix_ms,
+                quarantine_code: quarantine_code,
+                quarantine_diagnostic: quarantine_diagnostic,
+                quarantined_at_unix_ms: quarantined_at_unix_ms,
                 accepted_at_unix_ms: accepted_at_unix_ms,
               ),
           withReferenceMapper: (p0) => p0

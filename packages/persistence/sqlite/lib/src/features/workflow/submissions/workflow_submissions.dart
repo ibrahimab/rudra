@@ -46,6 +46,22 @@ class WorkflowSubmissions extends Table {
   /// Null for submissions that have not been rejected.
   IntColumn get rejected_at_unix_ms => integer().nullable()();
 
+  /// Stable reason for quarantining an unreadable submission.
+  ///
+  /// Null unless processing_state is 'quarantined'.
+  TextColumn get quarantine_code => text().nullable()();
+
+  /// Diagnostic recorded by the decoding boundary.
+  ///
+  /// The original payload remains in payload_json.
+  /// This column must not be used to duplicate raw payloads.
+  TextColumn get quarantine_diagnostic => text().nullable()();
+
+  /// UTC Unix timestamp when quarantine was committed.
+  ///
+  /// Null unless processing_state is 'quarantined'.
+  IntColumn get quarantined_at_unix_ms => integer().nullable()();
+
   /// UTC acceptance timestamp in Unix milliseconds.
   IntColumn get accepted_at_unix_ms => integer()();
 
