@@ -222,21 +222,12 @@ final class DevTasks {
     return check(package_name: package_name);
   }
 
-  /// Generates Drift sources and verifies the complete workspace.
+  /// Generates Drift sources and verifies the workspace.
   ///
-  /// Runs from the repository root, except build_runner, which
-  /// executes in the SQLite persistence package.
+  /// Use [migrate] when the database schema version changes.
   ///
-  /// Stops immediately on failure and preserves the failing
-  /// command's exit status.
-  ///
-  /// Generated sources are formatted and checked before success
-  /// is reported.
-  ///
-  /// Example:
-  /// ```dart
-  /// final status = await tasks.generate();
-  /// ```
+  /// Stops immediately on failure and preserves the
+  /// failing subprocess exit status.
   Future<int> generate() async {
     final dependency_status = await _run_dart(['pub', 'get']);
 
@@ -244,6 +235,46 @@ final class DevTasks {
       return dependency_status;
     }
 
+    return _generate_and_verify();
+  }
+
+  /// Generates versioned Drift migration artifacts and verifies
+  /// the complete workspace.
+  ///
+  /// The schema must already declare its intended new version.
+  /// Generated migration steps may require manual implementation
+  /// before the verification stage can pass.
+  ///
+  /// This command does not modify an application database.
+  Future<int> migrate() async {
+    final dependency_status = await _run_dart(['pub', 'get']);
+
+    if (dependency_status != RudraExitCode.success.value) {
+      return dependency_status;
+    }
+
+    final sqlite_directory = Directory(
+      '${repo_root.path}/packages/persistence/sqlite',
+    );
+
+    final migration_status = await _run_dart([
+      'run',
+      'drift_dev',
+      'make-migrations',
+    ], working_directory: sqlite_directory);
+
+    if (migration_status != RudraExitCode.success.value) {
+      return migration_status;
+    }
+
+    return _generate_and_verify();
+  }
+
+  /// Regenerates Drift source code and runs the full quality gate.
+  ///
+  /// Shared by [generate] and [migrate] to avoid duplicated
+  /// generation and verification logic.
+  Future<int> _generate_and_verify() async {
     final sqlite_directory = Directory(
       '${repo_root.path}/packages/persistence/sqlite',
     );
@@ -259,21 +290,7 @@ final class DevTasks {
       return generation_status;
     }
 
-    final format_status = await format();
-
-    if (format_status != RudraExitCode.success.value) {
-      return format_status;
-    }
-
-    // The existing quality gate performs workspace-wide
-    // analysis and tests, including the SQLite package.
-    final check_status = await check();
-
-    if (check_status != RudraExitCode.success.value) {
-      return check_status;
-    }
-
-    return _run_git(['diff', '--check']);
+    return verify();
   }
 
   /// Runs static analysis across the workspace.
@@ -448,6 +465,7 @@ final class DevTasks {
       'generate',
       'build',
       'verify',
+      'migrate',
     ];
 
     for (final command in developer_commands) {
@@ -570,31 +588,6 @@ final class DevTasks {
     } on ProcessException catch (error) {
       stderr.writeln(error);
       return 1;
-    }
-  }
-
-  /// Executes a Git command from the repository root.
-  ///
-  /// Standard output and diagnostics are forwarded to the
-  /// calling terminal.
-  ///
-  /// Returns the original exit status or a software error when
-  /// Git could not be started.
-  Future<int> _run_git(List<String> arguments) async {
-    stdout.writeln('> git ${arguments.join(' ')}');
-
-    try {
-      final process = await Process.start(
-        'git',
-        arguments,
-        workingDirectory: repo_root.path,
-        mode: ProcessStartMode.inheritStdio,
-      );
-
-      return await process.exitCode;
-    } on ProcessException catch (error) {
-      stderr.writeln(error);
-      return RudraExitCode.software_error.value;
     }
   }
 }

@@ -26,6 +26,7 @@ void main() {
         'analyze',
         'format',
         'generate',
+        'migrate',
         'build',
         'verify',
       ]) {
@@ -155,6 +156,7 @@ void main() {
           'analyze',
           'format',
           'generate',
+          'migrate',
           'build',
           'verify',
         ]),

@@ -60,6 +60,11 @@ final class DevToolsCliModule implements RudraCliModule {
         action: _tasks.generate,
       ),
       DevCommand(
+        name: 'migrate',
+        description: 'Generate Drift migrations and verify the workspace.',
+        action: _tasks.migrate,
+      ),
+      DevCommand(
         name: 'build',
         description: 'Build and verify the production executable.',
         action: _tasks.build,

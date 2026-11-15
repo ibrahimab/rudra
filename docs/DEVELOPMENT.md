@@ -184,24 +184,39 @@ The production build command is:
 
 Development-only tools must not become production commands accidentally.
 
-### 3.8 Drift code generation
+### 3.8 Drift code generation and migrations
 
-Rudra uses Drift to generate typed SQLite persistence code.
+Rudra uses Drift for SQLite persistence and schema evolution.
 
-From the repository root:
+To regenerate Drift source code:
 
     ./rudra generate
 
-This command performs dependency resolution, Drift code
-generation, Dart formatting, full workspace verification,
-and Git whitespace validation.
+To generate versioned migration artifacts:
 
-Generated `.g.dart` files belong in version control and
-must not be edited manually.
+    ./rudra migrate
 
-The regular `./rudra check` command remains read-only
-with respect to code generation. Generation must be
-requested explicitly whenever Drift schemas change.
+The migrate command performs:
+
+1. Workspace dependency resolution.
+2. Drift schema snapshot and migration generation.
+3. Drift source generation using build_runner.
+4. Workspace formatting.
+5. Workspace static analysis.
+6. All workspace tests.
+
+Both commands stop at the first failed stage.
+
+Migration behavior is implemented separately in the
+database's MigrationStrategy. The migrate command does not
+upgrade application database files.
+
+Generated schema snapshots, migration helpers, and generated
+Dart source files belong in version control.
+
+Do not manually edit generated code.
+
+Neither command runs Git diff validation.
 
 ## 4. Naming Conventions
 
