@@ -7,17 +7,19 @@ import 'package:drift/drift.dart';
 ///
 /// Database sequence establishes global insertion order.
 /// Workflow version establishes deterministic replay order.
-
-/// Indexes the trusted owner embedded in the committed
-/// WorkflowStartedEvent outcome.
 ///
-/// Only workflow.started rows have an established owner.
-/// The expression uses the version-one event envelope,
-/// where os_user_id is a top-level JSON field.
+/// The committed WorkflowStartedEvent records its trusted
+/// OS-user identity in the dedicated os_user_id column.
 ///
-/// SQLite maintains this index atomically with journal writes.
-/// Future serializer versions must preserve or explicitly
-/// migrate this ownership-index expression.
+/// An index on os_user_id and workflow_id enables efficient
+/// owner-scoped history restoration without inspecting
+/// serialized event payloads.
+///
+/// Ownership metadata is committed atomically with the
+/// authoritative journal and unfinished-workflow projection.
+///
+/// The SDK remains responsible for validating ownership
+/// against replayed domain events.
 @TableIndex.sql('''
 CREATE INDEX workflow_events_owner_idx
 ON workflow_events (os_user_id, workflow_id)
