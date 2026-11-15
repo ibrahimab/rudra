@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
 import 'database/rudra_database.dart';
+
+import 'features/workflow/history/drift_workflow_committer.dart';
+
 import 'features/workflow/submissions/drift_event_submission_store.dart';
 import 'features/workflow/submissions/drift_workflow_inbox.dart';
 
@@ -56,6 +59,16 @@ final class RudraSqlitePersistence {
 
   /// Read boundary for accepted workflow commands.
   late final WorkflowInbox workflow_inbox = DriftWorkflowInbox(
+    database: _database,
+    scope_id: _scope_id,
+    codec: _codec,
+  );
+
+  /// Atomic persistence boundary for committed workflow changes.
+  ///
+  /// Shares the same database and event codec as the
+  /// submission store and inbox.
+  late final WorkflowCommitter workflow_committer = DriftWorkflowCommitter(
     database: _database,
     scope_id: _scope_id,
     codec: _codec,

@@ -47,3 +47,4 @@ export 'processing/workflow_inbox.dart';
 export 'processing/workflow_identity_provider.dart';
 export 'processing/workflow_committer.dart';
 export 'processing/workflow_processor.dart';
+export 'processing/workflow_commit_exception.dart';
