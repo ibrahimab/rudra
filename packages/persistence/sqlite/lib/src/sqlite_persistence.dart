@@ -4,6 +4,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 
 import 'database/rudra_database.dart';
 import 'features/workflow/submissions/drift_event_submission_store.dart';
+import 'features/workflow/submissions/drift_workflow_inbox.dart';
 
 /// Owns SQLite persistence resources for one Rudra application.
 ///
@@ -49,6 +50,17 @@ final class RudraSqlitePersistence {
   /// The adapter shares this instance's database connection.
   late final EventSubmissionStore event_submission_store =
       DriftEventSubmissionStore(database: _database, scope_id: _scope_id);
+
+  /// Read boundary for accepted workflow commands.
+  ///
+  /// Uses the same SQLite connection and trusted submission
+  /// scope as [event_submission_store].
+  ///
+  /// Reading a command does not claim or process it.
+  late final WorkflowInbox workflow_inbox = DriftWorkflowInbox(
+    database: _database,
+    scope_id: _scope_id,
+  );
 
   /// Releases the database connection and its resources.
   ///
