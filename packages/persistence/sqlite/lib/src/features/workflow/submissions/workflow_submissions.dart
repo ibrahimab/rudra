@@ -36,6 +36,16 @@ class WorkflowSubmissions extends Table {
   TextColumn get processing_state =>
       text().withDefault(const Constant('pending'))();
 
+  /// Stable reason recorded for a rejected submission.
+  ///
+  /// Null for pending and successfully completed commands.
+  TextColumn get rejection_code => text().nullable()();
+
+  /// UTC Unix timestamp when a business rejection was committed.
+  ///
+  /// Null for submissions that have not been rejected.
+  IntColumn get rejected_at_unix_ms => integer().nullable()();
+
   /// UTC acceptance timestamp in Unix milliseconds.
   IntColumn get accepted_at_unix_ms => integer()();
 

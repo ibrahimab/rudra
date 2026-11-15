@@ -103,6 +103,27 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
     requiredDuringInsert: false,
     defaultValue: const Constant('pending'),
   );
+  static const VerificationMeta _rejection_codeMeta = const VerificationMeta(
+    'rejection_code',
+  );
+  @override
+  late final GeneratedColumn<String> rejection_code = GeneratedColumn<String>(
+    'rejection_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rejected_at_unix_msMeta =
+      const VerificationMeta('rejected_at_unix_ms');
+  @override
+  late final GeneratedColumn<int> rejected_at_unix_ms = GeneratedColumn<int>(
+    'rejected_at_unix_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _accepted_at_unix_msMeta =
       const VerificationMeta('accepted_at_unix_ms');
   @override
@@ -123,6 +144,8 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
     event_type,
     payload_json,
     processing_state,
+    rejection_code,
+    rejected_at_unix_ms,
     accepted_at_unix_ms,
   ];
   @override
@@ -207,6 +230,24 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
         ),
       );
     }
+    if (data.containsKey('rejection_code')) {
+      context.handle(
+        _rejection_codeMeta,
+        rejection_code.isAcceptableOrUnknown(
+          data['rejection_code']!,
+          _rejection_codeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rejected_at_unix_ms')) {
+      context.handle(
+        _rejected_at_unix_msMeta,
+        rejected_at_unix_ms.isAcceptableOrUnknown(
+          data['rejected_at_unix_ms']!,
+          _rejected_at_unix_msMeta,
+        ),
+      );
+    }
     if (data.containsKey('accepted_at_unix_ms')) {
       context.handle(
         _accepted_at_unix_msMeta,
@@ -263,6 +304,14 @@ class $WorkflowSubmissionsTable extends WorkflowSubmissions
         DriftSqlType.string,
         data['${effectivePrefix}processing_state'],
       )!,
+      rejection_code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rejection_code'],
+      ),
+      rejected_at_unix_ms: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rejected_at_unix_ms'],
+      ),
       accepted_at_unix_ms: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}accepted_at_unix_ms'],
@@ -305,6 +354,16 @@ class WorkflowSubmission extends DataClass
   /// Processing obligation, initially pending.
   final String processing_state;
 
+  /// Stable reason recorded for a rejected submission.
+  ///
+  /// Null for pending and successfully completed commands.
+  final String? rejection_code;
+
+  /// UTC Unix timestamp when a business rejection was committed.
+  ///
+  /// Null for submissions that have not been rejected.
+  final int? rejected_at_unix_ms;
+
   /// UTC acceptance timestamp in Unix milliseconds.
   final int accepted_at_unix_ms;
   const WorkflowSubmission({
@@ -316,6 +375,8 @@ class WorkflowSubmission extends DataClass
     required this.event_type,
     required this.payload_json,
     required this.processing_state,
+    this.rejection_code,
+    this.rejected_at_unix_ms,
     required this.accepted_at_unix_ms,
   });
   @override
@@ -331,6 +392,12 @@ class WorkflowSubmission extends DataClass
     map['event_type'] = Variable<String>(event_type);
     map['payload_json'] = Variable<String>(payload_json);
     map['processing_state'] = Variable<String>(processing_state);
+    if (!nullToAbsent || rejection_code != null) {
+      map['rejection_code'] = Variable<String>(rejection_code);
+    }
+    if (!nullToAbsent || rejected_at_unix_ms != null) {
+      map['rejected_at_unix_ms'] = Variable<int>(rejected_at_unix_ms);
+    }
     map['accepted_at_unix_ms'] = Variable<int>(accepted_at_unix_ms);
     return map;
   }
@@ -347,6 +414,12 @@ class WorkflowSubmission extends DataClass
       event_type: Value(event_type),
       payload_json: Value(payload_json),
       processing_state: Value(processing_state),
+      rejection_code: rejection_code == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rejection_code),
+      rejected_at_unix_ms: rejected_at_unix_ms == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rejected_at_unix_ms),
       accepted_at_unix_ms: Value(accepted_at_unix_ms),
     );
   }
@@ -365,6 +438,10 @@ class WorkflowSubmission extends DataClass
       event_type: serializer.fromJson<String>(json['event_type']),
       payload_json: serializer.fromJson<String>(json['payload_json']),
       processing_state: serializer.fromJson<String>(json['processing_state']),
+      rejection_code: serializer.fromJson<String?>(json['rejection_code']),
+      rejected_at_unix_ms: serializer.fromJson<int?>(
+        json['rejected_at_unix_ms'],
+      ),
       accepted_at_unix_ms: serializer.fromJson<int>(
         json['accepted_at_unix_ms'],
       ),
@@ -382,6 +459,8 @@ class WorkflowSubmission extends DataClass
       'event_type': serializer.toJson<String>(event_type),
       'payload_json': serializer.toJson<String>(payload_json),
       'processing_state': serializer.toJson<String>(processing_state),
+      'rejection_code': serializer.toJson<String?>(rejection_code),
+      'rejected_at_unix_ms': serializer.toJson<int?>(rejected_at_unix_ms),
       'accepted_at_unix_ms': serializer.toJson<int>(accepted_at_unix_ms),
     };
   }
@@ -395,6 +474,8 @@ class WorkflowSubmission extends DataClass
     String? event_type,
     String? payload_json,
     String? processing_state,
+    Value<String?> rejection_code = const Value.absent(),
+    Value<int?> rejected_at_unix_ms = const Value.absent(),
     int? accepted_at_unix_ms,
   }) => WorkflowSubmission(
     sequence: sequence ?? this.sequence,
@@ -407,6 +488,12 @@ class WorkflowSubmission extends DataClass
     event_type: event_type ?? this.event_type,
     payload_json: payload_json ?? this.payload_json,
     processing_state: processing_state ?? this.processing_state,
+    rejection_code: rejection_code.present
+        ? rejection_code.value
+        : this.rejection_code,
+    rejected_at_unix_ms: rejected_at_unix_ms.present
+        ? rejected_at_unix_ms.value
+        : this.rejected_at_unix_ms,
     accepted_at_unix_ms: accepted_at_unix_ms ?? this.accepted_at_unix_ms,
   );
   WorkflowSubmission copyWithCompanion(WorkflowSubmissionsCompanion data) {
@@ -429,6 +516,12 @@ class WorkflowSubmission extends DataClass
       processing_state: data.processing_state.present
           ? data.processing_state.value
           : this.processing_state,
+      rejection_code: data.rejection_code.present
+          ? data.rejection_code.value
+          : this.rejection_code,
+      rejected_at_unix_ms: data.rejected_at_unix_ms.present
+          ? data.rejected_at_unix_ms.value
+          : this.rejected_at_unix_ms,
       accepted_at_unix_ms: data.accepted_at_unix_ms.present
           ? data.accepted_at_unix_ms.value
           : this.accepted_at_unix_ms,
@@ -446,6 +539,8 @@ class WorkflowSubmission extends DataClass
           ..write('event_type: $event_type, ')
           ..write('payload_json: $payload_json, ')
           ..write('processing_state: $processing_state, ')
+          ..write('rejection_code: $rejection_code, ')
+          ..write('rejected_at_unix_ms: $rejected_at_unix_ms, ')
           ..write('accepted_at_unix_ms: $accepted_at_unix_ms')
           ..write(')'))
         .toString();
@@ -461,6 +556,8 @@ class WorkflowSubmission extends DataClass
     event_type,
     payload_json,
     processing_state,
+    rejection_code,
+    rejected_at_unix_ms,
     accepted_at_unix_ms,
   );
   @override
@@ -475,6 +572,8 @@ class WorkflowSubmission extends DataClass
           other.event_type == this.event_type &&
           other.payload_json == this.payload_json &&
           other.processing_state == this.processing_state &&
+          other.rejection_code == this.rejection_code &&
+          other.rejected_at_unix_ms == this.rejected_at_unix_ms &&
           other.accepted_at_unix_ms == this.accepted_at_unix_ms);
 }
 
@@ -487,6 +586,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
   final Value<String> event_type;
   final Value<String> payload_json;
   final Value<String> processing_state;
+  final Value<String?> rejection_code;
+  final Value<int?> rejected_at_unix_ms;
   final Value<int> accepted_at_unix_ms;
   const WorkflowSubmissionsCompanion({
     this.sequence = const Value.absent(),
@@ -497,6 +598,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     this.event_type = const Value.absent(),
     this.payload_json = const Value.absent(),
     this.processing_state = const Value.absent(),
+    this.rejection_code = const Value.absent(),
+    this.rejected_at_unix_ms = const Value.absent(),
     this.accepted_at_unix_ms = const Value.absent(),
   });
   WorkflowSubmissionsCompanion.insert({
@@ -508,6 +611,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     required String event_type,
     required String payload_json,
     this.processing_state = const Value.absent(),
+    this.rejection_code = const Value.absent(),
+    this.rejected_at_unix_ms = const Value.absent(),
     required int accepted_at_unix_ms,
   }) : event_id = Value(event_id),
        correlation_id = Value(correlation_id),
@@ -524,6 +629,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     Expression<String>? event_type,
     Expression<String>? payload_json,
     Expression<String>? processing_state,
+    Expression<String>? rejection_code,
+    Expression<int>? rejected_at_unix_ms,
     Expression<int>? accepted_at_unix_ms,
   }) {
     return RawValuesInsertable({
@@ -535,6 +642,9 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
       if (event_type != null) 'event_type': event_type,
       if (payload_json != null) 'payload_json': payload_json,
       if (processing_state != null) 'processing_state': processing_state,
+      if (rejection_code != null) 'rejection_code': rejection_code,
+      if (rejected_at_unix_ms != null)
+        'rejected_at_unix_ms': rejected_at_unix_ms,
       if (accepted_at_unix_ms != null)
         'accepted_at_unix_ms': accepted_at_unix_ms,
     });
@@ -549,6 +659,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     Value<String>? event_type,
     Value<String>? payload_json,
     Value<String>? processing_state,
+    Value<String?>? rejection_code,
+    Value<int?>? rejected_at_unix_ms,
     Value<int>? accepted_at_unix_ms,
   }) {
     return WorkflowSubmissionsCompanion(
@@ -560,6 +672,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
       event_type: event_type ?? this.event_type,
       payload_json: payload_json ?? this.payload_json,
       processing_state: processing_state ?? this.processing_state,
+      rejection_code: rejection_code ?? this.rejection_code,
+      rejected_at_unix_ms: rejected_at_unix_ms ?? this.rejected_at_unix_ms,
       accepted_at_unix_ms: accepted_at_unix_ms ?? this.accepted_at_unix_ms,
     );
   }
@@ -591,6 +705,12 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
     if (processing_state.present) {
       map['processing_state'] = Variable<String>(processing_state.value);
     }
+    if (rejection_code.present) {
+      map['rejection_code'] = Variable<String>(rejection_code.value);
+    }
+    if (rejected_at_unix_ms.present) {
+      map['rejected_at_unix_ms'] = Variable<int>(rejected_at_unix_ms.value);
+    }
     if (accepted_at_unix_ms.present) {
       map['accepted_at_unix_ms'] = Variable<int>(accepted_at_unix_ms.value);
     }
@@ -608,6 +728,8 @@ class WorkflowSubmissionsCompanion extends UpdateCompanion<WorkflowSubmission> {
           ..write('event_type: $event_type, ')
           ..write('payload_json: $payload_json, ')
           ..write('processing_state: $processing_state, ')
+          ..write('rejection_code: $rejection_code, ')
+          ..write('rejected_at_unix_ms: $rejected_at_unix_ms, ')
           ..write('accepted_at_unix_ms: $accepted_at_unix_ms')
           ..write(')'))
         .toString();
@@ -1642,6 +1764,8 @@ typedef $$WorkflowSubmissionsTableCreateCompanionBuilder =
       required String event_type,
       required String payload_json,
       Value<String> processing_state,
+      Value<String?> rejection_code,
+      Value<int?> rejected_at_unix_ms,
       required int accepted_at_unix_ms,
     });
 typedef $$WorkflowSubmissionsTableUpdateCompanionBuilder =
@@ -1654,6 +1778,8 @@ typedef $$WorkflowSubmissionsTableUpdateCompanionBuilder =
       Value<String> event_type,
       Value<String> payload_json,
       Value<String> processing_state,
+      Value<String?> rejection_code,
+      Value<int?> rejected_at_unix_ms,
       Value<int> accepted_at_unix_ms,
     });
 
@@ -1703,6 +1829,16 @@ class $$WorkflowSubmissionsTableFilterComposer
 
   ColumnFilters<String> get processing_state => $composableBuilder(
     column: $table.processing_state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rejection_code => $composableBuilder(
+    column: $table.rejection_code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rejected_at_unix_ms => $composableBuilder(
+    column: $table.rejected_at_unix_ms,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1761,6 +1897,16 @@ class $$WorkflowSubmissionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get rejection_code => $composableBuilder(
+    column: $table.rejection_code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rejected_at_unix_ms => $composableBuilder(
+    column: $table.rejected_at_unix_ms,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get accepted_at_unix_ms => $composableBuilder(
     column: $table.accepted_at_unix_ms,
     builder: (column) => ColumnOrderings(column),
@@ -1807,6 +1953,16 @@ class $$WorkflowSubmissionsTableAnnotationComposer
 
   GeneratedColumn<String> get processing_state => $composableBuilder(
     column: $table.processing_state,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rejection_code => $composableBuilder(
+    column: $table.rejection_code,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get rejected_at_unix_ms => $composableBuilder(
+    column: $table.rejected_at_unix_ms,
     builder: (column) => column,
   );
 
@@ -1867,6 +2023,8 @@ class $$WorkflowSubmissionsTableTableManager
                 Value<String> event_type = const Value.absent(),
                 Value<String> payload_json = const Value.absent(),
                 Value<String> processing_state = const Value.absent(),
+                Value<String?> rejection_code = const Value.absent(),
+                Value<int?> rejected_at_unix_ms = const Value.absent(),
                 Value<int> accepted_at_unix_ms = const Value.absent(),
               }) => WorkflowSubmissionsCompanion(
                 sequence: sequence,
@@ -1877,6 +2035,8 @@ class $$WorkflowSubmissionsTableTableManager
                 event_type: event_type,
                 payload_json: payload_json,
                 processing_state: processing_state,
+                rejection_code: rejection_code,
+                rejected_at_unix_ms: rejected_at_unix_ms,
                 accepted_at_unix_ms: accepted_at_unix_ms,
               ),
           createCompanionCallback:
@@ -1889,6 +2049,8 @@ class $$WorkflowSubmissionsTableTableManager
                 required String event_type,
                 required String payload_json,
                 Value<String> processing_state = const Value.absent(),
+                Value<String?> rejection_code = const Value.absent(),
+                Value<int?> rejected_at_unix_ms = const Value.absent(),
                 required int accepted_at_unix_ms,
               }) => WorkflowSubmissionsCompanion.insert(
                 sequence: sequence,
@@ -1899,6 +2061,8 @@ class $$WorkflowSubmissionsTableTableManager
                 event_type: event_type,
                 payload_json: payload_json,
                 processing_state: processing_state,
+                rejection_code: rejection_code,
+                rejected_at_unix_ms: rejected_at_unix_ms,
                 accepted_at_unix_ms: accepted_at_unix_ms,
               ),
           withReferenceMapper: (p0) => p0

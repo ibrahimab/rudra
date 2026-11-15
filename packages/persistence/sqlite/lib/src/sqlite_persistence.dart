@@ -8,6 +8,8 @@ import 'features/workflow/history/drift_workflow_committer.dart';
 
 import 'features/workflow/submissions/drift_event_submission_store.dart';
 import 'features/workflow/submissions/drift_workflow_inbox.dart';
+import 'features/workflow/submissions/drift_workflow_rejection_store.dart';
+import 'features/workflow/submissions/drift_workflow_status_reader.dart';
 
 /// Owns SQLite persistence resources for one Rudra application.
 ///
@@ -73,6 +75,24 @@ final class RudraSqlitePersistence {
     scope_id: _scope_id,
     codec: _codec,
   );
+
+  /// Records confirmed business rejections of pending commands.
+  ///
+  /// Shares the submission scope, codec, and database connection
+  /// with the inbox and transaction committer.
+  late final WorkflowSubmissionRejector workflow_rejector =
+      DriftWorkflowRejectionStore(
+        database: _database,
+        scope_id: _scope_id,
+        codec: _codec,
+      );
+
+  /// Read-only, durable submission status lookup.
+  ///
+  /// Applications can query a previously accepted request
+  /// without subscribing to transient processing events.
+  late final WorkflowSubmissionStatusReader workflow_status_reader =
+      DriftWorkflowStatusReader(database: _database, scope_id: _scope_id);
 
   /// Releases the database connection and its resources.
   ///

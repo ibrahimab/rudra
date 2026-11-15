@@ -8,6 +8,8 @@ import 'workflow_committer.dart';
 import 'workflow_identity_provider.dart';
 import 'workflow_inbox.dart';
 import 'workflow_processing_models.dart';
+import 'workflow_commit_exception.dart';
+import 'workflow_submission_resolution.dart';
 
 /// Orchestrates durable workflow command processing.
 ///
@@ -26,9 +28,11 @@ final class WorkflowProcessor {
     required WorkflowInbox inbox,
     required WorkflowIdentityProvider identity_provider,
     required WorkflowCommitter committer,
+    required WorkflowSubmissionRejector rejector,
   }) : _inbox = inbox,
        _identity_provider = identity_provider,
        _committer = committer,
+       _rejector = rejector,
        _handlers = Map.unmodifiable(registry.command_behaviors),
        _machine = WorkflowStateMachine(
          flow: WorkflowFlow(transitions: registry.transitions),
@@ -37,6 +41,10 @@ final class WorkflowProcessor {
   final WorkflowInbox _inbox;
   final WorkflowIdentityProvider _identity_provider;
   final WorkflowCommitter _committer;
+
+  /// Persists confirmed business rejections independently
+  /// of the authoritative workflow event journal.
+  final WorkflowSubmissionRejector _rejector;
 
   final Map<Type, WorkflowCommandBehavior<dynamic>> _handlers;
   final WorkflowStateMachine _machine;
@@ -106,7 +114,29 @@ final class WorkflowProcessor {
 
     // The committer rechecks transactional invariants.
     // Only its successful completion establishes the workflow.
-    await _committer.commit(plan);
+    try {
+      await _committer.commit(plan);
+    } on WorkflowCommitException catch (error) {
+      // Only a confirmed ownership conflict is a business
+      // rejection in the currently implemented lifecycle.
+      //
+      // Stale plans and unexpected failures must not be
+      // silently converted into rejected submissions.
+      if (error.code != WorkflowCommitErrorCode.ownership_conflict) {
+        rethrow;
+      }
+
+      const rejection_code = WorkflowRejectionCode.ownership_conflict;
+
+      // This must finish successfully before we report that
+      // the request was rejected.
+      await _rejector.reject(submission: pending, code: rejection_code);
+
+      throw WorkflowSubmissionRejectedException(
+        receipt: pending.receipt,
+        code: rejection_code,
+      );
+    }
 
     return plan;
   }

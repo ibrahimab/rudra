@@ -1,10 +1,16 @@
 import 'dart:io';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
+
 import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
+
 import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_committer.dart';
+
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_event_submission_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_rejection_store.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_status_reader.dart';
+
 import 'package:test/test.dart';
 
 /// Verifies atomic workflow establishment and durable recovery.
@@ -75,6 +81,11 @@ void main() {
         os_user_id: os_user_id,
       ),
       committer: committer,
+      rejector: DriftWorkflowRejectionStore(
+        database: database,
+        scope_id: scope_id,
+        codec: codec,
+      ),
     );
   }
 
@@ -163,45 +174,149 @@ void main() {
     );
   });
 
-  test('rejects competing starts for one OS user', () async {
-    await submit('/first');
-    await submit('/second');
+  test('durably rejects competing starts and advances the inbox', () async {
+    final first = await submit('/first');
+    final second = await submit('/second');
 
     await processor('workflow-1').process_next();
 
-    // The first submission is completed. The inbox now
-    // returns the second pending start request.
+    // The competing start must be durably rejected rather
+    // than repeatedly returned as pending.
     await expectLater(
       processor('workflow-2').process_next(),
       throwsA(
-        isA<WorkflowCommitException>().having(
+        isA<WorkflowSubmissionRejectedException>().having(
           (error) => error.code,
           'code',
-          WorkflowCommitErrorCode.ownership_conflict,
+          WorkflowRejectionCode.ownership_conflict,
         ),
       ),
     );
 
-    final history = await database.select(database.workflowEvents).get();
+    final reader = DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    );
+
+    final first_status = await reader.status_for(first);
+    final second_status = await reader.status_for(second);
+
+    expect(first_status!.state, WorkflowSubmissionState.completed);
+
+    expect(second_status!.state, WorkflowSubmissionState.rejected);
+
+    expect(
+      second_status.rejection_code,
+      WorkflowRejectionCode.ownership_conflict,
+    );
+
+    expect(second_status.rejected_at_unix_ms, isNotNull);
+
+    // Only the first workflow has authoritative history.
+    expect(await database.select(database.workflowEvents).get(), hasLength(2));
 
     final reservations = await database
         .select(database.unfinishedWorkflows)
         .get();
 
-    final submissions = await database
-        .select(database.workflowSubmissions)
-        .get();
-
-    expect(history, hasLength(2));
     expect(reservations, hasLength(1));
     expect(reservations.single.workflow_id, 'workflow-1');
 
-    expect(
-      submissions.where(
-        (submission) => submission.processing_state == 'pending',
-      ),
-      hasLength(1),
+    // The rejected request is no longer returned by the inbox.
+    expect(await inbox.next_pending(), isNull);
+
+    // A newly accepted request is not blocked by the
+    // previous rejected submission.
+    final third = await submit('/third');
+
+    final pending = await inbox.next_pending();
+
+    expect(pending, isNotNull);
+    expect(pending!.receipt.event_id, third.event_id);
+  });
+
+  test('recovers rejection status after reopening SQLite', () async {
+    await submit('/first');
+    final rejected_receipt = await submit('/second');
+
+    await processor('workflow-1').process_next();
+
+    await expectLater(
+      processor('workflow-2').process_next(),
+      throwsA(isA<WorkflowSubmissionRejectedException>()),
     );
+
+    await database.close();
+    database = RudraDatabase.file(database_file);
+
+    // Construct fresh services after restarting persistence.
+    // No in-memory notification or previous processor state
+    // is needed to recover the rejection.
+    final reader = DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    );
+
+    final resolved = await reader.status_for(rejected_receipt);
+
+    expect(resolved, isNotNull);
+    expect(resolved!.state, WorkflowSubmissionState.rejected);
+    expect(resolved.rejection_code, WorkflowRejectionCode.ownership_conflict);
+
+    final restarted_inbox = DriftWorkflowInbox(
+      database: database,
+      scope_id: scope_id,
+      codec: codec,
+    );
+
+    expect(await restarted_inbox.next_pending(), isNull);
+
+    // Status must not be disclosed outside its trusted scope.
+    final foreign_reader = DriftWorkflowStatusReader(
+      database: database,
+      scope_id: 'another-scope',
+    );
+
+    expect(await foreign_reader.status_for(rejected_receipt), isNull);
+  });
+
+  test('cannot reject a submission that was already completed', () async {
+    await submit('/workspace');
+
+    final pending = await inbox.next_pending();
+    expect(pending, isNotNull);
+
+    await processor('workflow-1').process_next();
+
+    final rejector = DriftWorkflowRejectionStore(
+      database: database,
+      scope_id: scope_id,
+      codec: codec,
+    );
+
+    await expectLater(
+      rejector.reject(
+        submission: pending!,
+        code: WorkflowRejectionCode.ownership_conflict,
+      ),
+      throwsA(
+        isA<WorkflowCommitException>().having(
+          (error) => error.code,
+          'code',
+          WorkflowCommitErrorCode.stale_submission,
+        ),
+      ),
+    );
+
+    final stored = await database
+        .select(database.workflowSubmissions)
+        .getSingle();
+
+    expect(stored.processing_state, 'completed');
+    expect(stored.rejection_code, isNull);
+
+    // The original successful journal must remain intact.
+    expect(await database.select(database.workflowEvents).get(), hasLength(2));
   });
 
   test('recovers committed workflow state after restart', () async {

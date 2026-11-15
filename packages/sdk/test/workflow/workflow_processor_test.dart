@@ -19,6 +19,7 @@ void main() {
       inbox: inbox,
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: committer,
+      rejector: _FakeWorkflowRejector(),
     );
 
     final plan = await processor.process_next();
@@ -53,6 +54,7 @@ void main() {
       inbox: _FakeWorkflowInbox(null),
       identity_provider: identity_provider,
       committer: committer,
+      rejector: _FakeWorkflowRejector(),
     );
 
     expect(await processor.process_next(), isNull);
@@ -68,6 +70,7 @@ void main() {
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(root: '/different-root'),
       committer: committer,
+      rejector: _FakeWorkflowRejector(),
     );
 
     await expectLater(
@@ -92,11 +95,67 @@ void main() {
       inbox: _FakeWorkflowInbox(_pending()),
       identity_provider: _FakeWorkflowIdentityProvider(),
       committer: committer,
+      rejector: _FakeWorkflowRejector(),
     );
 
     await expectLater(processor.process_next(), throwsStateError);
 
     expect(committer.committed, isNull);
+  });
+
+  test('persists known business rejection before reporting it', () async {
+    final rejector = _FakeWorkflowRejector();
+
+    final processor = WorkflowProcessor(
+      registry: registry,
+      inbox: _FakeWorkflowInbox(_pending()),
+      identity_provider: _FakeWorkflowIdentityProvider(),
+      committer: _RejectingWorkflowCommitter(
+        WorkflowCommitErrorCode.ownership_conflict,
+      ),
+      rejector: rejector,
+    );
+
+    await expectLater(
+      processor.process_next(),
+      throwsA(
+        isA<WorkflowSubmissionRejectedException>().having(
+          (error) => error.code,
+          'code',
+          WorkflowRejectionCode.ownership_conflict,
+        ),
+      ),
+    );
+
+    expect(rejector.calls, 1);
+    expect(rejector.last_code, WorkflowRejectionCode.ownership_conflict);
+  });
+
+  test('does not persist rejection for an invalid processing plan', () async {
+    final rejector = _FakeWorkflowRejector();
+
+    final processor = WorkflowProcessor(
+      registry: registry,
+      inbox: _FakeWorkflowInbox(_pending()),
+      identity_provider: _FakeWorkflowIdentityProvider(),
+      committer: _RejectingWorkflowCommitter(
+        WorkflowCommitErrorCode.invalid_plan,
+      ),
+      rejector: rejector,
+    );
+
+    await expectLater(
+      processor.process_next(),
+      throwsA(
+        isA<WorkflowCommitException>().having(
+          (error) => error.code,
+          'code',
+          WorkflowCommitErrorCode.invalid_plan,
+        ),
+      ),
+    );
+
+    expect(rejector.calls, 0);
   });
 }
 
@@ -212,5 +271,40 @@ final class _FakeWorkflowCommitter implements WorkflowCommitter {
     }
 
     committed = plan;
+  }
+}
+
+/// Simulates a classified transactional commitment failure.
+final class _RejectingWorkflowCommitter implements WorkflowCommitter {
+  /// Creates a committer that always reports [code].
+  const _RejectingWorkflowCommitter(this.code);
+
+  /// Failure returned during commitment.
+  final WorkflowCommitErrorCode code;
+
+  @override
+  Future<void> commit(WorkflowProcessingPlan plan) async {
+    throw WorkflowCommitException(
+      code: code,
+      message: 'Simulated commitment failure.',
+    );
+  }
+}
+
+/// Tracks rejected submissions without performing persistence.
+final class _FakeWorkflowRejector implements WorkflowSubmissionRejector {
+  /// Number of rejections submitted to this test double.
+  int calls = 0;
+
+  /// Last rejection code, if a rejection was recorded.
+  WorkflowRejectionCode? last_code;
+
+  @override
+  Future<void> reject({
+    required PendingWorkflowCommand submission,
+    required WorkflowRejectionCode code,
+  }) async {
+    calls++;
+    last_code = code;
   }
 }

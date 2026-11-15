@@ -266,8 +266,117 @@ i1.GeneratedColumn<String> _column_16(String aliasedName) =>
       type: i1.DriftSqlType.string,
       $customConstraints: 'NOT NULL',
     );
+
+final class Schema3 extends i0.VersionedSchema {
+  Schema3({required super.database}) : super(version: 3);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    workflowSubmissions,
+    workflowEvents,
+    unfinishedWorkflows,
+  ];
+  late final Shape3 workflowSubmissions = Shape3(
+    source: i0.VersionedTable(
+      entityName: 'workflow_submissions',
+      withoutRowId: false,
+      isStrict: true,
+      tableConstraints: ['UNIQUE(scope_id, idempotency_key)'],
+      columns: [
+        _column_0,
+        _column_1,
+        _column_2,
+        _column_3,
+        _column_4,
+        _column_5,
+        _column_6,
+        _column_7,
+        _column_17,
+        _column_18,
+        _column_8,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape1 workflowEvents = Shape1(
+    source: i0.VersionedTable(
+      entityName: 'workflow_events',
+      withoutRowId: false,
+      isStrict: true,
+      tableConstraints: ['UNIQUE(workflow_id, version)'],
+      columns: [
+        _column_0,
+        _column_1,
+        _column_9,
+        _column_10,
+        _column_2,
+        _column_11,
+        _column_5,
+        _column_6,
+        _column_12,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape2 unfinishedWorkflows = Shape2(
+    source: i0.VersionedTable(
+      entityName: 'unfinished_workflows',
+      withoutRowId: false,
+      isStrict: true,
+      tableConstraints: ['PRIMARY KEY(os_user_id)'],
+      columns: [_column_13, _column_14, _column_15, _column_16, _column_10],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+}
+
+class Shape3 extends i0.VersionedTable {
+  Shape3({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get sequence =>
+      columnsByName['sequence']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get eventId =>
+      columnsByName['event_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get correlationId =>
+      columnsByName['correlation_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get scopeId =>
+      columnsByName['scope_id']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get idempotencyKey =>
+      columnsByName['idempotency_key']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get eventType =>
+      columnsByName['event_type']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get payloadJson =>
+      columnsByName['payload_json']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get processingState =>
+      columnsByName['processing_state']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get rejectionCode =>
+      columnsByName['rejection_code']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get rejectedAtUnixMs =>
+      columnsByName['rejected_at_unix_ms']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get acceptedAtUnixMs =>
+      columnsByName['accepted_at_unix_ms']! as i1.GeneratedColumn<int>;
+}
+
+i1.GeneratedColumn<String> _column_17(String aliasedName) =>
+    i1.GeneratedColumn<String>(
+      'rejection_code',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.string,
+      $customConstraints: 'NULL',
+    );
+i1.GeneratedColumn<int> _column_18(String aliasedName) =>
+    i1.GeneratedColumn<int>(
+      'rejected_at_unix_ms',
+      aliasedName,
+      true,
+      type: i1.DriftSqlType.int,
+      $customConstraints: 'NULL',
+    );
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
+  required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -276,6 +385,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from1To2(migrator, schema);
         return 2;
+      case 2:
+        final schema = Schema3(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from2To3(migrator, schema);
+        return 3;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -284,6 +398,7 @@ i0.MigrationStepWithVersion migrationSteps({
 
 i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
+  required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
 }) => i0.VersionedSchema.stepByStepHelper(
-  step: migrationSteps(from1To2: from1To2),
+  step: migrationSteps(from1To2: from1To2, from2To3: from2To3),
 );
