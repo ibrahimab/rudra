@@ -1,0 +1,412 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart' show Value;
+import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:test/test.dart';
+
+import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_committer.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_history_store.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_event_submission_store.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_quarantine_store.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_rejection_store.dart';
+
+/// Verifies committed workflow restoration from real SQLite.
+///
+/// Every test owns one database connection at a time.
+/// Restart tests close the existing owner before reopening.
+///
+/// No actual filesystem inspection or cleanup is performed.
+void main() {
+  const scope_id = 'submission-scope';
+  const os_user_id = 'trusted-os-user';
+  const workflow_id = 'workflow-1';
+
+  late Directory directory;
+  late File database_file;
+  late RudraDatabase database;
+  late WorkflowRuntime runtime;
+  late DriftWorkflowHistoryStore store;
+
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp(
+      'rudra-history-reader-test-',
+    );
+
+    database_file = File('${directory.path}/rudra.db');
+    database = RudraDatabase.file(database_file);
+
+    runtime = WorkflowRuntime.standard();
+    store = DriftWorkflowHistoryStore(database: database);
+  });
+
+  tearDown(() async {
+    await database.close();
+    await directory.delete(recursive: true);
+  });
+
+  /// Creates a real submission manager over the test database.
+  EventManager submission_manager() {
+    return EventManager(
+      store: DriftEventSubmissionStore(
+        database: database,
+        scope_id: scope_id,
+        codec: runtime.codec,
+      ),
+    );
+  }
+
+  /// Constructs an SDK reader with trusted identity supplied
+  /// independently of the submission scope.
+  WorkflowStateReader state_reader({String trusted_user = os_user_id}) {
+    return WorkflowStateReader(
+      runtime: runtime,
+      history_store: store,
+      os_user_id: trusted_user,
+    );
+  }
+
+  /// Establishes a workflow through actual production contracts.
+  ///
+  /// The processor validates the lifecycle and the committer
+  /// atomically records the journal, projection, and completion.
+  Future<void> establish_workflow() async {
+    await submission_manager().trigger(
+      WorkflowStartEvent(
+        target_id: 'local-macos',
+        root: TargetPath('/workspace'),
+      ),
+    );
+
+    final processor = WorkflowProcessor(
+      runtime: runtime,
+      inbox: DriftWorkflowInbox(
+        database: database,
+        scope_id: scope_id,
+        codec: runtime.codec,
+      ),
+      identity_provider: const _TestIdentityProvider(
+        workflow_id: workflow_id,
+        os_user_id: os_user_id,
+      ),
+      committer: DriftWorkflowCommitter(
+        database: database,
+        scope_id: scope_id,
+        codec: runtime.codec,
+        flow: runtime.flow,
+      ),
+      rejector: DriftWorkflowRejectionStore(
+        database: database,
+        scope_id: scope_id,
+        codec: runtime.codec,
+      ),
+      quarantiner: DriftWorkflowQuarantineStore(
+        database: database,
+        scope_id: scope_id,
+      ),
+    );
+
+    expect(await processor.process_next(), isA<WorkflowProcessingCommitted>());
+  }
+
+  /// Verifies that a corrupted persisted snapshot fails closed.
+  Future<void> expect_restoration_failure(
+    WorkflowStateReadErrorCode expected_code,
+  ) async {
+    await expectLater(
+      state_reader().current(),
+      throwsA(
+        isA<WorkflowStateReadException>().having(
+          (error) => error.code,
+          'code',
+          expected_code,
+        ),
+      ),
+    );
+  }
+
+  group('DriftWorkflowHistoryStore', () {
+    test('returns null when no workflow has been established', () async {
+      expect(await state_reader().current(), isNull);
+
+      expect(await database.select(database.workflowEvents).get(), isEmpty);
+
+      expect(
+        await database.select(database.unfinishedWorkflows).get(),
+        isEmpty,
+      );
+    });
+
+    test('does not process accepted pending submissions', () async {
+      await submission_manager().trigger(
+        WorkflowStartEvent(
+          target_id: 'local-macos',
+          root: TargetPath('/workspace'),
+        ),
+      );
+
+      expect(await state_reader().current(), isNull);
+
+      final submissions = await database
+          .select(database.workflowSubmissions)
+          .get();
+
+      expect(submissions, hasLength(1));
+      expect(submissions.single.processing_state, 'pending');
+
+      expect(await database.select(database.workflowEvents).get(), isEmpty);
+    });
+
+    test('restores authoritative committed workflow state', () async {
+      await establish_workflow();
+
+      final snapshot = await store.load_unfinished(os_user_id: os_user_id);
+
+      expect(snapshot, isNotNull);
+      expect(snapshot!.projected_version, 2);
+      expect(snapshot.journal, hasLength(2));
+
+      expect(
+        snapshot.journal.map((entry) => entry.version),
+        orderedEquals([1, 2]),
+      );
+
+      expect(
+        snapshot.journal.map((entry) => entry.event_type),
+        orderedEquals([
+          WorkflowStartEvent.type_id,
+          WorkflowStartedEvent.type_id,
+        ]),
+      );
+
+      final restored = await state_reader().current();
+
+      expect(restored, isNotNull);
+      expect(restored!.version, 2);
+      expect(restored.identity.workflow_id, workflow_id);
+      expect(restored.identity.os_user_id, os_user_id);
+      expect(restored.identity.target_id, 'local-macos');
+      expect(restored.identity.root.value, '/workspace');
+    });
+
+    test('does not expose another OS user workflow', () async {
+      await establish_workflow();
+
+      final foreign = await state_reader(trusted_user: 'another-os-user')
+          .current();
+
+      expect(foreign, isNull);
+
+      // The legitimate owner can still restore its state.
+      expect(await state_reader().current(), isNotNull);
+    });
+
+    test('recovers state after a complete database restart', () async {
+      await establish_workflow();
+
+      await database.close();
+
+      // The previous database owner is closed before creating
+      // a replacement. No connections overlap.
+      database = RudraDatabase.file(database_file);
+      store = DriftWorkflowHistoryStore(database: database);
+
+      final restored = await state_reader().current();
+
+      expect(restored, isA<WorkflowActiveState>());
+      expect(restored!.version, 2);
+      expect(restored.identity.workflow_id, workflow_id);
+      expect(restored.identity.root.value, '/workspace');
+
+      final submissions = await database
+          .select(database.workflowSubmissions)
+          .get();
+
+      expect(submissions.single.processing_state, 'completed');
+    });
+
+    test('restoration performs no persistence writes', () async {
+      await establish_workflow();
+
+      final events_before = await database
+          .select(database.workflowEvents)
+          .get();
+
+      final projections_before = await database
+          .select(database.unfinishedWorkflows)
+          .get();
+
+      final submissions_before = await database
+          .select(database.workflowSubmissions)
+          .get();
+
+      await state_reader().current();
+      await state_reader().current();
+
+      expect(
+        await database.select(database.workflowEvents).get(),
+        orderedEquals(events_before),
+      );
+
+      expect(
+        await database.select(database.unfinishedWorkflows).get(),
+        orderedEquals(projections_before),
+      );
+
+      expect(
+        await database.select(database.workflowSubmissions).get(),
+        orderedEquals(submissions_before),
+      );
+    });
+
+    test('rejects a stale unfinished projection version', () async {
+      await establish_workflow();
+
+      await database
+          .update(database.unfinishedWorkflows)
+          .write(const UnfinishedWorkflowsCompanion(version: Value(1)));
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.projection_mismatch,
+      );
+    });
+
+    test('rejects altered original target bindings', () async {
+      await establish_workflow();
+
+      await database
+          .update(database.unfinishedWorkflows)
+          .write(
+            const UnfinishedWorkflowsCompanion(
+              target_id: Value('different-target'),
+            ),
+          );
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.projection_mismatch,
+      );
+    });
+
+    test('rejects altered original root bindings', () async {
+      await establish_workflow();
+
+      await database
+          .update(database.unfinishedWorkflows)
+          .write(
+            const UnfinishedWorkflowsCompanion(
+              root_path: Value('/different-root'),
+            ),
+          );
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.projection_mismatch,
+      );
+    });
+
+    test('rejects missing committed journal events', () async {
+      await establish_workflow();
+
+      await database.delete(database.workflowEvents).go();
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.invalid_journal,
+      );
+    });
+
+    test('rejects a gap in journal versions', () async {
+      await establish_workflow();
+
+      await (database.update(database.workflowEvents)
+            ..where((row) => row.version.equals(2)))
+          .write(const WorkflowEventsCompanion(version: Value(3)));
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.invalid_journal,
+      );
+    });
+
+    test('rejects an unreadable committed event', () async {
+      await establish_workflow();
+
+      await (database.update(
+        database.workflowEvents,
+      )..where((row) => row.version.equals(2))).write(
+        const WorkflowEventsCompanion(payload_json: Value('invalid-json')),
+      );
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.invalid_event,
+      );
+    });
+
+    test('rejects a different journal owner', () async {
+      await establish_workflow();
+
+      final foreign_event = WorkflowStartedEvent(
+        identity: WorkflowIdentity(
+          workflow_id: workflow_id,
+          os_user_id: 'different-owner',
+          target_id: 'local-macos',
+          root: TargetPath('/workspace'),
+        ),
+      );
+
+      await (database.update(
+        database.workflowEvents,
+      )..where((row) => row.version.equals(2))).write(
+        WorkflowEventsCompanion(
+          payload_json: Value(runtime.codec.encode(foreign_event)),
+        ),
+      );
+
+      await expect_restoration_failure(
+        WorkflowStateReadErrorCode.ownership_mismatch,
+      );
+    });
+
+    test('rejects blank OS-user identifiers', () async {
+      await expectLater(
+        store.load_unfinished(os_user_id: ' '),
+        throwsArgumentError,
+      );
+    });
+  });
+}
+
+/// Deterministic trusted identity provider for integration tests.
+///
+/// This substitutes the native identity boundary only.
+/// Workflow processing and persistence remain real.
+final class _TestIdentityProvider implements WorkflowIdentityProvider {
+  /// Creates an identity provider with fixed test identities.
+  const _TestIdentityProvider({
+    required this.workflow_id,
+    required this.os_user_id,
+  });
+
+  /// Workflow identifier used for establishment.
+  final String workflow_id;
+
+  /// Trusted owner supplied independently of the submission.
+  final String os_user_id;
+
+  /// Proposes an identity using the command's immutable bindings.
+  @override
+  Future<WorkflowIdentity> propose_identity(
+    PendingWorkflowCommand submission,
+  ) async {
+    final command = submission.command;
+
+    if (command is! WorkflowStartEvent) {
+      throw StateError('Expected a workflow start command.');
+    }
+
+    return WorkflowIdentity(
+      workflow_id: workflow_id,
+      os_user_id: os_user_id,
+      target_id: command.target_id,
+      root: command.root,
+    );
+  }
+}

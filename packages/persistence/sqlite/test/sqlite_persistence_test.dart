@@ -85,6 +85,19 @@ void main() {
 
         expect(committed, isA<WorkflowProcessingCommitted>());
 
+        // Read committed lifecycle state through public SDK contracts.
+        // This must not submit another workflow-start command.
+        final current_workflow = await WorkflowStateReader(
+          runtime: runtime,
+          history_store: persistence.workflow_history_store,
+          os_user_id: os_user_id,
+        ).current();
+
+        expect(current_workflow, isNotNull);
+        expect(current_workflow!.version, 2);
+        expect(current_workflow.identity.workflow_id, 'frontend-workflow-1');
+        expect(current_workflow.identity.root.value, '/first');
+
         final rejected = await make_processor('frontend-workflow-2')
             .process_next();
 
@@ -121,6 +134,19 @@ void main() {
       );
 
       try {
+        // A fresh application composition must restore the same
+        // authoritative workflow without in-memory processor state.
+        final restored_workflow = await WorkflowStateReader(
+          runtime: runtime,
+          history_store: reopened.workflow_history_store,
+          os_user_id: os_user_id,
+        ).current();
+
+        expect(restored_workflow, isNotNull);
+        expect(restored_workflow!.version, 2);
+        expect(restored_workflow.identity.workflow_id, 'frontend-workflow-1');
+        expect(restored_workflow.identity.root.value, '/first');
+
         final first_status = await reopened.workflow_status_reader.status_for(
           first,
         );
