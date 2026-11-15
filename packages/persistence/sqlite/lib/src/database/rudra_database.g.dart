@@ -1937,6 +1937,10 @@ abstract class _$RudraDatabase extends GeneratedDatabase {
   late final $WorkflowEventsTable workflowEvents = $WorkflowEventsTable(this);
   late final $UnfinishedWorkflowsTable unfinishedWorkflows =
       $UnfinishedWorkflowsTable(this);
+  late final Index workflowEventsStartedOwnerIdx = Index(
+    'workflow_events_started_owner_idx',
+    'CREATE INDEX workflow_events_started_owner_idx ON workflow_events (CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, \'\$.os_user_id\') END, workflow_id) WHERE event_type = \'workflow.started\'',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1945,6 +1949,7 @@ abstract class _$RudraDatabase extends GeneratedDatabase {
     workflowSubmissions,
     workflowEvents,
     unfinishedWorkflows,
+    workflowEventsStartedOwnerIdx,
   ];
 }
 

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Value, Variable;
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -473,6 +473,100 @@ void main() {
       final journal = await database.select(database.workflowEvents).get();
 
       expect(journal, hasLength(3));
+    });
+
+    test('does not replay unrelated malformed user history', () async {
+      await establish_workflow();
+
+      const foreign_workflow_id = 'foreign-workflow';
+
+      final foreign_identity = WorkflowIdentity(
+        workflow_id: foreign_workflow_id,
+        os_user_id: 'foreign-os-user',
+        target_id: 'local-macos',
+        root: TargetPath('/foreign-root'),
+      );
+
+      // This first event is deliberately malformed.
+      //
+      // Its metadata is valid, but its payload cannot be
+      // decoded by the SDK.
+      await database
+          .into(database.workflowEvents)
+          .insert(
+            WorkflowEventsCompanion.insert(
+              event_id: 'foreign-start-event',
+              workflow_id: foreign_workflow_id,
+              version: 1,
+              correlation_id: 'foreign-correlation',
+              event_type: WorkflowStartEvent.type_id,
+              payload_json: 'invalid-json',
+              recorded_at_unix_ms: 1,
+            ),
+          );
+
+      // The authoritative ownership outcome remains valid.
+      // SQLite automatically indexes this user's identity.
+      await database
+          .into(database.workflowEvents)
+          .insert(
+            WorkflowEventsCompanion.insert(
+              event_id: 'foreign-started-event',
+              workflow_id: foreign_workflow_id,
+              version: 2,
+              correlation_id: 'foreign-correlation',
+              event_type: WorkflowStartedEvent.type_id,
+              payload_json: runtime.codec.encode(
+                WorkflowStartedEvent(identity: foreign_identity),
+              ),
+              recorded_at_unix_ms: 2,
+            ),
+          );
+
+      // The legitimate user must not replay foreign history.
+      final restored = await state_reader().current();
+
+      expect(restored, isNotNull);
+      expect(restored!.identity.workflow_id, workflow_id);
+
+      // The malformed journal must still be detected when its
+      // actual owner requests restoration.
+      await expectLater(
+        state_reader(trusted_user: 'foreign-os-user').current(),
+        throwsA(
+          isA<WorkflowStateReadException>().having(
+            (error) => error.code,
+            'code',
+            WorkflowStateReadErrorCode.invalid_event,
+          ),
+        ),
+      );
+    });
+
+    test('uses the workflow-owner index for restoration lookup', () async {
+      await establish_workflow();
+
+      final plan = await database
+          .customSelect(
+            '''
+        EXPLAIN QUERY PLAN
+        SELECT DISTINCT workflow_id
+        FROM workflow_events
+        WHERE event_type = 'workflow.started'
+          AND (
+            CASE
+              WHEN json_valid(payload_json)
+              THEN json_extract(payload_json, '\$.os_user_id')
+            END
+          ) = ?
+        ''',
+            variables: [Variable.withString(os_user_id)],
+          )
+          .get();
+
+      final details = plan.map((row) => row.read<String>('detail')).join('\n');
+
+      expect(details, contains('workflow_events_started_owner_idx'));
     });
   });
 }

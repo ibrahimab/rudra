@@ -499,10 +499,85 @@ i1.GeneratedColumn<int> _column_21(String aliasedName) =>
       type: i1.DriftSqlType.int,
       $customConstraints: 'NULL',
     );
+
+final class Schema5 extends i0.VersionedSchema {
+  Schema5({required super.database}) : super(version: 5);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    workflowSubmissions,
+    workflowEvents,
+    unfinishedWorkflows,
+    workflowEventsStartedOwnerIdx,
+  ];
+  late final Shape4 workflowSubmissions = Shape4(
+    source: i0.VersionedTable(
+      entityName: 'workflow_submissions',
+      withoutRowId: false,
+      isStrict: true,
+      tableConstraints: ['UNIQUE(scope_id, idempotency_key)'],
+      columns: [
+        _column_0,
+        _column_1,
+        _column_2,
+        _column_3,
+        _column_4,
+        _column_5,
+        _column_6,
+        _column_7,
+        _column_17,
+        _column_18,
+        _column_19,
+        _column_20,
+        _column_21,
+        _column_8,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape1 workflowEvents = Shape1(
+    source: i0.VersionedTable(
+      entityName: 'workflow_events',
+      withoutRowId: false,
+      isStrict: true,
+      tableConstraints: ['UNIQUE(workflow_id, version)'],
+      columns: [
+        _column_0,
+        _column_1,
+        _column_9,
+        _column_10,
+        _column_2,
+        _column_11,
+        _column_5,
+        _column_6,
+        _column_12,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape2 unfinishedWorkflows = Shape2(
+    source: i0.VersionedTable(
+      entityName: 'unfinished_workflows',
+      withoutRowId: false,
+      isStrict: true,
+      tableConstraints: ['PRIMARY KEY(os_user_id)'],
+      columns: [_column_13, _column_14, _column_15, _column_16, _column_10],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  final i1.Index workflowEventsStartedOwnerIdx = i1.Index(
+    'workflow_events_started_owner_idx',
+    'CREATE INDEX workflow_events_started_owner_idx ON workflow_events (CASE WHEN json_valid(payload_json) THEN json_extract(payload_json, \'\$.os_user_id\') END, workflow_id) WHERE event_type = \'workflow.started\'',
+  );
+}
+
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
+  required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -521,6 +596,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from3To4(migrator, schema);
         return 4;
+      case 4:
+        final schema = Schema5(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from4To5(migrator, schema);
+        return 5;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -531,10 +611,12 @@ i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
   required Future<void> Function(i1.Migrator m, Schema4 schema) from3To4,
+  required Future<void> Function(i1.Migrator m, Schema5 schema) from4To5,
 }) => i0.VersionedSchema.stepByStepHelper(
   step: migrationSteps(
     from1To2: from1To2,
     from2To3: from2To3,
     from3To4: from3To4,
+    from4To5: from4To5,
   ),
 );

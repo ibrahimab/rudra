@@ -48,7 +48,7 @@ final class RudraDatabase extends _$RudraDatabase {
 
   /// Version of Rudra's persisted SQLite schema.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   /// Upgrades existing databases without discarding
   /// previously accepted workflow submissions.
@@ -91,6 +91,25 @@ final class RudraDatabase extends _$RudraDatabase {
           schema.workflowSubmissions,
           schema.workflowSubmissions.quarantinedAtUnixMs,
         );
+      },
+
+      from4To5: (migrator, schema) async {
+        // Index historical workflow ownership without modifying
+        // committed event data.
+        //
+        // Malformed event payloads receive a NULL index entry
+        // instead of preventing database migration.
+        await customStatement(r'''
+          CREATE INDEX workflow_events_started_owner_idx
+          ON workflow_events (
+            CASE
+              WHEN json_valid(payload_json)
+              THEN json_extract(payload_json, '$.os_user_id')
+            END,
+            workflow_id
+          )
+          WHERE event_type = 'workflow.started'
+        ''');
       },
     ),
   );

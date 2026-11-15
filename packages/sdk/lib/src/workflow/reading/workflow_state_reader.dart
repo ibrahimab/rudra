@@ -117,8 +117,13 @@ final class WorkflowStateReader {
 
   /// Restores the current workflow from a consistent persisted snapshot.
   ///
-  /// Every other committed journal is inspected before returning
-  /// a current workflow or confirming its absence.
+  /// Every history located through the trusted owner's
+  /// authoritative owner index is validated through SDK replay.
+  ///
+  /// This includes histories whose derived unfinished-workflow
+  /// projection is missing or incorrectly assigned.
+  ///
+  /// Unrelated OS users' journals do not participate in this read.
   ///
   /// An active workflow belonging to this OS user but missing
   /// the expected projection is an integrity failure.

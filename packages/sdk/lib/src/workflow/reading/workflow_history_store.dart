@@ -87,19 +87,24 @@ final class WorkflowHistoryJournal {
 
 /// Consistent persisted evidence for workflow restoration.
 ///
-/// [projected] identifies the workflow currently reserved for
-/// the requested OS user, if one exists.
+/// [projected] identifies the unfinished workflow currently
+/// reserved for the requested OS user, if one exists.
 ///
-/// [other_histories] contains journal histories not associated
-/// with that projection. The SDK checks these histories to
-/// detect active workflows whose ownership projection is
-/// missing, incorrect, or duplicated.
+/// [other_histories] contains the remaining histories located
+/// through authoritative, committed workflow-owner evidence.
 ///
-/// All data must originate from one consistent persistence
-/// snapshot. This contract is intended for trusted application
-/// composition, not direct frontend access.
+/// Implementations must include the requesting user's histories
+/// even when their unfinished projection has been deleted or
+/// assigned to another OS user.
 ///
-/// The store does not determine lifecycle state.
+/// Unrelated users' histories must not be returned merely to
+/// check for missing projections.
+///
+/// All data originates from one consistent persistence snapshot.
+/// This contract is for trusted composition, not direct frontend
+/// consumption.
+///
+/// The store does not reconstruct lifecycle state.
 final class WorkflowRestorationEvidence {
   /// Creates immutable restoration evidence.
   WorkflowRestorationEvidence({
@@ -132,11 +137,10 @@ final class WorkflowRestorationEvidence {
 abstract interface class WorkflowHistoryStore {
   /// Loads consistent restoration evidence for [os_user_id].
   ///
-  /// Returns an evidence object even when no unfinished
-  /// workflow projection is present.
+  /// Returns evidence even when the unfinished projection is absent.
   ///
-  /// Other histories must not be omitted merely because
-  /// their current ownership projection is absent.
+  /// Owner-indexed histories must remain discoverable when their
+  /// derived unfinished projection is missing or incorrect.
   Future<WorkflowRestorationEvidence> load_restoration_evidence({
     required String os_user_id,
   });
