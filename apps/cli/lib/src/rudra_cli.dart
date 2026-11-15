@@ -5,6 +5,8 @@ import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
 
 import 'composition/product_sdk_composition.dart';
 
+import 'composition/product_workflow_composition.dart';
+
 import 'core/cli/rudra_cli_module.dart';
 import 'core/cli/rudra_exit_code.dart';
 
@@ -29,6 +31,8 @@ import 'features/explorer/cli/explorer_cli_module.dart';
 
 import 'features/explorer/application/explorer_controller.dart';
 import 'features/explorer/application/explorer_runner.dart';
+
+import 'features/workflow/cli/workflow_cli_module.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///
@@ -92,6 +96,14 @@ final class RudraCli {
   /// [explorer_terminal_host_factory] optionally overrides the
   /// production terminal host constructor.
   ///
+  /// [workflow_composition] supplies persistent workflow services.
+  ///
+  /// Production composition resolves the local OS-user identity
+  /// and database location. Tests may inject isolated dependencies.
+  ///
+  /// Workflow persistence is accessed only by explicit workflow
+  /// actions or later read-only state restoration.
+  ///
   /// The factory is invoked only when the Explorer command runs.
   /// This supports deterministic interaction tests without
   /// modifying real terminal modes.
@@ -108,6 +120,7 @@ final class RudraCli {
     StringSink? error_output,
     ProductSdkComposition? target_composition,
     ExplorerTerminalHost Function()? explorer_terminal_host_factory,
+    ProductWorkflowComposition? workflow_composition,
   }) {
     // Resolve the target once so that all application
     // components share the same SDK and starting directory.
@@ -171,6 +184,30 @@ final class RudraCli {
           renderer: filesystem_renderer,
         ),
       );
+
+      // Persistent workflow services are available only when
+      // explicitly composed for this target.
+      //
+      // Injected filesystem compositions do not silently receive
+      // a production persistence context.
+      final workflows =
+          workflow_composition ??
+          (target_composition == null && Platform.isMacOS
+              ? ProductWorkflowComposition.for_current_host()
+              : null);
+
+      if (workflows != null) {
+        cli.register_module(
+          WorkflowCliModule(
+            working_directory: composition.working_directory,
+            start_workflow: (root) => workflows.start(
+              target_id: composition.sdk.target_id,
+              root: root,
+            ),
+            output: presentation_output,
+          ),
+        );
+      }
 
       // Construct terminal hosts lazily so ordinary commands
       // never probe or modify interactive terminal state.
