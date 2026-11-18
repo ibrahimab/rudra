@@ -3,6 +3,10 @@ import '../events/workflow_event.dart';
 import '../workflow_state_machine.dart';
 import '../workflow_runtime.dart';
 
+import '../events/workflow_stop_event.dart';
+import '../states/workflow_state.dart';
+import '../workflow_transition_exception.dart';
+
 import '../states/workflow_active_state.dart';
 import '../states/workflow_initial_state.dart';
 import '../workflow_identity.dart';
@@ -107,10 +111,40 @@ final class WorkflowProcessor {
     final previous_state = _machine.replay(pending.committed_events);
 
     // Validate the submitted command before proposing outcomes.
-    var resulting_state = _machine.transition(
-      state: previous_state,
-      event: pending.command,
-    );
+    //
+    // Only two recognized stop-transition failures represent
+    // business rejections. Other failures must propagate.
+    late WorkflowState resulting_state;
+
+    try {
+      resulting_state = _machine.transition(
+        state: previous_state,
+        event: pending.command,
+      );
+    } on WorkflowTransitionException catch (error) {
+      final WorkflowRejectionCode rejection_code;
+
+      if (pending.command is WorkflowStopEvent &&
+          previous_state is WorkflowInitialState &&
+          error.code == WorkflowTransitionErrorCode.invalid_transition) {
+        rejection_code = WorkflowRejectionCode.workflow_not_active;
+      } else if (pending.command is WorkflowStopEvent &&
+          previous_state is WorkflowActiveState &&
+          error.code == WorkflowTransitionErrorCode.workflow_id_mismatch) {
+        rejection_code = WorkflowRejectionCode.workflow_id_mismatch;
+      } else {
+        rethrow;
+      }
+
+      // Persist the business rejection before reporting it.
+      // A failed or stale rejection write must propagate.
+      await _rejector.reject(submission: pending, code: rejection_code);
+
+      return WorkflowProcessingRejected(
+        receipt: pending.receipt,
+        code: rejection_code,
+      );
+    }
 
     // New workflows require a proposed trusted identity.
     // Existing workflows must retain their committed identity.

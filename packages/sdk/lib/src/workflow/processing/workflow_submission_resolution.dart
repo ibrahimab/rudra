@@ -20,11 +20,16 @@ enum WorkflowSubmissionState {
 
 /// Stable reasons for refusing an accepted workflow command.
 ///
-/// These codes form part of the persisted submission contract.
-/// Once introduced, their names must remain stable.
+/// These identifiers are persisted with submission resolutions.
 enum WorkflowRejectionCode {
   /// The trusted OS user already owns an unfinished workflow.
   ownership_conflict,
+
+  /// A stop request has no established active workflow.
+  workflow_not_active,
+
+  /// A stop request targets a different active workflow.
+  workflow_id_mismatch,
 }
 
 /// Queryable resolution of a previously accepted submission.

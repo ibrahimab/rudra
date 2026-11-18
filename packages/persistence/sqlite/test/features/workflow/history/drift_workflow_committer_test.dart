@@ -197,6 +197,117 @@ void main() {
     );
   });
 
+  test('rejects stop without an active workflow across restart', () async {
+    final receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
+    );
+
+    final result = await processor('unused').process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
+    expect(
+      (result as WorkflowProcessingRejected).code,
+      WorkflowRejectionCode.workflow_not_active,
+    );
+
+    final reader = DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    );
+
+    final resolution = await reader.status_for(receipt);
+
+    expect(resolution, isNotNull);
+    expect(resolution!.state, WorkflowSubmissionState.rejected);
+    expect(
+      resolution.rejection_code,
+      WorkflowRejectionCode.workflow_not_active,
+    );
+    expect(resolution.rejected_at_unix_ms, isNotNull);
+
+    expect(await database.select(database.workflowEvents).get(), isEmpty);
+    expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
+    expect(await inbox.next_pending(), isNull);
+
+    // Reopen the authoritative SQLite database.
+    await database.close();
+    database = RudraDatabase.file(database_file);
+
+    final restored = await DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    ).status_for(receipt);
+
+    expect(restored, isNotNull);
+    expect(restored!.state, WorkflowSubmissionState.rejected);
+    expect(restored.rejection_code, WorkflowRejectionCode.workflow_not_active);
+  });
+
+  test('rejects mismatched stop without changing active workflow', () async {
+    await submit('/workspace');
+
+    expect(
+      await processor('workflow-1').process_next(),
+      isA<WorkflowProcessingCommitted>(),
+    );
+
+    final history_before = await database.select(database.workflowEvents).get();
+
+    final unfinished_before = await database
+        .select(database.unfinishedWorkflows)
+        .get();
+
+    final receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'different-workflow'),
+    );
+
+    final result = await processor('unused').process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
+
+    final rejected = result as WorkflowProcessingRejected;
+
+    expect(rejected.code, WorkflowRejectionCode.workflow_id_mismatch);
+    expect(rejected.receipt.event_id, receipt.event_id);
+
+    final resolution = await DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    ).status_for(receipt);
+
+    expect(resolution, isNotNull);
+    expect(resolution!.state, WorkflowSubmissionState.rejected);
+    expect(
+      resolution.rejection_code,
+      WorkflowRejectionCode.workflow_id_mismatch,
+    );
+
+    // A rejected command must never alter the journal
+    // or the existing workflow ownership projection.
+    expect(
+      await database.select(database.workflowEvents).get(),
+      orderedEquals(history_before),
+    );
+
+    expect(
+      await database.select(database.unfinishedWorkflows).get(),
+      orderedEquals(unfinished_before),
+    );
+
+    final restored = await WorkflowStateReader(
+      runtime: runtime,
+      history_store: DriftWorkflowHistoryStore(database: database),
+      os_user_id: os_user_id,
+    ).current();
+
+    expect(restored, isNotNull);
+    expect(restored!.state.identity.workflow_id, 'workflow-1');
+    expect(restored.state.version, 2);
+    expect(restored.events, hasLength(2));
+
+    expect(await inbox.next_pending(), isNull);
+  });
+
   test('durably rejects competing starts and advances the inbox', () async {
     final first = await submit('/first');
     final second = await submit('/second');

@@ -109,6 +109,95 @@ void main() {
     );
   });
 
+  test('durably rejects stop without an active workflow', () async {
+    final pending = _stop_pending(requested_workflow_id: 'workflow-1');
+
+    final rejector = _FakeWorkflowRejector();
+    final committer = _FakeWorkflowCommitter();
+    final identity_provider = _FakeWorkflowIdentityProvider();
+
+    final processor = WorkflowProcessor(
+      runtime: runtime,
+      inbox: _FakeWorkflowInbox(pending),
+      identity_provider: identity_provider,
+      committer: committer,
+      rejector: rejector,
+      quarantiner: _FakeWorkflowQuarantiner(),
+    );
+
+    final result = await processor.process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
+
+    final rejected = result as WorkflowProcessingRejected;
+
+    expect(rejected.receipt.event_id, pending.receipt.event_id);
+    expect(rejected.code, WorkflowRejectionCode.workflow_not_active);
+
+    expect(rejector.calls, 1);
+    expect(rejector.last_code, WorkflowRejectionCode.workflow_not_active);
+
+    expect(identity_provider.calls, 0);
+    expect(committer.committed, isNull);
+  });
+
+  test('durably rejects stop targeting another workflow', () async {
+    final pending = _stop_pending(
+      requested_workflow_id: 'different-workflow',
+      established: true,
+    );
+
+    final rejector = _FakeWorkflowRejector();
+    final committer = _FakeWorkflowCommitter();
+    final identity_provider = _FakeWorkflowIdentityProvider();
+
+    final processor = WorkflowProcessor(
+      runtime: runtime,
+      inbox: _FakeWorkflowInbox(pending),
+      identity_provider: identity_provider,
+      committer: committer,
+      rejector: rejector,
+      quarantiner: _FakeWorkflowQuarantiner(),
+    );
+
+    final result = await processor.process_next();
+
+    expect(result, isA<WorkflowProcessingRejected>());
+
+    final rejected = result as WorkflowProcessingRejected;
+
+    expect(rejected.code, WorkflowRejectionCode.workflow_id_mismatch);
+    expect(rejected.receipt.event_id, pending.receipt.event_id);
+
+    expect(rejector.calls, 1);
+    expect(rejector.last_code, WorkflowRejectionCode.workflow_id_mismatch);
+
+    expect(identity_provider.calls, 0);
+    expect(committer.committed, isNull);
+  });
+
+  test('does not report invalid stop rejection if persistence fails', () async {
+    final rejector = _FakeWorkflowRejector(fail_rejection: true);
+
+    final committer = _FakeWorkflowCommitter();
+
+    final processor = WorkflowProcessor(
+      runtime: runtime,
+      inbox: _FakeWorkflowInbox(
+        _stop_pending(requested_workflow_id: 'workflow-1'),
+      ),
+      identity_provider: _FakeWorkflowIdentityProvider(),
+      committer: committer,
+      rejector: rejector,
+      quarantiner: _FakeWorkflowQuarantiner(),
+    );
+
+    await expectLater(processor.process_next(), throwsStateError);
+
+    expect(rejector.calls, 1);
+    expect(committer.committed, isNull);
+  });
+
   test('does not request identity or commitment for an empty inbox', () async {
     final committer = _FakeWorkflowCommitter();
     final identity_provider = _FakeWorkflowIdentityProvider();
@@ -327,6 +416,40 @@ PendingWorkflowCommand _pending() {
       target_id: 'local-macos',
       root: TargetPath('/workspace'),
     ),
+  );
+}
+
+/// Creates a stop submission with optional committed history.
+///
+/// The established workflow always has ID 'workflow-1'.
+/// [requested_workflow_id] can deliberately differ.
+PendingWorkflowCommand _stop_pending({
+  required String requested_workflow_id,
+  bool established = false,
+}) {
+  final identity = WorkflowIdentity(
+    workflow_id: 'workflow-1',
+    os_user_id: 'user-1',
+    target_id: 'local-macos',
+    root: TargetPath('/workspace'),
+  );
+
+  return PendingWorkflowCommand(
+    receipt: EventSubmissionReceipt(
+      event_id: 'stop-event-1',
+      correlation_id: 'stop-correlation-1',
+    ),
+    scope_id: 'submission-scope-1',
+    command: WorkflowStopEvent(workflow_id: requested_workflow_id),
+    committed_events: established
+        ? <WorkflowEvent>[
+            WorkflowStartEvent(
+              target_id: identity.target_id,
+              root: identity.root,
+            ),
+            WorkflowStartedEvent(identity: identity),
+          ]
+        : const <WorkflowEvent>[],
   );
 }
 
