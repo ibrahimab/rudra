@@ -3,6 +3,10 @@ import '../events/workflow_event.dart';
 import '../workflow_state_machine.dart';
 import '../workflow_runtime.dart';
 
+import '../states/workflow_active_state.dart';
+import '../states/workflow_initial_state.dart';
+import '../workflow_identity.dart';
+
 import 'workflow_committer.dart';
 import 'workflow_identity_provider.dart';
 import 'workflow_inbox.dart';
@@ -108,8 +112,21 @@ final class WorkflowProcessor {
       event: pending.command,
     );
 
-    // Identity creation belongs to a separate trusted service.
-    final identity = await _identity_provider.propose_identity(pending);
+    // New workflows require a proposed trusted identity.
+    // Existing workflows must retain their committed identity.
+    //
+    // Unsupported source states fail closed.
+    final WorkflowIdentity identity;
+
+    if (previous_state is WorkflowInitialState) {
+      identity = await _identity_provider.propose_identity(pending);
+    } else if (previous_state is WorkflowActiveState) {
+      identity = previous_state.identity;
+    } else {
+      throw StateError(
+        'Unsupported workflow source state for command processing.',
+      );
+    }
 
     final outcomes = behavior.propose_outcomes(
       pending.command,

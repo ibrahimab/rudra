@@ -51,6 +51,64 @@ void main() {
     expect(() => plan.events_to_append.clear(), throwsUnsupportedError);
   });
 
+  test('stops an existing workflow without proposing a new identity', () async {
+    final identity = WorkflowIdentity(
+      workflow_id: 'workflow-1',
+      os_user_id: 'user-1',
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final pending = PendingWorkflowCommand(
+      receipt: EventSubmissionReceipt(
+        event_id: 'stop-event-1',
+        correlation_id: 'stop-correlation-1',
+      ),
+      scope_id: 'submission-scope-1',
+      command: WorkflowStopEvent(workflow_id: identity.workflow_id),
+      committed_events: [
+        WorkflowStartEvent(target_id: identity.target_id, root: identity.root),
+        WorkflowStartedEvent(identity: identity),
+      ],
+    );
+
+    final identity_provider = _FakeWorkflowIdentityProvider();
+    final committer = _FakeWorkflowCommitter();
+
+    final processor = WorkflowProcessor(
+      runtime: runtime,
+      inbox: _FakeWorkflowInbox(pending),
+      identity_provider: identity_provider,
+      committer: committer,
+      rejector: _FakeWorkflowRejector(),
+      quarantiner: _FakeWorkflowQuarantiner(),
+    );
+
+    final result = await processor.process_next();
+
+    expect(result, isA<WorkflowProcessingCommitted>());
+
+    final plan = (result as WorkflowProcessingCommitted).plan;
+
+    expect(committer.committed, same(plan));
+    expect(identity_provider.calls, 0);
+
+    expect(plan.previous_state, isA<WorkflowActiveState>());
+    expect(plan.previous_state.version, 2);
+
+    expect(plan.resulting_state, isA<WorkflowEndedState>());
+    expect(plan.resulting_state.version, 4);
+
+    expect(plan.events_to_append, hasLength(2));
+    expect(plan.events_to_append[0], isA<WorkflowStopEvent>());
+    expect(plan.events_to_append[1], isA<WorkflowEndedEvent>());
+
+    expect(
+      (plan.resulting_state as WorkflowEndedState).identity,
+      same(identity),
+    );
+  });
+
   test('does not request identity or commitment for an empty inbox', () async {
     final committer = _FakeWorkflowCommitter();
     final identity_provider = _FakeWorkflowIdentityProvider();
