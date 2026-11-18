@@ -34,6 +34,27 @@ enum WorkflowStateReadErrorCode {
   orphaned_workflow,
 }
 
+/// Validated active workflow and its authoritative event history.
+///
+/// Both values originate from the same consistent persistence
+/// snapshot and have passed SDK restoration validation.
+///
+/// The event collection is immutable. Reading it does not
+/// reserve the workflow or authorize state changes.
+final class WorkflowActiveHistory {
+  /// Creates an immutable validated workflow history.
+  WorkflowActiveHistory({
+    required this.state,
+    required Iterable<WorkflowEvent> events,
+  }) : events = List<WorkflowEvent>.unmodifiable(events);
+
+  /// Restored active workflow state.
+  final WorkflowActiveState state;
+
+  /// Committed events in workflow-version order.
+  final List<WorkflowEvent> events;
+}
+
 /// Indicates that persisted workflow state is inconsistent.
 ///
 /// These failures are read-only diagnostics. They never
@@ -132,6 +153,18 @@ final class WorkflowStateReader {
   ///
   /// No commands, events, repairs, or filesystem operations occur.
   Future<WorkflowActiveState?> current() async {
+    final history = await current_with_history();
+    return history?.state;
+  }
+
+  /// Restores an active workflow together with its validated events.
+  ///
+  /// The state and events originate from one consistent history
+  /// snapshot and pass the same integrity checks as [current].
+  ///
+  /// Returns null when the OS user has no unfinished workflow.
+  /// Persistence and replay failures propagate without repairs.
+  Future<WorkflowActiveHistory?> current_with_history() async {
     final evidence = await _history_store.load_restoration_evidence(
       os_user_id: _os_user_id,
     );
@@ -152,7 +185,7 @@ final class WorkflowStateReader {
         );
       }
 
-      final state = _replay_history(history);
+      final state = _replay_history(history).state;
 
       if (state is WorkflowActiveState) {
         if (state.identity.os_user_id != _os_user_id) {
@@ -202,12 +235,14 @@ final class WorkflowStateReader {
       );
     }
 
-    final replayed = _replay_history(
+    final restored = _replay_history(
       WorkflowHistoryJournal(
         workflow_id: identity.workflow_id,
         journal: projected.journal,
       ),
     );
+
+    final replayed = restored.state;
 
     if (replayed is! WorkflowActiveState) {
       throw const WorkflowStateReadException(
@@ -235,7 +270,7 @@ final class WorkflowStateReader {
       );
     }
 
-    return replayed;
+    return WorkflowActiveHistory(state: replayed, events: restored.events);
   }
 
   /// Validates and replays one complete committed journal.
@@ -245,7 +280,9 @@ final class WorkflowStateReader {
   /// or domain-transition validation.
   ///
   /// The journal is never modified.
-  WorkflowState _replay_history(WorkflowHistoryJournal history) {
+  ({WorkflowState state, List<WorkflowEvent> events}) _replay_history(
+    WorkflowHistoryJournal history,
+  ) {
     if (history.workflow_id.trim().isEmpty || history.journal.isEmpty) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.invalid_journal,
@@ -320,7 +357,7 @@ final class WorkflowStateReader {
       );
     }
 
-    return replayed;
+    return (state: replayed, events: List<WorkflowEvent>.unmodifiable(events));
   }
 
   /// Validates a trusted OS-user identifier without normalizing it.

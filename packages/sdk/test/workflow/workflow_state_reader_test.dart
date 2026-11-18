@@ -58,6 +58,70 @@ void main() {
       expect(state.identity.root.value, '/workspace');
     });
 
+    test('restores validated active history from one snapshot', () async {
+      final store = _FixtureHistoryStore(_snapshot(runtime));
+
+      final reader = WorkflowStateReader(
+        runtime: runtime,
+        history_store: store,
+        os_user_id: 'os-user-1',
+      );
+
+      final result = await reader.current_with_history();
+
+      expect(result, isNotNull);
+
+      final history = result!;
+
+      expect(history.state.version, 2);
+      expect(history.state.identity.workflow_id, 'workflow-1');
+      expect(history.state.identity.os_user_id, 'os-user-1');
+
+      expect(history.events, hasLength(2));
+      expect(history.events[0], isA<WorkflowStartEvent>());
+      expect(history.events[1], isA<WorkflowStartedEvent>());
+
+      final replayed = WorkflowStateMachine(flow: runtime.flow)
+          .replay(history.events);
+
+      expect(replayed, isA<WorkflowActiveState>());
+      expect(replayed.version, history.state.version);
+
+      expect(store.reads, 1);
+      expect(store.requested_user, 'os-user-1');
+
+      expect(() => history.events.clear(), throwsUnsupportedError);
+    });
+
+    test('returns null history when no active workflow exists', () async {
+      final reader = reader_for(null);
+
+      expect(await reader.current_with_history(), isNull);
+    });
+
+    test('validated history rejects foreign workflow ownership', () async {
+      final reader = reader_for(
+        _snapshot(
+          runtime,
+          journal: _journal(
+            runtime,
+            outcome_identity: _identity(os_user_id: 'os-user-2'),
+          ),
+        ),
+      );
+
+      await expectLater(
+        reader.current_with_history(),
+        throwsA(
+          isA<WorkflowStateReadException>().having(
+            (error) => error.code,
+            'code',
+            WorkflowStateReadErrorCode.ownership_mismatch,
+          ),
+        ),
+      );
+    });
+
     test('does not modify the supplied history', () async {
       final snapshot = _snapshot(runtime);
       final original_events = List.of(snapshot.journal);
