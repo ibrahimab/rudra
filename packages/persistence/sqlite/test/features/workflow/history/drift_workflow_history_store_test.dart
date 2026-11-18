@@ -185,11 +185,12 @@ void main() {
       final restored = await state_reader().current();
 
       expect(restored, isNotNull);
-      expect(restored!.version, 2);
-      expect(restored.identity.workflow_id, workflow_id);
-      expect(restored.identity.os_user_id, os_user_id);
-      expect(restored.identity.target_id, 'local-macos');
-      expect(restored.identity.root.value, '/workspace');
+      expect(restored!.state.version, 2);
+      expect(restored.state.identity.workflow_id, workflow_id);
+      expect(restored.state.identity.os_user_id, os_user_id);
+      expect(restored.state.identity.target_id, 'local-macos');
+      expect(restored.state.identity.root.value, '/workspace');
+      expect(restored.events, hasLength(2));
     });
 
     test('does not expose another OS user workflow', () async {
@@ -216,10 +217,12 @@ void main() {
 
       final restored = await state_reader().current();
 
-      expect(restored, isA<WorkflowActiveState>());
-      expect(restored!.version, 2);
-      expect(restored.identity.workflow_id, workflow_id);
-      expect(restored.identity.root.value, '/workspace');
+      expect(restored, isA<WorkflowActiveHistory>());
+      expect(restored!.state, isA<WorkflowActiveState>());
+      expect(restored.state.version, 2);
+      expect(restored.state.identity.workflow_id, workflow_id);
+      expect(restored.state.identity.root.value, '/workspace');
+      expect(restored.events, hasLength(2));
 
       final submissions = await database
           .select(database.workflowSubmissions)
@@ -533,7 +536,7 @@ void main() {
       final restored = await state_reader().current();
 
       expect(restored, isNotNull);
-      expect(restored!.identity.workflow_id, workflow_id);
+      expect(restored!.state.identity.workflow_id, workflow_id);
 
       // The malformed journal must still be detected when its
       // actual owner requests restoration.

@@ -94,9 +94,13 @@ void main() {
         ).current();
 
         expect(current_workflow, isNotNull);
-        expect(current_workflow!.version, 2);
-        expect(current_workflow.identity.workflow_id, 'frontend-workflow-1');
-        expect(current_workflow.identity.root.value, '/first');
+
+        expect(current_workflow!.state.version, 2);
+        expect(
+          current_workflow.state.identity.workflow_id,
+          'frontend-workflow-1',
+        );
+        expect(current_workflow.state.identity.root.value, '/first');
 
         final rejected = await make_processor('frontend-workflow-2')
             .process_next();
@@ -143,9 +147,13 @@ void main() {
         ).current();
 
         expect(restored_workflow, isNotNull);
-        expect(restored_workflow!.version, 2);
-        expect(restored_workflow.identity.workflow_id, 'frontend-workflow-1');
-        expect(restored_workflow.identity.root.value, '/first');
+
+        expect(restored_workflow!.state.version, 2);
+        expect(
+          restored_workflow.state.identity.workflow_id,
+          'frontend-workflow-1',
+        );
+        expect(restored_workflow.state.identity.root.value, '/first');
 
         final first_status = await reopened.workflow_status_reader.status_for(
           first,

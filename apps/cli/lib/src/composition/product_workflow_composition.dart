@@ -100,11 +100,13 @@ final class ProductWorkflowComposition {
     );
 
     try {
-      return await WorkflowStateReader(
+      final history = await WorkflowStateReader(
         runtime: runtime,
         history_store: persistence.workflow_history_store,
         os_user_id: os_user_id,
       ).current();
+
+      return history?.state;
     } finally {
       await persistence.close();
     }
@@ -174,7 +176,7 @@ final class ProductWorkflowComposition {
 
       if (existing != null) {
         throw WorkflowAlreadyActiveException(
-          workflow_id: existing.identity.workflow_id,
+          workflow_id: existing.state.identity.workflow_id,
         );
       }
 
@@ -207,7 +209,8 @@ final class ProductWorkflowComposition {
 
         switch (resolution.state) {
           case WorkflowSubmissionState.completed:
-            final active = await reader.current();
+            final restored = await reader.current();
+            final active = restored?.state;
 
             if (active == null ||
                 active.identity.target_id != target_id ||
@@ -227,7 +230,7 @@ final class ProductWorkflowComposition {
               final current_workflow = await reader.current();
 
               throw WorkflowAlreadyActiveException(
-                workflow_id: current_workflow?.identity.workflow_id,
+                workflow_id: current_workflow?.state.identity.workflow_id,
               );
             }
 

@@ -102,15 +102,10 @@ final class WorkflowStateReadException implements Exception {
 ///
 /// Example:
 /// ```dart
-/// final reader = WorkflowStateReader(
-///   runtime: runtime,
-///   history_store: history_store,
-///   os_user_id: trusted_os_user_id,
-/// );
+/// final workflow = await reader.current();
 ///
-/// final active = await reader.current();
-///
-/// print(active?.identity.workflow_id);
+/// print(workflow?.state.identity.workflow_id);
+/// print(workflow?.events.length);
 /// ```
 final class WorkflowStateReader {
   /// Creates a reader bound to one trusted OS-user identity.
@@ -136,35 +131,19 @@ final class WorkflowStateReader {
   final String _os_user_id;
   final WorkflowStateMachine _machine;
 
-  /// Restores the current workflow from a consistent persisted snapshot.
+  /// Restores the active workflow and its validated event history.
   ///
-  /// Every history located through the trusted owner's
-  /// authoritative owner index is validated through SDK replay.
+  /// Both originate from one consistent persistence snapshot.
+  /// Committed events are decoded and replayed through the SDK
+  /// state machine before the result is returned.
   ///
-  /// This includes histories whose derived unfinished-workflow
-  /// projection is missing or incorrectly assigned.
+  /// Returns null when no unfinished workflow exists.
   ///
-  /// Unrelated OS users' journals do not participate in this read.
+  /// Invalid journals, ownership mismatches, and persistence
+  /// failures propagate without modifying stored data.
   ///
-  /// An active workflow belonging to this OS user but missing
-  /// the expected projection is an integrity failure.
-  ///
-  /// Terminal histories do not occupy unfinished-workflow slots.
-  ///
-  /// No commands, events, repairs, or filesystem operations occur.
-  Future<WorkflowActiveState?> current() async {
-    final history = await current_with_history();
-    return history?.state;
-  }
-
-  /// Restores an active workflow together with its validated events.
-  ///
-  /// The state and events originate from one consistent history
-  /// snapshot and pass the same integrity checks as [current].
-  ///
-  /// Returns null when the OS user has no unfinished workflow.
-  /// Persistence and replay failures propagate without repairs.
-  Future<WorkflowActiveHistory?> current_with_history() async {
+  /// This operation does not submit commands or mutate state.
+  Future<WorkflowActiveHistory?> current() async {
     final evidence = await _history_store.load_restoration_evidence(
       os_user_id: _os_user_id,
     );

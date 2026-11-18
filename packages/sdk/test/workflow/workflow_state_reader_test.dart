@@ -48,10 +48,13 @@ void main() {
     });
 
     test('restores committed active workflow state', () async {
-      final state = await reader_for(_snapshot(runtime)).current();
+      final restored = await reader_for(_snapshot(runtime)).current();
 
-      expect(state, isNotNull);
-      expect(state!.version, 2);
+      expect(restored, isNotNull);
+
+      final state = restored!.state;
+
+      expect(state.version, 2);
       expect(state.identity.workflow_id, 'workflow-1');
       expect(state.identity.os_user_id, 'os-user-1');
       expect(state.identity.target_id, 'local-macos');
@@ -67,7 +70,7 @@ void main() {
         os_user_id: 'os-user-1',
       );
 
-      final result = await reader.current_with_history();
+      final result = await reader.current();
 
       expect(result, isNotNull);
 
@@ -96,7 +99,7 @@ void main() {
     test('returns null history when no active workflow exists', () async {
       final reader = reader_for(null);
 
-      expect(await reader.current_with_history(), isNull);
+      expect(await reader.current(), isNull);
     });
 
     test('validated history rejects foreign workflow ownership', () async {
@@ -111,7 +114,7 @@ void main() {
       );
 
       await expectLater(
-        reader.current_with_history(),
+        reader.current(),
         throwsA(
           isA<WorkflowStateReadException>().having(
             (error) => error.code,
