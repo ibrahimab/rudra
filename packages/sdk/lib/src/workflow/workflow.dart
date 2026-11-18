@@ -9,6 +9,8 @@ export 'events/workflow_event.dart';
 export 'events/workflow_start_event.dart';
 export 'events/workflow_started_event.dart';
 export 'events/workflow_ended_event.dart';
+export 'events/workflow_stop_event.dart';
+export 'states/workflow_stop_requested_state.dart';
 
 /// Submission contracts.
 export 'event_manager.dart';

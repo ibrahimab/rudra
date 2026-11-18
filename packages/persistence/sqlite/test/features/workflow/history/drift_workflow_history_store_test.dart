@@ -4,7 +4,8 @@ import 'package:drift/drift.dart' show Value, Variable;
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
+import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart'
+    hide WorkflowEvent;
 import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_committer.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_history_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_event_submission_store.dart';
@@ -446,23 +447,28 @@ void main() {
       // Simulate a future valid terminal commitment.
       // Production terminal processing is not implemented yet.
       await database.transaction(() async {
-        await database
-            .into(database.workflowEvents)
-            .insert(
-              WorkflowEventsCompanion.insert(
-                event_id: 'terminal-event-1',
-                workflow_id: workflow_id,
-                version: 3,
-                correlation_id: correlation_id,
-                event_type: WorkflowEndedEvent.type_id,
-                payload_json: runtime.codec.encode(
-                  WorkflowEndedEvent(workflow_id: workflow_id),
+        final events = <WorkflowEvent>[
+          WorkflowStopEvent(workflow_id: workflow_id),
+          WorkflowEndedEvent(workflow_id: workflow_id),
+        ];
+
+        for (final (index, event) in events.indexed) {
+          await database
+              .into(database.workflowEvents)
+              .insert(
+                WorkflowEventsCompanion.insert(
+                  event_id: 'terminal-event-${index + 1}',
+                  workflow_id: workflow_id,
+                  version: index + 3,
+                  correlation_id: correlation_id,
+                  event_type: event.event_type,
+                  payload_json: runtime.codec.encode(event),
+                  recorded_at_unix_ms: DateTime.now()
+                      .toUtc()
+                      .millisecondsSinceEpoch,
                 ),
-                recorded_at_unix_ms: DateTime.now()
-                    .toUtc()
-                    .millisecondsSinceEpoch,
-              ),
-            );
+              );
+        }
 
         await database.delete(database.unfinishedWorkflows).go();
       });
@@ -471,7 +477,7 @@ void main() {
 
       final journal = await database.select(database.workflowEvents).get();
 
-      expect(journal, hasLength(3));
+      expect(journal, hasLength(4));
     });
 
     test('does not replay unrelated malformed user history', () async {

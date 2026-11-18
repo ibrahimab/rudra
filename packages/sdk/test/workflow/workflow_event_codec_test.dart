@@ -16,13 +16,14 @@ void main() {
     root: TargetPath('/workspace/../downloads'),
   );
 
-  test('round-trips all three lifecycle events', () {
+  test('round-trips all four lifecycle events', () {
     final events = <WorkflowEvent>[
       WorkflowStartEvent(
         target_id: 'local-macos',
         root: TargetPath('/workspace/../downloads'),
       ),
       WorkflowStartedEvent(identity: identity()),
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
       WorkflowEndedEvent(workflow_id: 'workflow-1'),
     ];
 
@@ -40,7 +41,8 @@ void main() {
 
     expect(restored[0], isA<WorkflowStartEvent>());
     expect(restored[1], isA<WorkflowStartedEvent>());
-    expect(restored[2], isA<WorkflowEndedEvent>());
+    expect(restored[2], isA<WorkflowStopEvent>());
+    expect(restored[3], isA<WorkflowEndedEvent>());
 
     expect(
       (restored[0] as WorkflowStartEvent).root.value,
@@ -49,13 +51,14 @@ void main() {
 
     expect((restored[1] as WorkflowStartedEvent).identity.os_user_id, 'user-1');
 
-    expect((restored[2] as WorkflowEndedEvent).workflow_id, 'workflow-1');
+    expect((restored[2] as WorkflowStopEvent).workflow_id, 'workflow-1');
 
-    // Replayed instances must reproduce the same domain state.
+    expect((restored[3] as WorkflowEndedEvent).workflow_id, 'workflow-1');
+
     final state = WorkflowStateMachine().replay(restored);
 
     expect(state, isA<WorkflowEndedState>());
-    expect(state.version, 3);
+    expect(state.version, 4);
     expect(state.is_terminal, isTrue);
   });
 
@@ -160,6 +163,14 @@ void main() {
       () => codec.decode(
         event_type: WorkflowEndedEvent.type_id,
         payload_json: 'not-json',
+      ),
+      throwsFormatException,
+    );
+
+    expect(
+      () => codec.decode(
+        event_type: WorkflowStopEvent.type_id,
+        payload_json: '{"schema_version":1,"workflow_id":" "}',
       ),
       throwsFormatException,
     );

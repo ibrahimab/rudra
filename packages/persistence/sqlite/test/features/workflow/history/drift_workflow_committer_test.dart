@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
+import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart'
+    hide WorkflowEvent;
 
 import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_committer.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_history_store.dart';
@@ -502,23 +503,28 @@ void main() {
     // Simulate a future atomic workflow-end commitment.
     // Production stop processing is not implemented yet.
     await database.transaction(() async {
-      await database
-          .into(database.workflowEvents)
-          .insert(
-            WorkflowEventsCompanion.insert(
-              event_id: 'workflow-1-ended',
-              workflow_id: 'workflow-1',
-              version: 3,
-              correlation_id: correlation_id,
-              event_type: WorkflowEndedEvent.type_id,
-              payload_json: codec.encode(
-                WorkflowEndedEvent(workflow_id: 'workflow-1'),
+      final events = <WorkflowEvent>[
+        WorkflowStopEvent(workflow_id: 'workflow-1'),
+        WorkflowEndedEvent(workflow_id: 'workflow-1'),
+      ];
+
+      for (final (index, event) in events.indexed) {
+        await database
+            .into(database.workflowEvents)
+            .insert(
+              WorkflowEventsCompanion.insert(
+                event_id: 'workflow-1-terminal-${index + 1}',
+                workflow_id: 'workflow-1',
+                version: index + 3,
+                correlation_id: correlation_id,
+                event_type: event.event_type,
+                payload_json: codec.encode(event),
+                recorded_at_unix_ms: DateTime.now()
+                    .toUtc()
+                    .millisecondsSinceEpoch,
               ),
-              recorded_at_unix_ms: DateTime.now()
-                  .toUtc()
-                  .millisecondsSinceEpoch,
-            ),
-          );
+            );
+      }
 
       await database.delete(database.unfinishedWorkflows).go();
     });
@@ -546,7 +552,7 @@ void main() {
         .select(database.unfinishedWorkflows)
         .get();
 
-    expect(history, hasLength(5));
+    expect(history, hasLength(6));
     expect(reservations, hasLength(1));
     expect(reservations.single.workflow_id, 'workflow-2');
   });

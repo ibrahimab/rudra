@@ -9,12 +9,13 @@ void main() {
   test('assembles the standard lifecycle behaviors', () {
     final flow = WorkflowFlow.standard();
 
-    expect(flow.transitions, hasLength(3));
+    expect(flow.transitions, hasLength(4));
 
     final cases = <(Type, Type, Type)>[
       (WorkflowInitialState, WorkflowStartEvent, WorkflowStartRequestedState),
       (WorkflowStartRequestedState, WorkflowStartedEvent, WorkflowActiveState),
-      (WorkflowActiveState, WorkflowEndedEvent, WorkflowEndedState),
+      (WorkflowActiveState, WorkflowStopEvent, WorkflowStopRequestedState),
+      (WorkflowStopRequestedState, WorkflowEndedEvent, WorkflowEndedState),
     ];
 
     for (final (source, event, destination) in cases) {
@@ -71,7 +72,7 @@ void main() {
     registry.register(const LifecycleWorkflowModule());
 
     expect(before, isEmpty);
-    expect(registry.transitions, hasLength(3));
+    expect(registry.transitions, hasLength(4));
 
     expect(() => registry.transitions.clear(), throwsUnsupportedError);
   });
@@ -117,18 +118,17 @@ void main() {
     expect(registry.transitions, hasLength(1));
   });
 
-  test('registers command handling through the start behavior', () {
+  test('registers start and stop command handling', () {
     final registry = WorkflowModuleRegistry();
 
     registry.register(const LifecycleWorkflowModule());
 
-    expect(registry.transitions, hasLength(3));
-    expect(registry.command_behaviors, hasLength(1));
+    expect(registry.transitions, hasLength(4));
+    expect(registry.command_behaviors, hasLength(2));
 
     expect(registry.handler_for(command_type: WorkflowStartEvent), isNotNull);
-
+    expect(registry.handler_for(command_type: WorkflowStopEvent), isNotNull);
     expect(registry.handler_for(command_type: WorkflowStartedEvent), isNull);
-
     expect(registry.handler_for(command_type: WorkflowEndedEvent), isNull);
   });
 
@@ -171,6 +171,44 @@ void main() {
     expect((state as WorkflowActiveState).identity.workflow_id, 'workflow-1');
   });
 
+  test('stop handler proposes a valid terminal outcome', () {
+    final registry = WorkflowModuleRegistry()
+      ..register(const LifecycleWorkflowModule());
+
+    final identity = WorkflowIdentity(
+      workflow_id: 'workflow-1',
+      os_user_id: 'user-1',
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final command = WorkflowStopEvent(workflow_id: identity.workflow_id);
+
+    final handler = registry.handler_for(command_type: WorkflowStopEvent);
+
+    expect(handler, isNotNull);
+
+    final outcomes = handler!.propose_outcomes(command, identity: identity);
+
+    expect(outcomes, hasLength(1));
+    expect(outcomes.single, isA<WorkflowEndedEvent>());
+    expect(() => outcomes.clear(), throwsUnsupportedError);
+
+    final machine = WorkflowStateMachine(
+      flow: WorkflowFlow(transitions: registry.transitions),
+    );
+
+    final state = machine.replay([
+      WorkflowStartEvent(target_id: identity.target_id, root: identity.root),
+      WorkflowStartedEvent(identity: identity),
+      command,
+      ...outcomes,
+    ]);
+
+    expect(state, isA<WorkflowEndedState>());
+    expect(state.version, 4);
+  });
+
   test('rejects duplicate command handlers atomically', () {
     final registry = WorkflowModuleRegistry();
 
@@ -186,8 +224,8 @@ void main() {
       throwsStateError,
     );
 
-    expect(registry.transitions, hasLength(3));
-    expect(registry.command_behaviors, hasLength(1));
+    expect(registry.transitions, hasLength(4));
+    expect(registry.command_behaviors, hasLength(2));
   });
 
   test('registers serializers through lifecycle module', () {
@@ -195,7 +233,7 @@ void main() {
 
     registry.register(const LifecycleWorkflowModule());
 
-    expect(registry.serializers, hasLength(3));
+    expect(registry.serializers, hasLength(4));
 
     final codec = WorkflowEventCodec.from_registry(registry);
 
@@ -229,11 +267,11 @@ void main() {
       throwsStateError,
     );
 
-    expect(registry.serializers, hasLength(3));
-    expect(registry.transitions, hasLength(3));
+    expect(registry.serializers, hasLength(4));
+    expect(registry.transitions, hasLength(4));
 
     // The previously retrieved snapshot is unchanged.
-    expect(before, hasLength(3));
+    expect(before, hasLength(4));
   });
 }
 

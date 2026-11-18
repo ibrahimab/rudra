@@ -78,21 +78,30 @@ void main() {
       expect(result.version, 2);
     });
 
-    test('transitions from active to ended', () {
+    test('transitions from active through stop requested to ended', () {
       final identity = _create_identity();
       final active = _active_state(identity: identity);
 
-      final result = machine.transition(
+      final requested = machine.transition(
         state: active,
+        event: WorkflowStopEvent(workflow_id: identity.workflow_id),
+      );
+
+      expect(requested, isA<WorkflowStopRequestedState>());
+      expect(requested.version, 3);
+      expect(
+        (requested as WorkflowStopRequestedState).identity,
+        same(identity),
+      );
+
+      final ended = machine.transition(
+        state: requested,
         event: WorkflowEndedEvent(workflow_id: identity.workflow_id),
       );
 
-      expect(result, isA<WorkflowEndedState>());
-
-      final ended = result as WorkflowEndedState;
-
-      expect(ended.version, 3);
-      expect(ended.identity, same(identity));
+      expect(ended, isA<WorkflowEndedState>());
+      expect(ended.version, 4);
+      expect((ended as WorkflowEndedState).identity, same(identity));
       expect(active.version, 2);
     });
 
@@ -155,49 +164,65 @@ void main() {
       expect(active.identity.root.value, r'C:\Users\example\Downloads');
     });
 
-    test('rejects ending another workflow', () {
+    test('rejects stopping another workflow', () {
       final active = _active_state();
-
-      final event = WorkflowEndedEvent(workflow_id: 'different-workflow');
 
       _expect_transition_error(
         machine,
         active,
-        event,
+        WorkflowStopEvent(workflow_id: 'different-workflow'),
         WorkflowTransitionErrorCode.workflow_id_mismatch,
       );
 
       expect(active.version, 2);
     });
 
+    test('rejects ending another stopped workflow', () {
+      final requested = WorkflowStopRequestedState(
+        identity: _create_identity(),
+        version: 3,
+      );
+
+      _expect_transition_error(
+        machine,
+        requested,
+        WorkflowEndedEvent(workflow_id: 'different-workflow'),
+        WorkflowTransitionErrorCode.workflow_id_mismatch,
+      );
+
+      expect(requested.version, 3);
+    });
+
     test('rejects every unspecified lifecycle transition', () {
       const initial = WorkflowInitialState();
       final requested = _requested_state();
       final active = _active_state();
+      final stop_requested = WorkflowStopRequestedState(
+        identity: _create_identity(),
+        version: 3,
+      );
       final ended = _ended_state();
 
       final invalid_cases = <(WorkflowState, WorkflowEvent)>[
-        // A workflow cannot start without a request.
         (initial, WorkflowStartedEvent(identity: _create_identity())),
-
-        // A workflow cannot end before it starts.
+        (initial, WorkflowStopEvent(workflow_id: 'workflow-1')),
         (initial, WorkflowEndedEvent(workflow_id: 'workflow-1')),
 
-        // A pending request cannot be submitted again.
         (requested, _start_event()),
-
-        // A pending request cannot be ended directly.
+        (requested, WorkflowStopEvent(workflow_id: 'workflow-1')),
         (requested, WorkflowEndedEvent(workflow_id: 'workflow-1')),
 
-        // An active workflow cannot be started again.
         (active, _start_event()),
-
-        // An active workflow cannot receive a second started outcome.
         (active, WorkflowStartedEvent(identity: _create_identity())),
+        (active, WorkflowEndedEvent(workflow_id: 'workflow-1')),
 
-        // Terminal workflows cannot be restarted or ended again.
+        (stop_requested, _start_event()),
+        (stop_requested, WorkflowStartedEvent(identity: _create_identity())),
+        (stop_requested, WorkflowStopEvent(workflow_id: 'workflow-1')),
+
         (ended, _start_event()),
         (ended, WorkflowStartedEvent(identity: _create_identity())),
+        (ended, WorkflowStopEvent(workflow_id: 'workflow-1')),
         (ended, WorkflowEndedEvent(workflow_id: 'workflow-1')),
       ];
 
@@ -213,7 +238,8 @@ void main() {
       expect(initial.version, 0);
       expect(requested.version, 1);
       expect(active.version, 2);
-      expect(ended.version, 3);
+      expect(stop_requested.version, 3);
+      expect(ended.version, 4);
     });
 
     test('rejects unsupported event implementations', () {
@@ -249,7 +275,7 @@ void main() {
       final result = machine.replay(_valid_history());
 
       expect(result, isA<WorkflowEndedState>());
-      expect(result.version, 3);
+      expect(result.version, 4);
 
       final ended = result as WorkflowEndedState;
 
@@ -265,15 +291,18 @@ void main() {
 
       final requested = machine.replay(events.take(1));
       final active = machine.replay(events.take(2));
+      final stop_requested = machine.replay(events.take(3));
       final ended = machine.replay(events);
 
       expect(requested, isA<WorkflowStartRequestedState>());
       expect(active, isA<WorkflowActiveState>());
+      expect(stop_requested, isA<WorkflowStopRequestedState>());
       expect(ended, isA<WorkflowEndedState>());
 
       expect(requested.version, 1);
       expect(active.version, 2);
-      expect(ended.version, 3);
+      expect(stop_requested.version, 3);
+      expect(ended.version, 4);
     });
 
     test('replay and individual transitions produce equivalent state', () {
@@ -375,7 +404,7 @@ void main() {
         () => machine.replay(events),
         throwsA(
           isA<WorkflowReplayException>()
-              .having((error) => error.event_index, 'event_index', 3)
+              .having((error) => error.event_index, 'event_index', 4)
               .having(
                 (error) => error.cause.code,
                 'cause.code',
@@ -450,16 +479,17 @@ WorkflowActiveState _active_state({WorkflowIdentity? identity}) {
 
 /// Creates a valid terminal workflow state.
 WorkflowEndedState _ended_state() {
-  return WorkflowEndedState(identity: _create_identity(), version: 3);
+  return WorkflowEndedState(identity: _create_identity(), version: 4);
 }
 
 /// Creates a complete, valid workflow event history.
 ///
-/// The list represents three committed events in order.
+/// The list represents four committed events in order.
 List<WorkflowEvent> _valid_history() {
   return [
     _start_event(),
     WorkflowStartedEvent(identity: _create_identity()),
+    WorkflowStopEvent(workflow_id: 'workflow-1'),
     WorkflowEndedEvent(workflow_id: 'workflow-1'),
   ];
 }

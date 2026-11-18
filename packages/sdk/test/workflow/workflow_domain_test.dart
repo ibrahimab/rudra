@@ -79,12 +79,14 @@ void main() {
       final events = <WorkflowEvent>[
         WorkflowStartEvent(target_id: 'local-macos', root: TargetPath('/tmp')),
         WorkflowStartedEvent(identity: identity),
+        WorkflowStopEvent(workflow_id: identity.workflow_id),
         WorkflowEndedEvent(workflow_id: identity.workflow_id),
       ];
 
       expect(events.map((event) => event.event_type).toList(), [
         'workflow.start',
         'workflow.started',
+        'workflow.stop',
         'workflow.ended',
       ]);
     });
@@ -108,6 +110,13 @@ void main() {
       expect(event.event_type, WorkflowStartedEvent.type_id);
     });
 
+    test('stop event identifies its workflow', () {
+      final event = WorkflowStopEvent(workflow_id: 'workflow-1');
+
+      expect(event.workflow_id, 'workflow-1');
+      expect(event.event_type, WorkflowStopEvent.type_id);
+    });
+
     test('ended event identifies its workflow', () {
       final event = WorkflowEndedEvent(workflow_id: 'workflow-1');
 
@@ -122,6 +131,7 @@ void main() {
       );
 
       expect(() => WorkflowEndedEvent(workflow_id: ' '), throwsArgumentError);
+      expect(() => WorkflowStopEvent(workflow_id: ' '), throwsArgumentError);
     });
   });
 
@@ -147,18 +157,29 @@ void main() {
       expect(state.version, 1);
     });
 
-    test('active and ended states retain original identity', () {
+    test('active, stop-requested and ended states retain identity', () {
       final identity = _create_identity();
 
       final active = WorkflowActiveState(identity: identity, version: 2);
 
-      final ended = WorkflowEndedState(identity: identity, version: 3);
+      final stop_requested = WorkflowStopRequestedState(
+        identity: identity,
+        version: 3,
+      );
+
+      final ended = WorkflowEndedState(identity: identity, version: 4);
 
       expect(active.identity, same(identity));
+      expect(stop_requested.identity, same(identity));
       expect(ended.identity, same(identity));
 
       expect(active.version, 2);
-      expect(ended.version, 3);
+      expect(stop_requested.version, 3);
+      expect(ended.version, 4);
+
+      expect(active.is_terminal, isFalse);
+      expect(stop_requested.is_terminal, isFalse);
+      expect(ended.is_terminal, isTrue);
     });
 
     test('rejects invalid versions', () {
@@ -181,6 +202,12 @@ void main() {
 
         expect(
           () => WorkflowEndedState(identity: identity, version: version),
+          throwsArgumentError,
+        );
+
+        expect(
+          () =>
+              WorkflowStopRequestedState(identity: identity, version: version),
           throwsArgumentError,
         );
       }

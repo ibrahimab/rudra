@@ -1,14 +1,15 @@
 import '../events/workflow_ended_event.dart';
-import '../states/workflow_active_state.dart';
 import '../states/workflow_ended_state.dart';
+import '../states/workflow_stop_requested_state.dart';
 import '../transitions/workflow_transition.dart';
 import '../workflow_transition_exception.dart';
+
 import 'workflow_behavior.dart';
 
-/// Defines Active + WorkflowEndedEvent -> Ended.
+/// Defines StopRequested + WorkflowEndedEvent -> Ended.
 ///
-/// Ensures that the terminal event belongs to the
-/// workflow being ended.
+/// Ensures the terminal outcome belongs to the workflow
+/// whose stop was explicitly requested.
 ///
 /// This transition does not perform filesystem operations.
 final class WorkflowEndedBehavior implements WorkflowBehavior {
@@ -17,13 +18,13 @@ final class WorkflowEndedBehavior implements WorkflowBehavior {
 
   @override
   WorkflowTransition<
-    WorkflowActiveState,
+    WorkflowStopRequestedState,
     WorkflowEndedEvent,
     WorkflowEndedState
   >
   get transition =>
       WorkflowTransition<
-        WorkflowActiveState,
+        WorkflowStopRequestedState,
         WorkflowEndedEvent,
         WorkflowEndedState
       >(

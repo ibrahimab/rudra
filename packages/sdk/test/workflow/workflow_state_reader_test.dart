@@ -238,18 +238,25 @@ void main() {
     test('rejects terminal history with unfinished projection', () async {
       final journal = _journal(runtime);
 
-      journal.add(
+      journal.addAll([
         _entry(
           runtime,
           sequence: 13,
           version: 3,
           event_id: 'event-3',
+          event: WorkflowStopEvent(workflow_id: 'workflow-1'),
+        ),
+        _entry(
+          runtime,
+          sequence: 14,
+          version: 4,
+          event_id: 'event-4',
           event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
         ),
-      );
+      ]);
 
       await expect_failure(
-        _snapshot(runtime, projected_version: 3, journal: journal),
+        _snapshot(runtime, projected_version: 4, journal: journal),
         WorkflowStateReadErrorCode.projection_mismatch,
       );
     });
@@ -329,15 +336,22 @@ void main() {
     test('accepts terminal history without a projection', () async {
       final journal = _journal(runtime);
 
-      journal.add(
+      journal.addAll([
         _entry(
           runtime,
           sequence: 13,
           version: 3,
           event_id: 'event-3',
+          event: WorkflowStopEvent(workflow_id: 'workflow-1'),
+        ),
+        _entry(
+          runtime,
+          sequence: 14,
+          version: 4,
+          event_id: 'event-4',
           event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
         ),
-      );
+      ]);
 
       final store = _FixtureHistoryStore(
         null,

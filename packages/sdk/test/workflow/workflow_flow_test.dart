@@ -9,10 +9,10 @@ import 'package:test/test.dart';
 /// All tests operate on in-memory domain objects only.
 void main() {
   group('WorkflowFlow', () {
-    test('standard flow registers the three lifecycle transitions', () {
+    test('standard flow registers the four lifecycle transitions', () {
       final flow = WorkflowFlow.standard();
 
-      expect(flow.transitions, hasLength(3));
+      expect(flow.transitions, hasLength(4));
 
       final cases = <(Type, Type, Type)>[
         (WorkflowInitialState, WorkflowStartEvent, WorkflowStartRequestedState),
@@ -21,7 +21,8 @@ void main() {
           WorkflowStartedEvent,
           WorkflowActiveState,
         ),
-        (WorkflowActiveState, WorkflowEndedEvent, WorkflowEndedState),
+        (WorkflowActiveState, WorkflowStopEvent, WorkflowStopRequestedState),
+        (WorkflowStopRequestedState, WorkflowEndedEvent, WorkflowEndedState),
       ];
 
       for (final (from_state, event_type, to_state) in cases) {
@@ -98,7 +99,7 @@ void main() {
 
       original.clear();
 
-      expect(flow.transitions, hasLength(3));
+      expect(flow.transitions, hasLength(4));
 
       expect(() => flow.transitions.clear(), throwsUnsupportedError);
 
@@ -121,6 +122,7 @@ void main() {
       final events = <WorkflowEvent>[
         _start_event(),
         WorkflowStartedEvent(identity: _identity()),
+        WorkflowStopEvent(workflow_id: 'workflow-1'),
         WorkflowEndedEvent(workflow_id: 'workflow-1'),
       ];
 
