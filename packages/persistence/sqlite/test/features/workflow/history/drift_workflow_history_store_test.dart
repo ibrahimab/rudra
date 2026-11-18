@@ -86,6 +86,7 @@ void main() {
         database: database,
         scope_id: scope_id,
         codec: runtime.codec,
+        state_reader: state_reader(),
       ),
       identity_provider: const _TestIdentityProvider(
         workflow_id: workflow_id,

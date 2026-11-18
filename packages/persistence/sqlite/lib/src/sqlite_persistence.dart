@@ -65,12 +65,27 @@ final class RudraSqlitePersistence {
         codec: _runtime.codec,
       );
 
-  /// Read boundary for accepted workflow commands.
-  late final WorkflowInbox workflow_inbox = DriftWorkflowInbox(
-    database: _database,
-    scope_id: _scope_id,
-    codec: _runtime.codec,
-  );
+  /// Constructs a workflow inbox for a trusted OS-user identity.
+  ///
+  /// Submission scope and authenticated OS-user identity are
+  /// deliberately separate inputs.
+  ///
+  /// The reader verifies the authoritative journal and
+  /// unfinished-workflow projection before returning history.
+  ///
+  /// Creating the inbox performs no workflow mutations.
+  WorkflowInbox workflow_inbox_for({required String os_user_id}) {
+    return DriftWorkflowInbox(
+      database: _database,
+      scope_id: _scope_id,
+      codec: _runtime.codec,
+      state_reader: WorkflowStateReader(
+        runtime: _runtime,
+        history_store: workflow_history_store,
+        os_user_id: os_user_id,
+      ),
+    );
+  }
 
   /// Atomic persistence boundary for committed workflow changes.
   ///

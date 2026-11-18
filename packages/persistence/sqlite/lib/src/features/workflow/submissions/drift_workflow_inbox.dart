@@ -30,14 +30,18 @@ import '../../../database/rudra_database.dart' hide WorkflowEvent;
 final class DriftWorkflowInbox implements WorkflowInbox {
   /// Creates a read-only workflow inbox for one trusted scope.
   ///
-  /// The injected codec must recognize every command type
-  /// accepted by the corresponding submission store.
+  /// [state_reader] is configured by trusted application
+  /// composition with the authenticated OS-user identity.
+  ///
+  /// The codec and reader must use the same workflow runtime.
   DriftWorkflowInbox({
     required RudraDatabase database,
     required String scope_id,
+    required WorkflowStateReader state_reader,
     WorkflowEventCodec? codec,
   }) : _database = database,
        _scope_id = _require_scope(scope_id),
+       _state_reader = state_reader,
        _codec = codec ?? WorkflowEventCodec.standard();
 
   /// Injected event codec shared with submission persistence.
@@ -48,6 +52,9 @@ final class DriftWorkflowInbox implements WorkflowInbox {
 
   /// Trusted submission scope handled by this inbox.
   final String _scope_id;
+
+  /// Reader configured with independently trusted OS-user identity.
+  final WorkflowStateReader _state_reader;
 
   /// Reads the oldest eligible pending submission.
   ///
@@ -123,10 +130,27 @@ final class DriftWorkflowInbox implements WorkflowInbox {
       );
     }
 
+    // Only stop commands need an established workflow history.
+    //
+    // The reader selects by trusted OS-user ownership, never by
+    // the workflow identifier supplied in the command.
+    //
+    // The committer must revalidate this snapshot transactionally
+    // because another processor may commit after this read.
+    final List<WorkflowEvent> committed_events;
+
+    if (event is WorkflowStopEvent) {
+      final active = await _state_reader.current();
+      committed_events = active?.events ?? const <WorkflowEvent>[];
+    } else {
+      committed_events = const <WorkflowEvent>[];
+    }
+
     return PendingWorkflowCommand(
       receipt: receipt,
       scope_id: submission.scope_id,
       command: event,
+      committed_events: committed_events,
     );
   }
 

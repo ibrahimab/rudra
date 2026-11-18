@@ -189,7 +189,7 @@ final class ProductWorkflowComposition {
       // All domain behavior remains in the SDK processor.
       final processor = WorkflowProcessor(
         runtime: runtime,
-        inbox: persistence.workflow_inbox,
+        inbox: persistence.workflow_inbox_for(os_user_id: os_user_id),
         identity_provider: _CliWorkflowIdentityProvider(os_user_id),
         committer: persistence.workflow_committer,
         rejector: persistence.workflow_rejector,

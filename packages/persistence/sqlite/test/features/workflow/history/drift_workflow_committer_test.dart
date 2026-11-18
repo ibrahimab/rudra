@@ -56,6 +56,11 @@ void main() {
       database: database,
       scope_id: scope_id,
       codec: codec,
+      state_reader: WorkflowStateReader(
+        runtime: runtime,
+        history_store: DriftWorkflowHistoryStore(database: database),
+        os_user_id: os_user_id,
+      ),
     );
 
     committer = DriftWorkflowCommitter(
@@ -282,6 +287,11 @@ void main() {
       database: database,
       scope_id: scope_id,
       codec: codec,
+      state_reader: WorkflowStateReader(
+        runtime: runtime,
+        history_store: DriftWorkflowHistoryStore(database: database),
+        os_user_id: os_user_id,
+      ),
     );
 
     expect(await restarted_inbox.next_pending(), isNull);

@@ -7,17 +7,34 @@ import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_inbox.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_quarantine_store.dart';
 import 'package:rudra_persistence_sqlite/src/features/workflow/submissions/drift_workflow_status_reader.dart';
+import 'package:rudra_persistence_sqlite/src/features/workflow/history/drift_workflow_history_store.dart';
 
 import 'package:test/test.dart';
 
 /// Verifies durable, read-only workflow inbox behavior.
 void main() {
   const scope_id = 'trusted-user';
+  const os_user_id = 'trusted-os-user';
 
   late Directory directory;
   late File database_file;
   late RudraDatabase database;
   late DriftWorkflowInbox inbox;
+  late WorkflowRuntime runtime;
+
+  /// Creates an inbox with a separately trusted OS-user identity.
+  DriftWorkflowInbox create_inbox() {
+    return DriftWorkflowInbox(
+      database: database,
+      scope_id: scope_id,
+      codec: runtime.codec,
+      state_reader: WorkflowStateReader(
+        runtime: runtime,
+        history_store: DriftWorkflowHistoryStore(database: database),
+        os_user_id: os_user_id,
+      ),
+    );
+  }
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('rudra-inbox-test-');
@@ -25,7 +42,8 @@ void main() {
     database_file = File('${directory.path}/rudra.db');
     database = RudraDatabase.file(database_file);
 
-    inbox = DriftWorkflowInbox(database: database, scope_id: scope_id);
+    runtime = WorkflowRuntime.standard();
+    inbox = create_inbox();
   });
 
   tearDown(() async {
@@ -81,6 +99,115 @@ void main() {
     expect(rows.every((row) => row.processing_state == 'pending'), isTrue);
   });
 
+  test('loads validated committed history for a stop command', () async {
+    final identity = WorkflowIdentity(
+      workflow_id: 'workflow-1',
+      os_user_id: os_user_id,
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final start = WorkflowStartEvent(
+      target_id: identity.target_id,
+      root: identity.root,
+    );
+
+    final started = WorkflowStartedEvent(identity: identity);
+
+    // Establish a valid journal and its ownership projection.
+    // This fixture tests inbox reading, not start processing.
+    await database.transaction(() async {
+      await database
+          .into(database.workflowEvents)
+          .insert(
+            WorkflowEventsCompanion.insert(
+              event_id: 'committed-start',
+              workflow_id: identity.workflow_id,
+              version: 1,
+              correlation_id: 'original-correlation',
+              event_type: start.event_type,
+              payload_json: runtime.codec.encode(start),
+              recorded_at_unix_ms: 1,
+            ),
+          );
+
+      await database
+          .into(database.workflowEvents)
+          .insert(
+            WorkflowEventsCompanion.insert(
+              event_id: 'committed-started',
+              workflow_id: identity.workflow_id,
+              os_user_id: const Value(os_user_id),
+              version: 2,
+              correlation_id: 'original-correlation',
+              causation_id: const Value('committed-start'),
+              event_type: started.event_type,
+              payload_json: runtime.codec.encode(started),
+              recorded_at_unix_ms: 2,
+            ),
+          );
+
+      await database
+          .into(database.unfinishedWorkflows)
+          .insert(
+            UnfinishedWorkflowsCompanion.insert(
+              os_user_id: os_user_id,
+              workflow_id: identity.workflow_id,
+              target_id: identity.target_id,
+              root_path: identity.root.value,
+              version: 2,
+            ),
+          );
+    });
+
+    final manager = EventManager(
+      store: DriftEventSubmissionStore(
+        database: database,
+        scope_id: scope_id,
+        codec: runtime.codec,
+      ),
+    );
+
+    final receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: identity.workflow_id),
+    );
+
+    final pending = await inbox.next_pending();
+
+    expect(pending, isNotNull);
+    expect(pending!.receipt.event_id, receipt.event_id);
+    expect(pending.command, isA<WorkflowStopEvent>());
+
+    expect(pending.committed_events, hasLength(2));
+    expect(pending.committed_events[0], isA<WorkflowStartEvent>());
+    expect(pending.committed_events[1], isA<WorkflowStartedEvent>());
+
+    final restored = WorkflowStateMachine(flow: runtime.flow)
+        .replay(pending.committed_events);
+
+    expect(restored, isA<WorkflowActiveState>());
+    expect(restored.version, 2);
+
+    final active = restored as WorkflowActiveState;
+
+    expect(active.identity.workflow_id, identity.workflow_id);
+    expect(active.identity.os_user_id, os_user_id);
+
+    // Inbox reads must not process or mutate a stop request.
+    expect(await database.select(database.workflowEvents).get(), hasLength(2));
+
+    expect(
+      await database.select(database.unfinishedWorkflows).get(),
+      hasLength(1),
+    );
+
+    final submissions = await database
+        .select(database.workflowSubmissions)
+        .get();
+
+    expect(submissions.single.processing_state, 'pending');
+  });
+
   test('filters by scope and pending processing status', () async {
     await submit('/foreign', submission_scope: 'another-user');
 
@@ -111,7 +238,7 @@ void main() {
     // the previously committed submission.
     database = RudraDatabase.file(database_file);
 
-    inbox = DriftWorkflowInbox(database: database, scope_id: scope_id);
+    inbox = create_inbox();
 
     final pending = await inbox.next_pending();
 
@@ -234,7 +361,7 @@ void main() {
 
     database = RudraDatabase.file(database_file);
 
-    inbox = DriftWorkflowInbox(database: database, scope_id: scope_id);
+    inbox = create_inbox();
 
     final recovered_status = await DriftWorkflowStatusReader(
       database: database,

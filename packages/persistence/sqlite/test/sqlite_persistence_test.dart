@@ -69,7 +69,7 @@ void main() {
         WorkflowProcessor make_processor(String workflow_id) {
           return WorkflowProcessor(
             runtime: runtime,
-            inbox: persistence.workflow_inbox,
+            inbox: persistence.workflow_inbox_for(os_user_id: os_user_id),
             identity_provider: _TestIdentityProvider(
               workflow_id: workflow_id,
               os_user_id: os_user_id,
