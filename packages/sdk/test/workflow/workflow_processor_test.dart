@@ -198,6 +198,44 @@ void main() {
     expect(committer.committed, isNull);
   });
 
+  test('persists stop conflicts detected during commitment', () async {
+    final cases = <(WorkflowCommitErrorCode, WorkflowRejectionCode)>[
+      (
+        WorkflowCommitErrorCode.workflow_not_active,
+        WorkflowRejectionCode.workflow_not_active,
+      ),
+      (
+        WorkflowCommitErrorCode.workflow_id_mismatch,
+        WorkflowRejectionCode.workflow_id_mismatch,
+      ),
+    ];
+
+    for (final (commit_code, rejection_code) in cases) {
+      final rejector = _FakeWorkflowRejector();
+
+      final processor = WorkflowProcessor(
+        runtime: runtime,
+        inbox: _FakeWorkflowInbox(
+          _stop_pending(requested_workflow_id: 'workflow-1', established: true),
+        ),
+        identity_provider: _FakeWorkflowIdentityProvider(),
+        committer: _RejectingWorkflowCommitter(commit_code),
+        rejector: rejector,
+        quarantiner: _FakeWorkflowQuarantiner(),
+      );
+
+      final result = await processor.process_next();
+
+      expect(result, isA<WorkflowProcessingRejected>());
+
+      final rejected = result as WorkflowProcessingRejected;
+
+      expect(rejected.code, rejection_code);
+      expect(rejector.calls, 1);
+      expect(rejector.last_code, rejection_code);
+    }
+  });
+
   test('does not request identity or commitment for an empty inbox', () async {
     final committer = _FakeWorkflowCommitter();
     final identity_provider = _FakeWorkflowIdentityProvider();

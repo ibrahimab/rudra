@@ -87,15 +87,20 @@ final class RudraSqlitePersistence {
     );
   }
 
-  /// Atomic persistence boundary for committed workflow changes.
+  /// Constructs a committer for an authenticated OS user.
   ///
-  /// Shares the same database and event codec as the
-  /// submission store and inbox.
-  late final WorkflowCommitter workflow_committer = DriftWorkflowCommitter(
-    database: _database,
-    scope_id: _scope_id,
-    runtime: _runtime,
-  );
+  /// The trusted identity is supplied independently of the
+  /// submission scope and the proposed workflow state.
+  ///
+  /// Start and Stop share the same runtime and database.
+  WorkflowCommitter workflow_committer_for({required String os_user_id}) {
+    return DriftWorkflowCommitter(
+      database: _database,
+      scope_id: _scope_id,
+      os_user_id: os_user_id,
+      runtime: _runtime,
+    );
+  }
 
   /// Read-only access to authoritative committed workflow history.
   ///

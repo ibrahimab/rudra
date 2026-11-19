@@ -95,6 +95,7 @@ void main() {
       committer: DriftWorkflowCommitter(
         database: database,
         scope_id: scope_id,
+        os_user_id: os_user_id,
         runtime: runtime,
       ),
       rejector: DriftWorkflowRejectionStore(

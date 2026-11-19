@@ -66,6 +66,7 @@ void main() {
     committer = DriftWorkflowCommitter(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
       runtime: runtime,
     );
   });
@@ -167,6 +168,282 @@ void main() {
 
     expect(restored, isA<WorkflowActiveState>());
     expect(restored.version, 2);
+  });
+
+  test('atomically ends a workflow and releases ownership', () async {
+    final start_receipt = await submit('/workspace');
+
+    expect(
+      await processor('workflow-1').process_next(),
+      isA<WorkflowProcessingCommitted>(),
+    );
+
+    final stop_receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
+    );
+
+    final result = await processor('unused').process_next();
+
+    expect(result, isA<WorkflowProcessingCommitted>());
+
+    final plan = (result as WorkflowProcessingCommitted).plan;
+
+    expect(plan.previous_state, isA<WorkflowActiveState>());
+    expect(plan.previous_state.version, 2);
+    expect(plan.resulting_state, isA<WorkflowEndedState>());
+    expect(plan.resulting_state.version, 4);
+
+    final history = await database.select(database.workflowEvents).get()
+      ..sort((a, b) => a.version.compareTo(b.version));
+
+    expect(history, hasLength(4));
+
+    expect(history.map((event) => event.version), orderedEquals([1, 2, 3, 4]));
+
+    expect(
+      history.map((event) => event.event_type),
+      orderedEquals([
+        WorkflowStartEvent.type_id,
+        WorkflowStartedEvent.type_id,
+        WorkflowStopEvent.type_id,
+        WorkflowEndedEvent.type_id,
+      ]),
+    );
+
+    // Both original events retain their identities.
+    expect(history[0].event_id, start_receipt.event_id);
+    expect(history[1].causation_id, start_receipt.event_id);
+
+    // The accepted stop command becomes journal version 3.
+    expect(history[2].event_id, stop_receipt.event_id);
+    expect(history[2].correlation_id, stop_receipt.correlation_id);
+
+    // The terminal outcome is caused by the accepted stop.
+    expect(history[3].causation_id, stop_receipt.event_id);
+    expect(history[3].correlation_id, stop_receipt.correlation_id);
+
+    // Only the Started outcome carries the indexed owner.
+    expect(history[0].os_user_id, isNull);
+    expect(history[1].os_user_id, os_user_id);
+    expect(history[2].os_user_id, isNull);
+    expect(history[3].os_user_id, isNull);
+
+    final replayed = WorkflowStateMachine(flow: runtime.flow).replay(
+      history.map(
+        (event) => codec.decode(
+          event_type: event.event_type,
+          payload_json: event.payload_json,
+        ),
+      ),
+    );
+
+    expect(replayed, isA<WorkflowEndedState>());
+    expect(replayed.version, 4);
+
+    // Terminal commitment releases the unfinished projection.
+    expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
+
+    final state = await WorkflowStateReader(
+      runtime: runtime,
+      history_store: DriftWorkflowHistoryStore(database: database),
+      os_user_id: os_user_id,
+    ).current();
+
+    expect(state, isNull);
+
+    final status = await DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    ).status_for(stop_receipt);
+
+    expect(status, isNotNull);
+    expect(status!.state, WorkflowSubmissionState.completed);
+
+    expect(await inbox.next_pending(), isNull);
+  });
+
+  test('rolls back stop when terminal serialization fails', () async {
+    await submit('/workspace');
+
+    expect(
+      await processor('workflow-1').process_next(),
+      isA<WorkflowProcessingCommitted>(),
+    );
+
+    final receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
+    );
+
+    final pending = await inbox.next_pending();
+
+    expect(pending, isNotNull);
+
+    final machine = WorkflowStateMachine(flow: runtime.flow);
+    final command = pending!.command;
+    final outcome = WorkflowEndedEvent(workflow_id: 'workflow-1');
+
+    final plan = WorkflowProcessingPlan(
+      submission: pending,
+      previous_state: machine.replay(pending.committed_events),
+      resulting_state: machine.replay([
+        ...pending.committed_events,
+        command,
+        outcome,
+      ]),
+      events_to_append: [command, outcome],
+    );
+
+    // Retain all historical serializers but deliberately omit
+    // the terminal outcome serializer.
+    //
+    // The transaction must fail after version 3 is inserted,
+    // then roll that insertion back.
+    final incomplete_codec = WorkflowEventCodec(
+      serializers: registry.serializers.where(
+        (serializer) => serializer.dart_type != WorkflowEndedEvent,
+      ),
+    );
+
+    final failing_committer = DriftWorkflowCommitter(
+      database: database,
+      scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
+      codec: incomplete_codec,
+    );
+
+    await expectLater(failing_committer.commit(plan), throwsUnsupportedError);
+
+    // The original active history is unchanged.
+    final history = await database.select(database.workflowEvents).get();
+
+    expect(history, hasLength(2));
+    expect(history.map((event) => event.version), orderedEquals([1, 2]));
+
+    // Ownership is still reserved.
+    final unfinished = await database
+        .select(database.unfinishedWorkflows)
+        .get();
+
+    expect(unfinished, hasLength(1));
+    expect(unfinished.single.workflow_id, 'workflow-1');
+    expect(unfinished.single.version, 2);
+
+    // A failed stop cannot be reported as completed.
+    final status = await DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    ).status_for(receipt);
+
+    expect(status, isNotNull);
+    expect(status!.state, WorkflowSubmissionState.pending);
+
+    // The accepted request remains available for retry.
+    final retry = await inbox.next_pending();
+
+    expect(retry, isNotNull);
+    expect(retry!.receipt.event_id, receipt.event_id);
+  });
+
+  test('rejects a stale second stop after terminal commitment', () async {
+    await submit('/workspace');
+
+    expect(
+      await processor('workflow-1').process_next(),
+      isA<WorkflowProcessingCommitted>(),
+    );
+
+    final first_receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
+    );
+
+    final second_receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
+    );
+
+    // Simulate a second processor having read the active
+    // workflow before the first processor commits Stop.
+    final snapshot = await WorkflowStateReader(
+      runtime: runtime,
+      history_store: DriftWorkflowHistoryStore(database: database),
+      os_user_id: os_user_id,
+    ).current();
+
+    expect(snapshot, isNotNull);
+
+    final command = WorkflowStopEvent(workflow_id: 'workflow-1');
+    final outcome = WorkflowEndedEvent(workflow_id: 'workflow-1');
+
+    final pending = PendingWorkflowCommand(
+      receipt: second_receipt,
+      scope_id: scope_id,
+      command: command,
+      committed_events: snapshot!.events,
+    );
+
+    final stale_plan = WorkflowProcessingPlan(
+      submission: pending,
+      previous_state: snapshot.state,
+      resulting_state: WorkflowStateMachine(flow: runtime.flow)
+          .replay([...snapshot.events, command, outcome]),
+      events_to_append: [command, outcome],
+    );
+
+    // First processor commits the terminal transition.
+    final first_result = await processor('unused').process_next();
+
+    expect(first_result, isA<WorkflowProcessingCommitted>());
+    expect(
+      (first_result as WorkflowProcessingCommitted)
+          .plan
+          .submission
+          .receipt
+          .event_id,
+      first_receipt.event_id,
+    );
+
+    // The second proposal still references the old active state.
+    // The committer must not append a second terminal history.
+    await expectLater(
+      committer.commit(stale_plan),
+      throwsA(
+        isA<WorkflowCommitException>().having(
+          (error) => error.code,
+          'code',
+          WorkflowCommitErrorCode.workflow_not_active,
+        ),
+      ),
+    );
+
+    // The second submission is still pending because the
+    // rejected transaction must not resolve it implicitly.
+    final status_reader = DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    );
+
+    final before = await status_reader.status_for(second_receipt);
+
+    expect(before!.state, WorkflowSubmissionState.pending);
+
+    // Reprocessing reconstructs the current authoritative
+    // state and records a durable business rejection.
+    final second_result = await processor('unused').process_next();
+
+    expect(second_result, isA<WorkflowProcessingRejected>());
+    expect(
+      (second_result as WorkflowProcessingRejected).code,
+      WorkflowRejectionCode.workflow_not_active,
+    );
+
+    final after = await status_reader.status_for(second_receipt);
+
+    expect(after!.state, WorkflowSubmissionState.rejected);
+    expect(after.rejection_code, WorkflowRejectionCode.workflow_not_active);
+
+    expect(await database.select(database.workflowEvents).get(), hasLength(4));
+    expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
+    expect(await inbox.next_pending(), isNull);
   });
 
   test('rejects repeat commitment of a completed submission', () async {
@@ -538,6 +815,7 @@ void main() {
     final failing_committer = DriftWorkflowCommitter(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
       runtime: runtime,
       codec: incomplete_codec,
     );
@@ -618,46 +896,31 @@ void main() {
       isA<WorkflowProcessingCommitted>(),
     );
 
-    final original = await database.select(database.workflowEvents).get();
-    final correlation_id = original.first.correlation_id;
-
-    // Simulate a future atomic workflow-end commitment.
-    // Production stop processing is not implemented yet.
-    await database.transaction(() async {
-      final events = <WorkflowEvent>[
-        WorkflowStopEvent(workflow_id: 'workflow-1'),
-        WorkflowEndedEvent(workflow_id: 'workflow-1'),
-      ];
-
-      for (final (index, event) in events.indexed) {
-        await database
-            .into(database.workflowEvents)
-            .insert(
-              WorkflowEventsCompanion.insert(
-                event_id: 'workflow-1-terminal-${index + 1}',
-                workflow_id: 'workflow-1',
-                version: index + 3,
-                correlation_id: correlation_id,
-                event_type: event.event_type,
-                payload_json: codec.encode(event),
-                recorded_at_unix_ms: DateTime.now()
-                    .toUtc()
-                    .millisecondsSinceEpoch,
-              ),
-            );
-      }
-
-      await database.delete(database.unfinishedWorkflows).go();
-    });
+    final stop_receipt = await manager.trigger(
+      WorkflowStopEvent(workflow_id: 'workflow-1'),
+    );
 
     expect(
-      await WorkflowStateReader(
-        runtime: runtime,
-        history_store: DriftWorkflowHistoryStore(database: database),
-        os_user_id: os_user_id,
-      ).current(),
-      isNull,
+      await processor('unused').process_next(),
+      isA<WorkflowProcessingCommitted>(),
     );
+
+    final stop_status = await DriftWorkflowStatusReader(
+      database: database,
+      scope_id: scope_id,
+    ).status_for(stop_receipt);
+
+    expect(stop_status!.state, WorkflowSubmissionState.completed);
+
+    // Terminal workflows are no longer active, but their
+    // committed history remains available for replay.
+    final active = await WorkflowStateReader(
+      runtime: runtime,
+      history_store: DriftWorkflowHistoryStore(database: database),
+      os_user_id: os_user_id,
+    ).current();
+
+    expect(active, isNull);
 
     await submit('/second');
 
@@ -666,16 +929,83 @@ void main() {
       isA<WorkflowProcessingCommitted>(),
     );
 
-    // The old journal is preserved and the new workflow
-    // receives the ownership reservation.
     final history = await database.select(database.workflowEvents).get();
+
+    expect(history, hasLength(6));
+
+    expect(
+      history
+          .where((event) => event.workflow_id == 'workflow-1')
+          .map((event) => event.event_type),
+      orderedEquals([
+        WorkflowStartEvent.type_id,
+        WorkflowStartedEvent.type_id,
+        WorkflowStopEvent.type_id,
+        WorkflowEndedEvent.type_id,
+      ]),
+    );
+
+    expect(
+      history
+          .where((event) => event.workflow_id == 'workflow-2')
+          .map((event) => event.event_type),
+      orderedEquals([WorkflowStartEvent.type_id, WorkflowStartedEvent.type_id]),
+    );
+
     final reservations = await database
         .select(database.unfinishedWorkflows)
         .get();
 
-    expect(history, hasLength(6));
     expect(reservations, hasLength(1));
+    expect(reservations.single.os_user_id, os_user_id);
     expect(reservations.single.workflow_id, 'workflow-2');
+  });
+
+  test('refuses workflow ownership for a different OS user', () async {
+    await submit('/workspace');
+
+    final pending = await inbox.next_pending();
+
+    expect(pending, isNotNull);
+
+    final command = pending!.command;
+
+    final identity = WorkflowIdentity(
+      workflow_id: 'workflow-1',
+      os_user_id: 'different-os-user',
+      target_id: 'local-macos',
+      root: TargetPath('/workspace'),
+    );
+
+    final outcome = WorkflowStartedEvent(identity: identity);
+
+    final plan = WorkflowProcessingPlan(
+      submission: pending,
+      previous_state: const WorkflowInitialState(),
+      resulting_state: WorkflowStateMachine(flow: runtime.flow)
+          .replay([command, outcome]),
+      events_to_append: [command, outcome],
+    );
+
+    await expectLater(
+      committer.commit(plan),
+      throwsA(
+        isA<WorkflowCommitException>().having(
+          (error) => error.code,
+          'code',
+          WorkflowCommitErrorCode.invalid_plan,
+        ),
+      ),
+    );
+
+    expect(await database.select(database.workflowEvents).get(), isEmpty);
+    expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
+
+    final submission = await database
+        .select(database.workflowSubmissions)
+        .getSingle();
+
+    expect(submission.processing_state, 'pending');
   });
 }
 

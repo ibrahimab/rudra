@@ -6,6 +6,12 @@ enum WorkflowCommitErrorCode {
   /// An OS user already owns an unfinished workflow.
   ownership_conflict,
 
+  /// A stop request no longer has an active workflow.
+  workflow_not_active,
+
+  /// A stop request targets a different active workflow.
+  workflow_id_mismatch,
+
   /// The processing proposal violates the commit contract.
   invalid_plan,
 }

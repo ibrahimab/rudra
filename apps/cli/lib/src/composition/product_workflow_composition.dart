@@ -191,7 +191,7 @@ final class ProductWorkflowComposition {
         runtime: runtime,
         inbox: persistence.workflow_inbox_for(os_user_id: os_user_id),
         identity_provider: _CliWorkflowIdentityProvider(os_user_id),
-        committer: persistence.workflow_committer,
+        committer: persistence.workflow_committer_for(os_user_id: os_user_id),
         rejector: persistence.workflow_rejector,
         quarantiner: persistence.workflow_quarantiner,
       );

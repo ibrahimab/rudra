@@ -195,16 +195,22 @@ final class WorkflowProcessor {
     try {
       await _committer.commit(plan);
     } on WorkflowCommitException catch (error) {
-      // Only a confirmed ownership conflict is currently
-      // classified as a durable business rejection.
-      if (error.code != WorkflowCommitErrorCode.ownership_conflict) {
+      // Only confirmed business conflicts may become durable
+      // rejections. Integrity and infrastructure failures propagate.
+      final rejection_code = switch (error.code) {
+        WorkflowCommitErrorCode.ownership_conflict =>
+          WorkflowRejectionCode.ownership_conflict,
+        WorkflowCommitErrorCode.workflow_not_active =>
+          WorkflowRejectionCode.workflow_not_active,
+        WorkflowCommitErrorCode.workflow_id_mismatch =>
+          WorkflowRejectionCode.workflow_id_mismatch,
+        _ => null,
+      };
+
+      if (rejection_code == null) {
         rethrow;
       }
 
-      const rejection_code = WorkflowRejectionCode.ownership_conflict;
-
-      // If rejection persistence fails, the exception propagates.
-      // Never report a rejected result before durable commitment.
       await _rejector.reject(submission: pending, code: rejection_code);
 
       return WorkflowProcessingRejected(
