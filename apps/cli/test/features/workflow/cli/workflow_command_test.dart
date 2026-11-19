@@ -6,7 +6,7 @@ import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-/// Verifies explicit workflow creation through the product CLI.
+/// Verifies explicit workflow lifecycle actions through the CLI.
 ///
 /// Tests use real SQLite persistence and SDK workflow processing,
 /// but never inspect or modify an actual filesystem target.
@@ -108,6 +108,101 @@ void main() {
     expect(restored!.identity.workflow_id, first!.identity.workflow_id);
     expect(restored.version, first.version);
     expect(restored.identity.root.value, first.identity.root.value);
+  });
+
+  test('explicit stop commits and allows a new workflow', () async {
+    expect(
+      await create_cli(StringBuffer()).run(['workflow', 'start', '/fixture']),
+      RudraExitCode.success.value,
+    );
+
+    final original = await workflow_composition.current();
+
+    expect(original, isNotNull);
+
+    final output = StringBuffer();
+
+    final status = await create_cli(output).run(['workflow', 'stop']);
+
+    expect(status, RudraExitCode.success.value);
+    expect(output.toString(), contains('Workflow: ENDED'));
+    expect(
+      output.toString(),
+      contains('ID: ${original!.identity.workflow_id}'),
+    );
+
+    // Stop preserves persistent storage but releases the
+    // user's unfinished-workflow reservation.
+    expect(database_file.existsSync(), isTrue);
+    expect(await workflow_composition.current(), isNull);
+
+    // A new explicit Start may establish another workflow.
+    expect(
+      await create_cli(StringBuffer()).run(['workflow', 'start', '/fixture']),
+      RudraExitCode.success.value,
+    );
+
+    final next = await workflow_composition.current();
+
+    expect(next, isNotNull);
+    expect(next!.version, 2);
+    expect(next.identity.workflow_id, isNot(original.identity.workflow_id));
+  });
+
+  test('stop without a workflow does not create persistence', () async {
+    final output = StringBuffer();
+    final errors = StringBuffer();
+
+    final status = await create_cli(
+      output,
+      error_output: errors,
+    ).run(['workflow', 'stop']);
+
+    expect(status, RudraExitCode.workflow_conflict.value);
+    expect(errors.toString(), contains('No active workflow to stop.'));
+    expect(output.toString(), isEmpty);
+    expect(database_file.existsSync(), isFalse);
+  });
+
+  test('repeated stop reports an expected workflow conflict', () async {
+    expect(
+      await create_cli(StringBuffer()).run(['workflow', 'start']),
+      RudraExitCode.success.value,
+    );
+
+    expect(
+      await create_cli(StringBuffer()).run(['workflow', 'stop']),
+      RudraExitCode.success.value,
+    );
+
+    final errors = StringBuffer();
+
+    final status = await create_cli(
+      StringBuffer(),
+      error_output: errors,
+    ).run(['workflow', 'stop']);
+
+    expect(status, RudraExitCode.workflow_conflict.value);
+    expect(errors.toString(), contains('No active workflow to stop.'));
+
+    expect(await workflow_composition.current(), isNull);
+    expect(database_file.existsSync(), isTrue);
+  });
+
+  test('stop rejects unexpected arguments without persistence', () async {
+    final errors = StringBuffer();
+
+    final status = await create_cli(
+      StringBuffer(),
+      error_output: errors,
+    ).run(['workflow', 'stop', '/fixture']);
+
+    expect(status, RudraExitCode.invalid_usage.value);
+    expect(
+      errors.toString(),
+      contains('Workflow stop does not accept arguments.'),
+    );
+    expect(database_file.existsSync(), isFalse);
   });
 
   test('invalid root never initializes persistence', () async {

@@ -43,10 +43,14 @@ enum RudraExitCode {
   /// The command was invoked with invalid arguments or options.
   invalid_usage(64),
 
-  /// A requested workflow cannot be created because an
-  /// unfinished workflow already occupies the user's slot.
+  /// A requested workflow transition conflicts with the
+  /// current durable lifecycle state.
   ///
-  /// Exit 73 follows BSD EX_CANTCREAT.
+  /// Examples include starting when a workflow is already
+  /// active or stopping when no active workflow exists.
+  ///
+  /// Exit 73 follows BSD EX_CANTCREAT and is retained as
+  /// Rudra's existing workflow-conflict exit status.
   workflow_conflict(73),
 
   /// A required input file, manifest, or repository resource is missing.

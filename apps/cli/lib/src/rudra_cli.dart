@@ -207,6 +207,7 @@ final class RudraCli {
               target_id: composition.sdk.target_id,
               root: root,
             ),
+            stop_workflow: workflows.stop,
             output: presentation_output,
             error_output: diagnostic_output,
           ),

@@ -5,6 +5,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:uuid/uuid.dart';
 
 import '../features/workflow/application/workflow_start_exception.dart';
+import '../features/workflow/application/workflow_stop_exception.dart';
 
 /// Composes persistent workflow services for the product CLI.
 ///
@@ -258,6 +259,129 @@ final class ProductWorkflowComposition {
                   latest.state == WorkflowSubmissionState.pending) {
                 throw StateError(
                   'Workflow submission remains pending without '
+                  'an available processor.',
+                );
+              }
+            }
+
+            continue;
+        }
+      }
+    } finally {
+      await persistence.close();
+    }
+  }
+
+  /// Explicitly stops the currently active workflow.
+  ///
+  /// Returns the established workflow ID only after the
+  /// accepted stop submission is durably completed.
+  ///
+  /// Restoration supplies the workflow identity from the
+  /// trusted owner's committed history, not CLI arguments.
+  ///
+  /// No database is created when none exists. A missing or
+  /// changed active workflow produces a typed business failure.
+  ///
+  /// Filesystem inspection and cleanup are never triggered.
+  Future<String> stop() async {
+    if (!await database_file.exists()) {
+      throw const WorkflowStopRejectedException(
+        code: WorkflowRejectionCode.workflow_not_active,
+      );
+    }
+
+    final os_user_id = await _trusted_os_user_id();
+    final runtime = WorkflowRuntime.standard();
+
+    final persistence = _open_persistence(
+      runtime: runtime,
+      os_user_id: os_user_id,
+    );
+
+    try {
+      final reader = WorkflowStateReader(
+        runtime: runtime,
+        history_store: persistence.workflow_history_store,
+        os_user_id: os_user_id,
+      );
+
+      final active = await reader.current();
+
+      if (active == null) {
+        throw const WorkflowStopRejectedException(
+          code: WorkflowRejectionCode.workflow_not_active,
+        );
+      }
+
+      final workflow_id = active.state.identity.workflow_id;
+
+      // Only this explicit application action submits Stop.
+      // Reading current state or opening Explorer never does.
+      final manager = EventManager(store: persistence.event_submission_store);
+
+      final receipt = await manager.trigger(
+        WorkflowStopEvent(workflow_id: workflow_id),
+      );
+
+      final processor = WorkflowProcessor(
+        runtime: runtime,
+        inbox: persistence.workflow_inbox_for(os_user_id: os_user_id),
+        identity_provider: _CliWorkflowIdentityProvider(os_user_id),
+        committer: persistence.workflow_committer_for(os_user_id: os_user_id),
+        rejector: persistence.workflow_rejector,
+        quarantiner: persistence.workflow_quarantiner,
+      );
+
+      // Observe our exact durable submission, even if other
+      // submissions must be processed before it.
+      while (true) {
+        final resolution = await persistence.workflow_status_reader.status_for(
+          receipt,
+        );
+
+        if (resolution == null) {
+          throw StateError('Accepted stop submission is missing.');
+        }
+
+        switch (resolution.state) {
+          case WorkflowSubmissionState.completed:
+            // Stop completion is transactionally coupled to
+            // the terminal outcome and ownership release.
+            return workflow_id;
+
+          case WorkflowSubmissionState.rejected:
+            final code = resolution.rejection_code;
+
+            if (code == WorkflowRejectionCode.workflow_not_active ||
+                code == WorkflowRejectionCode.workflow_id_mismatch) {
+              throw WorkflowStopRejectedException(code: code!);
+            }
+
+            throw StateError(
+              'Workflow stop rejected: '
+              '${code?.name ?? "unknown"}.',
+            );
+
+          case WorkflowSubmissionState.quarantined:
+            throw StateError(
+              'Workflow stop quarantined: '
+              '${resolution.quarantine_code?.name ?? "unknown"}.',
+            );
+
+          case WorkflowSubmissionState.pending:
+            final processed = await processor.process_next();
+
+            if (processed is WorkflowProcessingIdle) {
+              // Another processor could have resolved the
+              // submission between the two reads.
+              final latest = await persistence.workflow_status_reader
+                  .status_for(receipt);
+
+              if (latest == null ||
+                  latest.state == WorkflowSubmissionState.pending) {
+                throw StateError(
+                  'Workflow stop remains pending without '
                   'an available processor.',
                 );
               }

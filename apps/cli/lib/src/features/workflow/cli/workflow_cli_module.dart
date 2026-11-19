@@ -4,6 +4,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import '../../../core/cli/rudra_cli_module.dart';
 import '../../../core/cli/rudra_exit_code.dart';
 import '../application/workflow_start_exception.dart';
+import '../application/workflow_stop_exception.dart';
 
 /// Registers explicit workflow lifecycle commands.
 ///
@@ -17,6 +18,7 @@ final class WorkflowCliModule implements RudraCliModule {
   WorkflowCliModule({
     required this.working_directory,
     required this.start_workflow,
+    required this.stop_workflow,
     required this.output,
     required this.error_output,
   });
@@ -26,6 +28,9 @@ final class WorkflowCliModule implements RudraCliModule {
 
   /// SDK-backed explicit workflow-start operation.
   final Future<WorkflowActiveState> Function(TargetPath) start_workflow;
+
+  /// SDK-backed explicit workflow-stop operation.
+  final Future<String> Function() stop_workflow;
 
   /// Output destination supplied by application composition.
   final StringSink output;
@@ -42,6 +47,7 @@ final class WorkflowCliModule implements RudraCliModule {
       _WorkflowCommand(
         working_directory: working_directory,
         start_workflow: start_workflow,
+        stop_workflow: stop_workflow,
         output: output,
         error_output: error_output,
       ),
@@ -51,10 +57,11 @@ final class WorkflowCliModule implements RudraCliModule {
 
 /// Groups explicit workflow actions under `rudra workflow`.
 final class _WorkflowCommand extends Command<int> {
-  /// Registers the supported workflow-start action.
+  /// Registers explicit start and stop actions.
   _WorkflowCommand({
     required TargetPath working_directory,
     required Future<WorkflowActiveState> Function(TargetPath) start_workflow,
+    required Future<String> Function() stop_workflow,
     required StringSink output,
     required StringSink error_output,
   }) {
@@ -66,6 +73,14 @@ final class _WorkflowCommand extends Command<int> {
         error_output: error_output,
       ),
     );
+
+    addSubcommand(
+      _WorkflowStopCommand(
+        stop_workflow: stop_workflow,
+        output: output,
+        error_output: error_output,
+      ),
+    );
   }
 
   @override
@@ -73,6 +88,74 @@ final class _WorkflowCommand extends Command<int> {
 
   @override
   String get description => 'Manage explicit workflow actions.';
+}
+
+/// Explicitly requests terminal commitment of an active workflow.
+///
+/// The command delegates trusted identity resolution,
+/// submission processing, and transactional persistence
+/// to application composition.
+///
+/// No lifecycle outcome is inferred from merely accepting
+/// a command submission.
+final class _WorkflowStopCommand extends Command<int> {
+  /// Creates the explicit workflow-stop action.
+  _WorkflowStopCommand({
+    required Future<String> Function() stop_workflow,
+    required StringSink output,
+    required StringSink error_output,
+  }) : _stop_workflow = stop_workflow,
+       _output = output,
+       _error_output = error_output;
+
+  final Future<String> Function() _stop_workflow;
+  final StringSink _output;
+  final StringSink _error_output;
+
+  @override
+  String get name => 'stop';
+
+  @override
+  String get description => 'Explicitly stop the active workflow.';
+
+  @override
+  String get invocation => 'rudra workflow stop';
+
+  /// Processes the stop action after validating invocation.
+  ///
+  /// Returns success only after durable terminal commitment.
+  /// Expected lifecycle conflicts use the workflow exit code.
+  @override
+  Future<int> run() async {
+    final arguments = argResults?.rest ?? const <String>[];
+
+    if (arguments.isNotEmpty) {
+      throw UsageException('Workflow stop does not accept arguments.', usage);
+    }
+
+    final String workflow_id;
+
+    try {
+      workflow_id = await _stop_workflow();
+    } on WorkflowStopRejectedException catch (error) {
+      final message = switch (error.code) {
+        WorkflowRejectionCode.workflow_not_active =>
+          'No active workflow to stop.',
+        WorkflowRejectionCode.workflow_id_mismatch =>
+          'Active workflow changed before stop completed.',
+        WorkflowRejectionCode.ownership_conflict =>
+          'Workflow stop rejected due to an ownership conflict.',
+      };
+
+      _error_output.writeln(message);
+
+      return RudraExitCode.workflow_conflict.value;
+    }
+
+    _output.writeln('Workflow: ENDED  |  ID: $workflow_id');
+
+    return RudraExitCode.success.value;
+  }
 }
 
 /// Explicitly requests establishment of a persistent workflow.
