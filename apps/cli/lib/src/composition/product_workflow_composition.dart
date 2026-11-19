@@ -289,6 +289,12 @@ final class ProductWorkflowComposition {
       );
     }
 
+    if (!await database_file.exists()) {
+      throw const WorkflowStopRejectedException(
+        code: WorkflowRejectionCode.workflow_not_active,
+      );
+    }
+
     final os_user_id = await _trusted_os_user_id();
     final runtime = WorkflowRuntime.standard();
 
