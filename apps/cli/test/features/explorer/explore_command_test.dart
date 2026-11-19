@@ -447,6 +447,75 @@ void main() {
         await directory.delete(recursive: true);
       }
     });
+
+    test('X durably stops the active workflow from Explorer', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rudra-explorer-stop-key-',
+      );
+
+      try {
+        final database_file = File('${directory.path}/rudra.sqlite');
+
+        final workflows = ProductWorkflowComposition(
+          database_file: database_file,
+          os_user_id_provider: () async => 'test-os-user',
+        );
+
+        // Establish the workflow through the normal CLI action.
+        final starter = _Fixture(children: {'/fixture': []})
+          ..workflow_composition = workflows;
+
+        expect(
+          await starter.create_cli().run(['workflow', 'start']),
+          RudraExitCode.success.value,
+        );
+
+        final original = await workflows.current();
+
+        expect(original, isNotNull);
+
+        // Explorer restores the workflow and processes explicit X.
+        final explorer = _Fixture(children: {'/fixture': []}, keys: 'xq')
+          ..workflow_composition = workflows;
+
+        expect(
+          await explorer.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
+
+        final screen = explorer.terminal.output_buffer.toString();
+
+        expect(screen, contains('Workflow: ACTIVE'));
+        expect(screen, contains('ID: ${original!.identity.workflow_id}'));
+        expect(screen, contains('X Stop Workflow'));
+        expect(screen, contains('Workflow: NOT LOADED'));
+        expect(screen, contains('S Start Workflow'));
+
+        // The Stop is committed, not merely submitted.
+        expect(await workflows.current(), isNull);
+        expect(database_file.existsSync(), isTrue);
+        expect(explorer.terminal.restored, isTrue);
+
+        // A new Explorer invocation must remain read-only.
+        final reopened = _Fixture(children: {'/fixture': []})
+          ..workflow_composition = workflows;
+
+        expect(
+          await reopened.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
+
+        expect(
+          reopened.terminal.output_buffer.toString(),
+          contains('Workflow: NOT LOADED'),
+        );
+
+        expect(await workflows.current(), isNull);
+        expect(reopened.terminal.restored, isTrue);
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    });
   });
 }
 

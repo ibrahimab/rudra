@@ -13,7 +13,7 @@ void main() {
   group('TerminalInput', () {
     test('decodes supported navigation keys', () async {
       final keys = await _decode([
-        ascii.encode('\x1B[A\x1B[B\x1B[D\r\b\x7FqQsS'),
+        ascii.encode('\x1B[A\x1B[B\x1B[D\r\b\x7FqQsSxX'),
       ]);
 
       expect(
@@ -29,6 +29,8 @@ void main() {
           ExplorerKey.quit,
           ExplorerKey.start_workflow,
           ExplorerKey.start_workflow,
+          ExplorerKey.stop_workflow,
+          ExplorerKey.stop_workflow,
         ]),
       );
     });
@@ -143,6 +145,15 @@ void main() {
       expect(
         keys,
         orderedEquals([ExplorerKey.start_workflow, ExplorerKey.start_workflow]),
+      );
+    });
+
+    test('X is an explicit workflow-stop action', () async {
+      final keys = await _decode([ascii.encode('xX')]);
+
+      expect(
+        keys,
+        orderedEquals([ExplorerKey.stop_workflow, ExplorerKey.stop_workflow]),
       );
     });
   });

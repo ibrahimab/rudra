@@ -27,6 +27,12 @@ enum ExplorerKey {
   /// Authorization and processing belong to application services.
   start_workflow,
 
+  /// Explicitly requests termination of the loaded workflow.
+  ///
+  /// The runner must bind this action to the workflow ID
+  /// already displayed to the user.
+  stop_workflow,
+
   /// Ends the current interactive explorer.
   quit,
 }
@@ -41,6 +47,7 @@ enum ExplorerKey {
 /// - Enter (CR or LF).
 /// - Backspace (BS or DEL).
 /// - Lowercase and uppercase S.
+/// - Lowercase and uppercase X.
 /// - Lowercase and uppercase Q.
 /// - Ctrl+C (ETX, 0x03), treated as a quit request.
 ///
@@ -211,6 +218,7 @@ final class TerminalInput {
       0x0A || 0x0D => ExplorerKey.open,
       0x08 || 0x7F => ExplorerKey.back,
       0x73 || 0x53 => ExplorerKey.start_workflow,
+      0x78 || 0x58 => ExplorerKey.stop_workflow,
       0x03 || 0x71 || 0x51 => ExplorerKey.quit,
       _ => null,
     };

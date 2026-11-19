@@ -290,6 +290,10 @@ final class RudraCli {
               error_output: diagnostic_output,
               active_workflow: active_workflow,
               start_workflow: workflows == null ? null : start_from_explorer,
+              stop_workflow: workflows == null
+                  ? null
+                  : (workflow_id) =>
+                        workflows.stop(expected_workflow_id: workflow_id),
             );
           },
         ),

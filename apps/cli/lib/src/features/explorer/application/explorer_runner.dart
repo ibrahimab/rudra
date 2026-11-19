@@ -70,6 +70,7 @@ final class ExplorerRunner {
     WorkflowActiveState? active_workflow,
     EventSubmissionReceipt? pending_submission,
     Future<WorkflowActiveState> Function(TargetPath)? start_workflow,
+    Future<String> Function(String workflow_id)? stop_workflow,
   }) : _controller = controller,
        _terminal = terminal,
        _renderer = renderer,
@@ -77,7 +78,8 @@ final class ExplorerRunner {
        _presenter = presenter,
        _active_workflow = active_workflow,
        _pending_submission = pending_submission,
-       _start_workflow = start_workflow;
+       _start_workflow = start_workflow,
+       _stop_workflow = stop_workflow;
 
   /// Read-only navigation coordinator.
   final ExplorerController _controller;
@@ -94,10 +96,10 @@ final class ExplorerRunner {
   /// Stateless Explorer presentation coordinator.
   final ExplorerPresenter _presenter;
 
-  /// Last committed workflow snapshot displayed by Explorer.
+  /// Last successfully restored or committed active workflow.
   ///
-  /// Starts as the restored persisted state. Only a successful,
-  /// explicit workflow-start action may update this snapshot.
+  /// Only an explicit successful Start or Stop may change
+  /// this snapshot. Navigation and Quit never change it.
   WorkflowActiveState? _active_workflow;
 
   /// Receipt of an accepted but unresolved workflow-start request.
@@ -128,6 +130,24 @@ final class ExplorerRunner {
   bool get _can_start_workflow =>
       _start_workflow != null &&
       _active_workflow == null &&
+      _pending_submission == null;
+
+  /// Explicit stop action supplied by trusted composition.
+  ///
+  /// The callback receives the workflow ID currently displayed.
+  /// A successful return identifies the workflow actually stopped.
+  ///
+  /// No SDK processing or persistence implementation is owned
+  /// by the Explorer runner.
+  final Future<String> Function(String workflow_id)? _stop_workflow;
+
+  /// Whether an explicit Stop can be offered.
+  ///
+  /// Stop is unavailable when there is no loaded active workflow
+  /// or a submission is already pending.
+  bool get _can_stop_workflow =>
+      _stop_workflow != null &&
+      _active_workflow != null &&
       _pending_submission == null;
 
   /// Terminal rows reserved outside the scrollable viewport.
@@ -252,6 +272,7 @@ final class ExplorerRunner {
             active_workflow: _active_workflow,
             pending_submission: _pending_submission,
             can_start_workflow: _can_start_workflow,
+            can_stop_workflow: _can_stop_workflow,
           );
 
           _renderer.render(view_model);
@@ -300,6 +321,39 @@ final class ExplorerRunner {
             continue;
           }
 
+          // Only X is allowed to request workflow termination.
+          //
+          // The expected workflow ID comes from the active snapshot
+          // already displayed in this Explorer invocation.
+          //
+          // Navigation and Quit cannot reach this action.
+          if (key == ExplorerKey.stop_workflow) {
+            if (!_can_stop_workflow) {
+              continue;
+            }
+
+            final expected_workflow_id = _active_workflow!.identity.workflow_id;
+
+            // Completion must be durably confirmed by composition.
+            // The callback cannot silently stop a different workflow.
+            final stopped_workflow_id = await _stop_workflow!(
+              expected_workflow_id,
+            );
+
+            if (stopped_workflow_id != expected_workflow_id) {
+              throw StateError(
+                'Committed stop result differs from the loaded workflow.',
+              );
+            }
+
+            // Clear the displayed active state only after success.
+            // No navigation state or viewport position is changed.
+            _active_workflow = null;
+
+            render_current();
+            continue;
+          }
+
           final previous_model = current_model;
 
           // Only ExplorerController may change navigation state.
@@ -319,6 +373,10 @@ final class ExplorerRunner {
 
             case ExplorerKey.start_workflow:
               // Handled before the switch.
+              break;
+
+            case ExplorerKey.stop_workflow:
+              // Handled before the navigation switch.
               break;
 
             case ExplorerKey.quit:

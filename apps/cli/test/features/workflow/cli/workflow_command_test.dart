@@ -5,6 +5,7 @@ import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
 import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+import 'package:rudra_cli/src/features/workflow/application/workflow_stop_exception.dart';
 
 /// Verifies explicit workflow lifecycle actions through the CLI.
 ///
@@ -212,6 +213,55 @@ void main() {
 
     expect(status, RudraExitCode.invalid_usage.value);
     expect(database_file.existsSync(), isFalse);
+  });
+
+  test('expected workflow ID cannot stop a replacement workflow', () async {
+    expect(
+      await create_cli(StringBuffer()).run(['workflow', 'start']),
+      RudraExitCode.success.value,
+    );
+
+    final original = await workflow_composition.current();
+
+    expect(original, isNotNull);
+
+    // Simulate another frontend ending the displayed workflow.
+    await workflow_composition.stop();
+
+    // Another explicit action establishes a replacement workflow.
+    expect(
+      await create_cli(StringBuffer()).run(['workflow', 'start']),
+      RudraExitCode.success.value,
+    );
+
+    final replacement = await workflow_composition.current();
+
+    expect(replacement, isNotNull);
+    expect(
+      replacement!.identity.workflow_id,
+      isNot(original!.identity.workflow_id),
+    );
+
+    // Explorer still displays the original workflow ID.
+    // It must not silently stop the replacement.
+    await expectLater(
+      workflow_composition.stop(
+        expected_workflow_id: original.identity.workflow_id,
+      ),
+      throwsA(
+        isA<WorkflowStopRejectedException>().having(
+          (error) => error.code,
+          'code',
+          WorkflowRejectionCode.workflow_id_mismatch,
+        ),
+      ),
+    );
+
+    final restored = await workflow_composition.current();
+
+    expect(restored, isNotNull);
+    expect(restored!.identity.workflow_id, replacement.identity.workflow_id);
+    expect(restored.version, 2);
   });
 }
 

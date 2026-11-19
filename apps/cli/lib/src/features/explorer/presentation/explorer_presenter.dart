@@ -84,6 +84,7 @@ final class ExplorerPresenter {
     WorkflowActiveState? active_workflow,
     EventSubmissionReceipt? pending_submission,
     bool can_start_workflow = false,
+    bool can_stop_workflow = false,
   }) {
     if (visible_row_limit < 0) {
       throw RangeError.value(
@@ -183,9 +184,12 @@ final class ExplorerPresenter {
       is_warning: directory.is_incomplete,
       navigation_hints: model.is_closed
           ? 'Explorer closed.'
-          : (can_start_workflow
-                ? 'Up/Down Select  Enter Open  Left/Backspace Back  S Start Workflow  Q Quit'
-                : 'Up/Down Select  Enter Open  Left/Backspace Back  Q Quit'),
+          : [
+              'Up/Down Select  Enter Open  Left/Backspace Back',
+              if (can_start_workflow) 'S Start Workflow',
+              if (can_stop_workflow) 'X Stop Workflow',
+              'Q Quit',
+            ].join('  '),
     );
 
     return ExplorerViewModel(

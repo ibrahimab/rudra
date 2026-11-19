@@ -564,6 +564,123 @@ void main() {
       expect(active.is_terminal, isFalse);
     });
 
+    test(
+      'X stops only the displayed workflow and updates the header',
+      () async {
+        final identity = WorkflowIdentity(
+          workflow_id: 'workflow-1',
+          os_user_id: 'trusted-user',
+          target_id: 'fixture-target',
+          root: TargetPath('/root'),
+        );
+
+        final active = WorkflowActiveState(identity: identity, version: 2);
+
+        var stops = 0;
+
+        final scenario = _Scenario(
+          children: {'/root': []},
+          entries: [],
+          active_workflow: active,
+          keys: 'xxq',
+          stop_workflow: (workflow_id) async {
+            stops++;
+            expect(workflow_id, identity.workflow_id);
+            return workflow_id;
+          },
+          start_workflow: (root) async {
+            throw StateError('Unexpected Start.');
+          },
+        );
+
+        expect(await scenario.runner.run(), RudraExitCode.success.value);
+        expect(stops, 1);
+
+        // The second X and Q never submit additional Stop actions.
+        expect(scenario.renderer.frames, hasLength(2));
+
+        final before = scenario.renderer.frames.first;
+        final after = scenario.renderer.frames.last;
+
+        expect(before.header.workflow_status, 'ACTIVE');
+        expect(before.footer.navigation_hints, contains('X Stop Workflow'));
+
+        expect(after.header.workflow_status, 'NOT LOADED');
+        expect(after.header.workflow_id, isNull);
+        expect(after.footer.navigation_hints, contains('S Start Workflow'));
+        expect(
+          after.footer.navigation_hints,
+          isNot(contains('X Stop Workflow')),
+        );
+
+        expect(scenario.inspector.listed, ['/root']);
+        expect(scenario.controller.model?.is_closed, isTrue);
+        expect(scenario.terminal.restored, isTrue);
+      },
+    );
+
+    test('navigation and Q never request workflow stop', () async {
+      final active = WorkflowActiveState(
+        identity: WorkflowIdentity(
+          workflow_id: 'workflow-1',
+          os_user_id: 'trusted-user',
+          target_id: 'fixture-target',
+          root: TargetPath('/root'),
+        ),
+        version: 2,
+      );
+
+      var stops = 0;
+
+      final scenario = _Scenario(
+        children: {'/root': []},
+        entries: [],
+        active_workflow: active,
+        keys: '\x1B[Bq',
+        stop_workflow: (workflow_id) async {
+          stops++;
+          return workflow_id;
+        },
+      );
+
+      expect(await scenario.runner.run(), RudraExitCode.success.value);
+      expect(stops, 0);
+
+      expect(scenario.renderer.frames.last.header.workflow_status, 'ACTIVE');
+      expect(scenario.terminal.restored, isTrue);
+    });
+
+    test(
+      'failed stop preserves displayed state and restores terminal',
+      () async {
+        final active = WorkflowActiveState(
+          identity: WorkflowIdentity(
+            workflow_id: 'workflow-1',
+            os_user_id: 'trusted-user',
+            target_id: 'fixture-target',
+            root: TargetPath('/root'),
+          ),
+          version: 2,
+        );
+
+        final scenario = _Scenario(
+          children: {'/root': []},
+          entries: [],
+          active_workflow: active,
+          keys: 'xq',
+          stop_workflow: (workflow_id) async {
+            throw StateError('Injected stop failure.');
+          },
+        );
+
+        await expectLater(scenario.runner.run(), throwsStateError);
+
+        expect(scenario.renderer.frames.last.header.workflow_status, 'ACTIVE');
+        expect(scenario.terminal.restored, isTrue);
+        expect(scenario.controller.model?.is_closed, isTrue);
+      },
+    );
+
     test('failed workflow start restores terminal modes', () async {
       final scenario = _Scenario(
         children: {'/root': []},
@@ -604,6 +721,7 @@ final class _Scenario {
     WorkflowActiveState? active_workflow,
     EventSubmissionReceipt? pending_submission,
     Future<WorkflowActiveState> Function(TargetPath)? start_workflow,
+    Future<String> Function(String workflow_id)? stop_workflow,
   }) {
     inspector = _Inspector(
       children: children,
@@ -632,6 +750,7 @@ final class _Scenario {
       active_workflow: active_workflow,
       pending_submission: pending_submission,
       start_workflow: start_workflow,
+      stop_workflow: stop_workflow,
     );
   }
 

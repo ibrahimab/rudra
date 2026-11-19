@@ -272,22 +272,20 @@ final class ProductWorkflowComposition {
     }
   }
 
-  /// Explicitly stops the currently active workflow.
+  /// [expected_workflow_id] optionally guards the identity
+  /// previously displayed by an interactive frontend.
   ///
-  /// Returns the established workflow ID only after the
-  /// accepted stop submission is durably completed.
+  /// The authenticated OS-user owner is still resolved through
+  /// trusted composition. A supplied identifier never overrides
+  /// that ownership.
   ///
-  /// Restoration supplies the workflow identity from the
-  /// trusted owner's committed history, not CLI arguments.
-  ///
-  /// No database is created when none exists. A missing or
-  /// changed active workflow produces a typed business failure.
-  ///
-  /// Filesystem inspection and cleanup are never triggered.
-  Future<String> stop() async {
-    if (!await database_file.exists()) {
-      throw const WorkflowStopRejectedException(
-        code: WorkflowRejectionCode.workflow_not_active,
+  /// If the active workflow has changed, no Stop event is submitted.
+  Future<String> stop({String? expected_workflow_id}) async {
+    if (expected_workflow_id != null && expected_workflow_id.trim().isEmpty) {
+      throw ArgumentError.value(
+        expected_workflow_id,
+        'expected_workflow_id',
+        'Expected workflow identifier must not be blank.',
       );
     }
 
@@ -315,6 +313,19 @@ final class ProductWorkflowComposition {
       }
 
       final workflow_id = active.state.identity.workflow_id;
+
+      // An interactive frontend may supply the identity it displayed.
+      //
+      // The expected ID is a concurrency guard, not authorization
+      // to access or stop another workflow.
+      //
+      // A replacement workflow must never be stopped merely because
+      // it became active between rendering and the user's keypress.
+      if (expected_workflow_id != null && workflow_id != expected_workflow_id) {
+        throw const WorkflowStopRejectedException(
+          code: WorkflowRejectionCode.workflow_id_mismatch,
+        );
+      }
 
       // Only this explicit application action submits Stop.
       // Reading current state or opening Explorer never does.
