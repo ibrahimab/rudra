@@ -37,6 +37,12 @@ import 'features/workflow/application/workflow_start_exception.dart';
 
 import 'features/workflow/cli/workflow_cli_module.dart';
 
+import 'features/explorer/application/explorer_action_registry.dart';
+import 'features/workflow/explorer/workflow_explorer_state.dart';
+import 'features/workflow/explorer/workflow_explorer_status.dart';
+import 'features/workflow/explorer/workflow_start_explorer_action.dart';
+import 'features/workflow/explorer/workflow_stop_explorer_action.dart';
+
 /// Coordinates command registration and execution for Rudra.
 ///
 /// The CLI framework owns a single command runner and manages the
@@ -260,6 +266,46 @@ final class RudraCli {
               }
             }
 
+            // Create the workflow state displayed during this
+            // Explorer invocation.
+            //
+            // This snapshot is initialized from authoritative,
+            // read-only restoration performed above.
+            //
+            // Its construction never submits workflow events.
+            final workflow_state = WorkflowExplorerState(
+              active_workflow: active_workflow,
+            );
+
+            // Assemble feature contributions before interaction.
+            //
+            // The generic Explorer runner receives only the
+            // action registry. It does not depend directly on
+            // workflow lifecycle implementations.
+            //
+            // New feature actions are contributed here without
+            // modifying terminal decoding or Explorer dispatch.
+            final action_registry = ExplorerActionRegistry([
+              ExplorerFeatureContribution(
+                id: 'workflow',
+                status: () => workflow_explorer_status(workflow_state),
+                actions: [
+                  if (workflows != null)
+                    create_workflow_start_action(
+                      state: workflow_state,
+                      start_workflow: start_from_explorer,
+                    ),
+                  if (workflows != null)
+                    create_workflow_stop_action(
+                      state: workflow_state,
+                      stop_workflow: (expected_workflow_id) => workflows.stop(
+                        expected_workflow_id: expected_workflow_id,
+                      ),
+                    ),
+                ],
+              ),
+            ]);
+
             final terminal = create_terminal_host();
 
             // All filesystem observations pass through the
@@ -288,12 +334,7 @@ final class RudraCli {
               terminal: terminal,
               renderer: renderer,
               error_output: diagnostic_output,
-              active_workflow: active_workflow,
-              start_workflow: workflows == null ? null : start_from_explorer,
-              stop_workflow: workflows == null
-                  ? null
-                  : (workflow_id) =>
-                        workflows.stop(expected_workflow_id: workflow_id),
+              action_registry: action_registry,
             );
           },
         ),

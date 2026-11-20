@@ -3,30 +3,34 @@ import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
 import 'explorer_header_view_model.dart';
 
-/// Renders the Explorer title, current directory, and workflow summary.
-///
-/// This widget consumes prepared presentation data only.
-/// It does not access the SDK, submit events, or load persistence.
-///
-/// All three rows have fixed height. Long values are sanitized
-/// and truncated by the shared terminal rendering backend.
 final class ExplorerHeader implements TerminalWidget {
-  /// Creates the header from its independent presentation model.
+  /// Creates a header from its prepared presentation model.
+  ///
+  /// Construction performs no application operations or
+  /// terminal I/O.
   const ExplorerHeader(this.view_model);
 
-  /// Immutable presentation snapshot.
+  /// Immutable, feature-independent presentation snapshot.
   final ExplorerHeaderViewModel view_model;
 
-  /// Fixed layout height, including the workflow summary.
+  /// Fixed height of the generic Explorer header.
+  ///
+  /// The title, directory, and status each occupy one row.
+  /// Keeping this value stable preserves viewport sizing.
   static const int fixed_rows = 3;
 
+  /// Number of terminal rows occupied by this widget.
   @override
   int get height => fixed_rows;
 
   /// Builds exactly three terminal lines.
   ///
-  /// Workflow status is descriptive. It must not be treated
-  /// as authorization to perform filesystem operations.
+  /// The status is supplied as prepared presentation data.
+  /// This widget does not interpret feature-specific states
+  /// or determine whether application operations are allowed.
+  ///
+  /// Terminal text sanitization and truncation remain the
+  /// responsibility of the shared rendering backend.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine(
@@ -39,28 +43,11 @@ final class ExplorerHeader implements TerminalWidget {
       role: TerminalRole.path,
     );
 
-    if (view_model.has_active_workflow) {
-      yield TerminalLine(
-        'Workflow: ACTIVE'
-        '  |  ID: ${view_model.workflow_id}'
-        '  |  Version: ${view_model.workflow_version}'
-        '  |  Target: ${view_model.workflow_target_id}',
-        role: TerminalRole.heading,
-      );
-
-      return;
-    }
-
-    if (view_model.has_pending_workflow) {
-      yield TerminalLine(
-        'Workflow: PENDING'
-        '  |  Submission: ${view_model.pending_submission_id}',
-        role: TerminalRole.muted,
-      );
-
-      return;
-    }
-
-    yield const TerminalLine('Workflow: NOT LOADED', role: TerminalRole.muted);
+    // The owning feature has already prepared the status.
+    // The header selects only its presentation style.
+    yield TerminalLine(
+      view_model.status_line,
+      role: view_model.emphasized ? TerminalRole.heading : TerminalRole.muted,
+    );
   }
 }

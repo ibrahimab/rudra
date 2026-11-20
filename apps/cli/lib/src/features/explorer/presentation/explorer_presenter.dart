@@ -5,6 +5,8 @@ import '../../filesystem/presentation/widgets/directory_listing/directory_listin
 import '../../filesystem/presentation/widgets/directory_inspection_issues/directory_inspection_issues_view_model.dart';
 
 import '../application/explorer_model.dart';
+import '../application/explorer_action_registry.dart';
+
 import 'explorer_view_model.dart';
 
 import 'widgets/directory/explorer_directory_view_model.dart';
@@ -51,40 +53,51 @@ final class ExplorerPresenter {
   /// Shared filesystem entry metadata presenter.
   final DirectoryListingPresenter _directory_listing_presenter;
 
-  /// Creates a complete immutable Explorer screen presentation.
+  /// Creates an immutable Explorer presentation snapshot.
   ///
-  /// [visible_row_limit] specifies the number of available
-  /// directory-entry rows, excluding fixed screen components.
+  /// [model] supplies the current navigation and filesystem
+  /// observation state.
   ///
-  /// [first_visible_index] is the preferred viewport position.
-  /// It is clamped to the available entry range.
+  /// [visible_row_limit] is the number of rows available for
+  /// directory entries after fixed UI components are reserved.
   ///
-  /// [active_workflow] is an established SDK workflow state,
-  /// loaded or committed by the application layer.
+  /// [first_visible_index] is the preferred scroll offset.
+  /// It is clamped to keep the selection visible.
   ///
-  /// [pending_submission] identifies an accepted workflow-start
-  /// request that has not yet established a workflow.
+  /// [statuses] contains read-only, feature-prepared status
+  /// contributions. Their application meaning is not interpreted
+  /// by this presenter.
   ///
-  /// Both [active_workflow] and [pending_submission] are optional.
-  /// Explorer navigation and filesystem presentation remain available
-  /// without a workflow.
+  /// [action_hints] contains labels for actions available in
+  /// the current interaction snapshot. Availability is computed
+  /// by the action registry, not by the presenter.
   ///
-  /// The presenter does not infer success from an accepted receipt.
-  ///
-  /// The selected row remains visible when at least one entry
-  /// row is available.
+  /// The presenter:
+  /// - Performs no filesystem or terminal I/O.
+  /// - Does not invoke actions.
+  /// - Does not query or modify workflow persistence.
+  /// - Does not modify the supplied navigation model.
+  /// - Does not infer operation success from status text.
   ///
   /// Throws [RangeError] for a negative viewport height.
   ///
-  /// The source navigation model is never modified.
+  /// Example:
+  /// ```dart
+  /// final view_model = presenter.present(
+  ///   explorer_model,
+  ///   visible_row_limit: 12,
+  ///   statuses: [
+  ///     const ExplorerStatus('Workflow: NOT LOADED'),
+  ///   ],
+  ///   action_hints: ['S Start Workflow'],
+  /// );
+  /// ```
   ExplorerViewModel present(
     ExplorerModel model, {
     required int visible_row_limit,
     int first_visible_index = 0,
-    WorkflowActiveState? active_workflow,
-    EventSubmissionReceipt? pending_submission,
-    bool can_start_workflow = false,
-    bool can_stop_workflow = false,
+    List<ExplorerStatus> statuses = const [],
+    List<String> action_hints = const [],
   }) {
     if (visible_row_limit < 0) {
       throw RangeError.value(
@@ -150,12 +163,14 @@ final class ExplorerPresenter {
       is_complete: listing_view_model.listing.is_complete,
     );
 
+    // Feature contributions arrive as presentation-only values.
+    // Explorer does not inspect the state behind them.
     final header = ExplorerHeaderViewModel(
       current_directory: model.current_directory.value,
-      workflow_id: active_workflow?.identity.workflow_id,
-      workflow_version: active_workflow?.version,
-      workflow_target_id: active_workflow?.identity.target_id,
-      pending_submission_id: pending_submission?.event_id,
+      status_line: statuses.isEmpty
+          ? 'Explorer ready.'
+          : statuses.map((status) => status.text).join('  |  '),
+      emphasized: statuses.any((status) => status.emphasized),
     );
 
     final selected_label = directory.selected_index == null
@@ -186,8 +201,7 @@ final class ExplorerPresenter {
           ? 'Explorer closed.'
           : [
               'Up/Down Select  Enter Open  Left/Backspace Back',
-              if (can_start_workflow) 'S Start Workflow',
-              if (can_stop_workflow) 'X Stop Workflow',
+              ...action_hints,
               'Q Quit',
             ].join('  '),
     );

@@ -1,37 +1,47 @@
-import 'package:rudra_sdk/rudra_sdk.dart'
-    show WorkflowActiveState, EventSubmissionReceipt, TargetPath;
-
 import '../../../core/cli/rudra_exit_code.dart';
 import '../../../core/rendering/renderer.dart';
 
 import 'explorer_controller.dart';
 import 'explorer_model.dart';
+import 'explorer_action_registry.dart';
+
 import '../presentation/explorer_presenter.dart';
 import '../terminal/explorer_terminal_host.dart';
 import '../presentation/explorer_view_model.dart';
 import '../terminal/terminal_input.dart';
+import '../terminal/terminal_key.dart';
 
-/// Coordinates one interactive, read-only Explorer workflow.
+/// Coordinates one interactive Explorer invocation.
 ///
-/// The runner connects existing CLI components:
-/// - [ExplorerController] owns navigation and SDK inspection.
-/// - [TerminalInput] decodes terminal bytes into navigation intent.
-/// - [ExplorerPresenter] prepares immutable presentation snapshots.
+/// The runner connects independently owned components:
+/// - [ExplorerController] owns read-only filesystem navigation.
+/// - [TerminalInput] decodes physical terminal keys.
+/// - [ExplorerActionRegistry] resolves contributed actions.
+/// - [ExplorerPresenter] builds immutable UI snapshots.
 /// - [Renderer] displays those snapshots.
-/// - [ExplorerTerminalHost] owns terminal modes and restoration.
+/// - [ExplorerTerminalHost] owns terminal mode restoration.
 ///
-/// The runner processes navigation actions sequentially.
-/// An SDK inspection must finish before another action is applied.
+/// The runner understands only built-in navigation, Quit,
+/// and generic action dispatch. It must not contain
+/// feature-specific workflow branches or application services.
 ///
-/// The initial directory inspection happens before entering
-/// interactive terminal mode. Its failure cannot leave the
-/// terminal in raw-input or alternate-screen mode.
+/// Registered actions execute sequentially. An asynchronous
+/// action must complete before another key is dispatched.
 ///
-/// Subsequent inspections occur inside the guarded terminal
-/// lifecycle. The host restores terminal state on failure.
+/// The runner does not itself create workflow events,
+/// open persistence stores or authorize filesystem cleanup.
+/// A registered feature may invoke an explicit application
+/// operation when the user activates its shortcut.
 ///
-/// No persistent Rudra session is created or modified.
-/// No cleanup decisions or filesystem mutations occur.
+/// Initial filesystem inspection occurs before entering
+/// interactive terminal mode. Failure therefore cannot
+/// leave the terminal in a changed mode.
+///
+/// Once interaction begins, failures propagate through the
+/// guarded terminal lifecycle, which attempts restoration.
+///
+/// Navigation, rendering, and Quit never implicitly submit
+/// application commands.
 ///
 /// Each runner instance supports exactly one invocation.
 ///
@@ -42,44 +52,58 @@ import '../terminal/terminal_input.dart';
 ///   terminal: terminal,
 ///   renderer: renderer,
 ///   error_output: stderr,
+///   action_registry: registry,
 /// );
 ///
-/// final status = await runner.run();
+/// final exit_code = await runner.run();
 /// ```
 final class ExplorerRunner {
-  /// Creates an interactive workflow from injected dependencies.
+  /// Creates an Explorer interaction coordinator.
   ///
-  /// [controller] provides SDK-backed read-only navigation.
+  /// [controller] owns SDK-backed read-only navigation.
   ///
-  /// [terminal] supplies input, dimensions, output capabilities,
-  /// and guarded terminal lifecycle management.
+  /// [terminal] owns the interactive terminal lifecycle,
+  /// including input, dimensions, and restoration.
   ///
-  /// [renderer] displays immutable Explorer presentation models.
+  /// [renderer] displays immutable Explorer view models.
   ///
-  /// [error_output] receives terminal configuration diagnostics.
+  /// [error_output] receives terminal configuration errors.
   ///
-  /// [presenter] prepares the presentation viewport.
+  /// [presenter] constructs immutable presentation snapshots.
   ///
-  /// Construction performs no inspection or terminal I/O.
+  /// [action_registry] supplies optional feature contributions.
+  /// When omitted, Explorer supports navigation and Quit only.
+  ///
+  /// The registry is assembled before interaction begins.
+  /// The runner does not register or construct feature actions.
+  ///
+  /// Construction does not inspect the filesystem, decode
+  /// terminal input, execute actions, submit workflow events,
+  /// or change terminal modes.
+  ///
+  /// Example:
+  /// ```dart
+  /// final runner = ExplorerRunner(
+  ///   controller: controller,
+  ///   terminal: terminal,
+  ///   renderer: renderer,
+  ///   error_output: stderr,
+  ///   action_registry: registry,
+  /// );
+  /// ```
   ExplorerRunner({
     required ExplorerController controller,
     required ExplorerTerminalHost terminal,
     required ViewportRenderer<ExplorerViewModel> renderer,
     required StringSink error_output,
     ExplorerPresenter presenter = const ExplorerPresenter(),
-    WorkflowActiveState? active_workflow,
-    EventSubmissionReceipt? pending_submission,
-    Future<WorkflowActiveState> Function(TargetPath)? start_workflow,
-    Future<String> Function(String workflow_id)? stop_workflow,
+    ExplorerActionRegistry? action_registry,
   }) : _controller = controller,
        _terminal = terminal,
        _renderer = renderer,
        _error_output = error_output,
        _presenter = presenter,
-       _active_workflow = active_workflow,
-       _pending_submission = pending_submission,
-       _start_workflow = start_workflow,
-       _stop_workflow = stop_workflow;
+       _action_registry = action_registry ?? ExplorerActionRegistry(const []);
 
   /// Read-only navigation coordinator.
   final ExplorerController _controller;
@@ -96,18 +120,6 @@ final class ExplorerRunner {
   /// Stateless Explorer presentation coordinator.
   final ExplorerPresenter _presenter;
 
-  /// Last successfully restored or committed active workflow.
-  ///
-  /// Only an explicit successful Start or Stop may change
-  /// this snapshot. Navigation and Quit never change it.
-  WorkflowActiveState? _active_workflow;
-
-  /// Receipt of an accepted but unresolved workflow-start request.
-  ///
-  /// A receipt must never be presented as a successfully
-  /// established workflow.
-  final EventSubmissionReceipt? _pending_submission;
-
   /// Whether this runner has already been invoked.
   bool _has_started = false;
 
@@ -115,40 +127,15 @@ final class ExplorerRunner {
   /// the terminal's alternate screen.
   static const int _terminal_safety_rows = 1;
 
-  /// Explicit workflow-start action supplied by composition.
+  /// Explicitly registered Explorer feature contributions.
   ///
-  /// The runner never creates SDK processing infrastructure,
-  /// generates workflow events, or owns database connections.
+  /// The runner never mutates registration or inspects
+  /// individual feature implementations.
   ///
-  /// Null means workflow creation is unavailable in this frontend.
-  final Future<WorkflowActiveState> Function(TargetPath)? _start_workflow;
-
-  /// Whether Explorer can currently offer workflow creation.
-  ///
-  /// An existing active workflow or pending submission prevents
-  /// accidental duplicate starts.
-  bool get _can_start_workflow =>
-      _start_workflow != null &&
-      _active_workflow == null &&
-      _pending_submission == null;
-
-  /// Explicit stop action supplied by trusted composition.
-  ///
-  /// The callback receives the workflow ID currently displayed.
-  /// A successful return identifies the workflow actually stopped.
-  ///
-  /// No SDK processing or persistence implementation is owned
-  /// by the Explorer runner.
-  final Future<String> Function(String workflow_id)? _stop_workflow;
-
-  /// Whether an explicit Stop can be offered.
-  ///
-  /// Stop is unavailable when there is no loaded active workflow
-  /// or a submission is already pending.
-  bool get _can_stop_workflow =>
-      _stop_workflow != null &&
-      _active_workflow != null &&
-      _pending_submission == null;
+  /// Registry availability is checked before dispatch.
+  /// Each feature remains responsible for its own
+  /// application-level safeguards.
+  final ExplorerActionRegistry _action_registry;
 
   /// Terminal rows reserved outside the scrollable viewport.
   ///
@@ -265,14 +252,15 @@ final class ExplorerRunner {
 
           final visible_row_limit = rows - reserved_rows;
 
+          // The registry projects current feature state into
+          // presentation-only values. Neither operation executes
+          // as part of rendering.
           final view_model = _presenter.present(
             current_model,
             visible_row_limit: visible_row_limit,
             first_visible_index: first_visible_index,
-            active_workflow: _active_workflow,
-            pending_submission: _pending_submission,
-            can_start_workflow: _can_start_workflow,
-            can_stop_workflow: _can_stop_workflow,
+            statuses: _action_registry.statuses(),
+            action_hints: _action_registry.available_hints(current_model),
           );
 
           _renderer.render(view_model);
@@ -288,109 +276,64 @@ final class ExplorerRunner {
         final input = TerminalInput(source: _terminal.input_bytes);
 
         await for (final key in input.read_keys()) {
-          if (key == ExplorerKey.quit) {
+          // Raw Ctrl+C is a controlled exit request.
+          // OS-generated SIGINT remains a typed terminal error.
+          if (key == TerminalSpecialKey.interrupt) {
             break;
           }
 
-          // Workflow creation is permitted only through an explicit
-          // S keypress while no unfinished workflow is loaded.
-          //
-          // All processing is delegated to the same application action
-          // used by `rudra workflow start`.
-          //
-          // The current directory becomes the requested workflow root.
-          // Navigation state and selection are not modified.
-          if (key == ExplorerKey.start_workflow) {
-            if (!_can_start_workflow) {
-              continue;
+          if (key is TerminalCharacterKey) {
+            // Quit is an Explorer lifecycle operation, not a
+            // contributed application action.
+            if (key.character.toLowerCase() == 'q') {
+              break;
             }
 
-            final start = _start_workflow!;
-
-            // A successful return means the SDK has committed the
-            // workflow and restored its authoritative state.
-            //
-            // Unexpected failures propagate through the guarded
-            // terminal lifecycle, which restores terminal modes.
-            final committed = await start(current_model.current_directory);
-
-            _active_workflow = committed;
-
-            // Re-render immediately, retaining the directory viewport.
-            render_current();
-            continue;
-          }
-
-          // Only X is allowed to request workflow termination.
-          //
-          // The expected workflow ID comes from the active snapshot
-          // already displayed in this Explorer invocation.
-          //
-          // Navigation and Quit cannot reach this action.
-          if (key == ExplorerKey.stop_workflow) {
-            if (!_can_stop_workflow) {
-              continue;
-            }
-
-            final expected_workflow_id = _active_workflow!.identity.workflow_id;
-
-            // Completion must be durably confirmed by composition.
-            // The callback cannot silently stop a different workflow.
-            final stopped_workflow_id = await _stop_workflow!(
-              expected_workflow_id,
+            // Resolve the binding against the current snapshot.
+            // Unknown and unavailable actions perform no operation.
+            final action = _action_registry.resolve(
+              key.character,
+              current_model,
             );
 
-            if (stopped_workflow_id != expected_workflow_id) {
-              throw StateError(
-                'Committed stop result differs from the loaded workflow.',
-              );
+            if (action == null) {
+              continue;
             }
 
-            // Clear the displayed active state only after success.
-            // No navigation state or viewport position is changed.
-            _active_workflow = null;
+            // Await one explicit operation before processing
+            // the next physical key. Exceptions are propagated
+            // through the guarded terminal lifecycle.
+            await action.execute(current_model);
 
+            // A feature may have changed its presentation state.
+            // Re-render using the same navigation and viewport.
             render_current();
             continue;
           }
 
           final previous_model = current_model;
 
-          // Only ExplorerController may change navigation state.
-          // No terminal input is interpreted as a filesystem path.
-          switch (key) {
-            case ExplorerKey.up:
-              current_model = _controller.move_selection(-1);
-
-            case ExplorerKey.down:
-              current_model = _controller.move_selection(1);
-
-            case ExplorerKey.open:
-              current_model = await _controller.open_selected();
-
-            case ExplorerKey.back:
-              current_model = await _controller.back();
-
-            case ExplorerKey.start_workflow:
-              // Handled before the switch.
-              break;
-
-            case ExplorerKey.stop_workflow:
-              // Handled before the navigation switch.
-              break;
-
-            case ExplorerKey.quit:
-              // Handled before the switch.
-              break;
+          // Only ExplorerController owns navigation transitions.
+          // Terminal keys are never interpreted as paths.
+          if (key == TerminalSpecialKey.up) {
+            current_model = _controller.move_selection(-1);
+          } else if (key == TerminalSpecialKey.down) {
+            current_model = _controller.move_selection(1);
+          } else if (key == TerminalSpecialKey.enter) {
+            current_model = await _controller.open_selected();
+          } else if (key == TerminalSpecialKey.left ||
+              key == TerminalSpecialKey.backspace) {
+            current_model = await _controller.back();
+          } else {
+            continue;
           }
 
-          // Opening a regular file, a symbolic link, or
-          // navigating back at the root returns the same
-          // model. No redundant render is necessary.
+          // No navigation change means no redundant render.
           if (identical(previous_model, current_model)) {
             continue;
           }
 
+          // Entering or leaving a directory resets its viewport.
           if (previous_model.current_directory.value !=
               current_model.current_directory.value) {
             first_visible_index = 0;

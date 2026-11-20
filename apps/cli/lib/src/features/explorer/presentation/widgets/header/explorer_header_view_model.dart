@@ -1,96 +1,54 @@
 /// Immutable presentation data for the Explorer header.
 ///
-/// A header may display an active workflow, a submitted
-/// command awaiting processing, or no loaded workflow.
+/// The header contains the current directory and one
+/// feature-contributed status line.
 ///
-/// These values are projections supplied by the Explorer
-/// presenter. The header itself has no workflow authority.
+/// Explorer does not interpret the meaning of that status.
+/// Workflow, filesystem or future application features
+/// prepare their own status projections before rendering.
 ///
-/// Paths and identifiers retain their original spelling.
-/// Terminal sanitization belongs to the rendering backend.
+/// Presentation values have no application authority.
+/// They do not authorize operations or represent
+/// persistence locks.
+///
+/// Text sanitization and truncation remain the
+/// responsibility of the terminal rendering backend.
+///
+/// Example:
+/// ```dart
+/// final header = ExplorerHeaderViewModel(
+///   current_directory: '/workspace',
+///   status_line: 'Workflow: ACTIVE',
+///   emphasized: true,
+/// );
+/// ```
 final class ExplorerHeaderViewModel {
-  /// Creates a header presentation snapshot.
+  /// Creates an immutable header presentation snapshot.
   ///
-  /// [current_directory] is always required.
+  /// [current_directory] is the currently displayed path.
   ///
-  /// Workflow metadata is supplied only when a committed
-  /// active workflow has been loaded.
+  /// [status_line] contains generic, already prepared
+  /// status text supplied by the presentation layer.
   ///
-  /// [pending_submission_id] identifies an accepted
-  /// workflow-start request, not an established workflow.
+  /// [emphasized] requests heading styling for the status.
   ///
-  /// The active and pending representations are mutually
-  /// exclusive.
+  /// Empty directory and status values are invalid.
   ExplorerHeaderViewModel({
     required this.current_directory,
-    this.workflow_id,
-    this.workflow_version,
-    this.workflow_target_id,
-    this.pending_submission_id,
+    this.status_line = 'Explorer ready.',
+    this.emphasized = false,
   }) {
-    if (current_directory.isEmpty) {
-      throw ArgumentError.value(
-        current_directory,
-        'current_directory',
-        'The current directory cannot be empty.',
-      );
-    }
-
-    final has_active_workflow = workflow_id != null;
-    final has_active_metadata =
-        workflow_version != null || workflow_target_id != null;
-
-    if (has_active_workflow != has_active_metadata) {
-      throw ArgumentError(
-        'Active workflow metadata must be supplied together.',
-      );
-    }
-
-    if (has_active_workflow &&
-        (workflow_version == null || workflow_target_id == null)) {
-      throw ArgumentError('An active workflow requires a version and target.');
-    }
-
-    if (workflow_version != null && workflow_version! <= 0) {
-      throw ArgumentError.value(workflow_version, 'workflow_version');
-    }
-
-    if (has_active_workflow && pending_submission_id != null) {
-      throw ArgumentError('A workflow cannot be both pending and active.');
+    if (current_directory.isEmpty || status_line.isEmpty) {
+      throw ArgumentError('Explorer header values cannot be empty.');
     }
   }
 
   /// Directory currently displayed by Explorer.
   final String current_directory;
 
-  /// Established workflow identity, if loaded.
-  final String? workflow_id;
+  /// Prepared feature status, without Explorer interpretation.
+  final String status_line;
 
-  /// Authoritative committed workflow version, if loaded.
-  final int? workflow_version;
-
-  /// Target associated with the established workflow.
-  final String? workflow_target_id;
-
-  /// Accepted submission ID that has not yet been resolved.
-  final String? pending_submission_id;
-
-  /// Whether this snapshot represents an established workflow.
-  bool get has_active_workflow => workflow_id != null;
-
-  /// Whether a start request is awaiting processing.
-  bool get has_pending_workflow => pending_submission_id != null;
-
-  /// Human-readable workflow status.
-  String get workflow_status {
-    if (has_active_workflow) {
-      return 'ACTIVE';
-    }
-
-    if (has_pending_workflow) {
-      return 'PENDING';
-    }
-
-    return 'NOT LOADED';
-  }
+  /// Whether status presentation should use heading styling.
+  final bool emphasized;
 }

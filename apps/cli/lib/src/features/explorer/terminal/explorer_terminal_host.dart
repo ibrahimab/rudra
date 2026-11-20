@@ -24,6 +24,7 @@ import 'dart:async';
 /// - Create persistent inspection sessions.
 /// - Authorize or execute cleanup operations.
 ///
+
 /// Example:
 /// ```dart
 /// final result = await host.run_interactive(() async {
@@ -32,7 +33,8 @@ import 'dart:async';
 ///   );
 ///
 ///   await for (final key in input.read_keys()) {
-///     if (key == ExplorerKey.quit) {
+///     if (key == TerminalSpecialKey.interrupt ||
+///         key == const TerminalCharacterKey('q')) {
 ///       break;
 ///     }
 ///   }
@@ -41,8 +43,9 @@ import 'dart:async';
 /// });
 /// ```
 ///
-/// TerminalInput and RudraExitCode are supplied by the
-/// calling Explorer application and are not host dependencies.
+/// TerminalInput, terminal key types, and RudraExitCode
+/// are supplied by the calling Explorer application.
+/// They are not dependencies of the terminal host.
 abstract interface class ExplorerTerminalHost {
   /// Whether this host can support an interactive Explorer.
   ///

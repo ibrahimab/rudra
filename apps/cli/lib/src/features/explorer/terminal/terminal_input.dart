@@ -1,67 +1,32 @@
 import 'dart:async';
 
-/// Navigation actions recognized by Rudra's interactive CLI.
-///
-/// These actions describe user intent rather than terminal-specific
-/// byte sequences.
-///
-/// Unknown keys and unsupported terminal sequences are ignored.
-///
-/// No action in this enum authorizes filesystem modification.
-enum ExplorerKey {
-  /// Moves selection to the preceding entry.
-  up,
+import 'terminal_key.dart';
 
-  /// Moves selection to the following entry.
-  down,
-
-  /// Opens the selected entry if it is a directory.
-  open,
-
-  /// Returns to the previously visited directory.
-  back,
-
-  /// Explicitly requests creation of a persistent workflow.
-  ///
-  /// This is a user action, not a navigation or view event.
-  /// Authorization and processing belong to application services.
-  start_workflow,
-
-  /// Explicitly requests termination of the loaded workflow.
-  ///
-  /// The runner must bind this action to the workflow ID
-  /// already displayed to the user.
-  stop_workflow,
-
-  /// Ends the current interactive explorer.
-  quit,
-}
-
-/// Decodes terminal input bytes into explorer navigation actions.
+/// Decodes raw terminal bytes into physical keyboard input.
 ///
-/// Terminal input arrives as chunks of bytes. A single key may
-/// produce multiple bytes, and a sequence may span several chunks.
+/// Terminal input arrives as ordered byte chunks. A physical
+/// key may occupy multiple bytes, and an ANSI escape sequence
+/// may cross multiple chunks.
 ///
-/// Supported input:
-/// - ANSI CSI and SS3 up, down, and left arrows.
-/// - Enter (CR or LF).
-/// - Backspace (BS or DEL).
-/// - Lowercase and uppercase S.
-/// - Lowercase and uppercase X.
-/// - Lowercase and uppercase Q.
-/// - Ctrl+C (ETX, 0x03), treated as a quit request.
+/// Supported input includes:
+/// - ANSI CSI and SS3 Up, Down, and Left arrows.
+/// - Enter using CR or LF.
+/// - Backspace using BS or DEL.
+/// - Printable ASCII characters, preserving their case.
+/// - Raw Ctrl+C using ETX.
 ///
-/// Unsupported keys and escape sequences produce no event.
+/// Unsupported ANSI sequences are ignored.
 ///
-/// This class does not:
-/// - Read directly from stdin.
-/// - Change terminal echo or line mode.
-/// - Render terminal output.
-/// - Inspect or modify the filesystem.
-/// - Manage navigation state.
+/// The decoder retains no application-level knowledge:
+/// - It does not map S or X to workflow operations.
+/// - It does not interpret Q as an application exit.
+/// - It does not inspect or modify the filesystem.
+/// - It does not create or submit workflow events.
+/// - It does not configure or restore terminal modes.
 ///
-/// Terminal configuration and restoration belong to the
-/// interactive terminal runner.
+/// Terminal configuration and restoration belong to
+/// ExplorerTerminalHost. Application shortcuts belong
+/// to the action registration layer.
 ///
 /// Example:
 /// ```dart
@@ -69,61 +34,71 @@ enum ExplorerKey {
 ///   source: Stream<List<int>>.fromIterable([
 ///     [0x1B],
 ///     [0x5B, 0x41],
-///     [0x0D],
-///     [0x71],
+///     [0x73],
 ///   ]),
 /// );
 ///
-/// await for (final key in input.read_keys()) {
-///   print(key);
-/// }
-/// ```
+/// final keys = await input.read_keys().toList();
 ///
-/// Produces up, open, and quit in that order.
+/// // Up arrow followed by the physical character 's'.
+/// assert(keys.first == TerminalSpecialKey.up);
+/// assert(keys.last == const TerminalCharacterKey('s'));
+/// ```
 final class TerminalInput {
-  /// Creates a decoder for the supplied byte stream.
+  /// Creates a decoder using an injected raw byte stream.
   ///
-  /// [source] must provide raw terminal input bytes.
+  /// [source] may be a native terminal stream or a
+  /// deterministic stream supplied by a test.
   ///
-  /// The source may be stdin or an injected stream used by tests.
+  /// Construction does not subscribe to [source] or
+  /// modify terminal settings.
   ///
-  /// Construction does not subscribe to the stream or change
-  /// terminal settings.
+  /// Each [read_keys] invocation establishes its own
+  /// subscription. Consumers should invoke it once
+  /// per interactive terminal session.
   const TerminalInput({required Stream<List<int>> source}) : _source = source;
 
-  /// Raw terminal input supplied by the caller.
+  /// Ordered terminal input chunks supplied by the host.
   final Stream<List<int>> _source;
 
-  /// Reads supported explorer navigation actions.
+  /// Emits physical keys in the order they are received.
   ///
   /// Escape-sequence state is retained across input chunks.
   ///
-  /// Both CSI (ESC [) and SS3 (ESC O) cursor-key sequences
-  /// are supported.
+  /// CSI parameter bytes are consumed until a final
+  /// command byte is received. Unsupported final commands
+  /// produce no key.
   ///
-  /// CSI parameter bytes are ignored until the final command
-  /// byte is received. Unsupported commands are discarded.
+  /// CRLF is treated as one Enter key, including when CR
+  /// and LF arrive in separate chunks.
   ///
-  /// An incomplete escape sequence at end-of-stream is ignored.
+  /// Incomplete escape sequences at end-of-stream are
+  /// discarded without producing an application action.
   ///
-  /// When [source] finishes, this stream completes normally.
-  /// Errors from [source] propagate to the subscriber.
+  /// Stream errors propagate to the caller unchanged.
+  /// The interactive terminal host remains responsible
+  /// for restoration after such failures.
   ///
-  /// Each invocation establishes a new source subscription.
-  /// Callers should consume this stream once for each
-  /// interactive terminal session.
+  /// This method performs no application operations.
   ///
-  /// This method performs no filesystem operations.
+  /// Example:
+  /// ```dart
+  /// final input = TerminalInput(
+  ///   source: Stream<List<int>>.value([0x70]),
+  /// );
   ///
-  /// Consecutive CRLF bytes produce a single open event,
-  /// including when the bytes arrive in separate chunks.
-  Stream<ExplorerKey> read_keys() async* {
+  /// final keys = await input.read_keys().toList();
+  ///
+  /// assert(keys.single == const TerminalCharacterKey('p'));
+  /// ```
+  Stream<TerminalKey> read_keys() async* {
     var state = _EscapeState.idle;
     var previous_was_carriage_return = false;
 
     await for (final chunk in _source) {
       for (final byte in chunk) {
-        // CRLF represents one Enter key, even across chunks.
+        // A CRLF sequence represents one Enter key.
+        // Preserve this rule across input chunk boundaries.
         if (previous_was_carriage_return && byte == 0x0A) {
           previous_was_carriage_return = false;
           continue;
@@ -142,8 +117,8 @@ final class TerminalInput {
             continue;
           }
 
-          // An unsupported escape prefix is discarded.
-          // The current byte may still be a valid key.
+          // Unsupported escape prefixes are discarded.
+          // The current byte is still eligible for decoding.
           state = _EscapeState.idle;
         }
 
@@ -189,55 +164,64 @@ final class TerminalInput {
     }
   }
 
-  /// Maps a terminal cursor-key command to navigation intent.
+  /// Decodes an ANSI cursor-key final byte.
   ///
-  /// Unrecognized commands do not produce an action.
-  static ExplorerKey? _arrow_key(int byte) {
+  /// Only supported directional keys are emitted.
+  /// Unsupported cursor commands return null.
+  static TerminalSpecialKey? _arrow_key(int byte) {
     return switch (byte) {
-      0x41 => ExplorerKey.up,
-      0x42 => ExplorerKey.down,
-      0x44 => ExplorerKey.back,
+      0x41 => TerminalSpecialKey.up,
+      0x42 => TerminalSpecialKey.down,
+      0x44 => TerminalSpecialKey.left,
       _ => null,
     };
   }
 
-  /// Maps ordinary ASCII control and character bytes.
+  /// Decodes ordinary ASCII input into physical keys.
   ///
-  /// Both common Backspace encodings are supported because
-  /// terminal configurations vary.
+  /// Control characters are mapped to their corresponding
+  /// special keys. Printable ASCII values are retained
+  /// without interpreting application shortcuts.
   ///
-  /// Ctrl+C received as a raw ETX byte is treated as a
-  /// controlled quit request.
-  ///
-  /// OS-generated SIGINT is handled separately by the
-  /// terminal host and forwarded as a typed input error.
-  ///
-  /// Unrecognized bytes are ignored.
-  static ExplorerKey? _ordinary_key(int byte) {
-    return switch (byte) {
-      0x0A || 0x0D => ExplorerKey.open,
-      0x08 || 0x7F => ExplorerKey.back,
-      0x73 || 0x53 => ExplorerKey.start_workflow,
-      0x78 || 0x58 => ExplorerKey.stop_workflow,
-      0x03 || 0x71 || 0x51 => ExplorerKey.quit,
-      _ => null,
-    };
+  /// Unsupported control characters return null.
+  static TerminalKey? _ordinary_key(int byte) {
+    switch (byte) {
+      case 0x0A:
+      case 0x0D:
+        return TerminalSpecialKey.enter;
+
+      case 0x08:
+      case 0x7F:
+        return TerminalSpecialKey.backspace;
+
+      case 0x03:
+        return TerminalSpecialKey.interrupt;
+    }
+
+    // All supported printable ASCII characters are
+    // available to future action registrations.
+    if (byte >= 0x20 && byte <= 0x7E) {
+      return TerminalCharacterKey(String.fromCharCode(byte));
+    }
+
+    return null;
   }
 }
 
-/// Tracks decoding of a terminal escape sequence.
+/// Internal state of the ANSI escape-sequence decoder.
 ///
-/// State exists only while consuming one input stream.
+/// State is local to one [TerminalInput.read_keys] invocation.
+/// No decoding state is shared between terminal sessions.
 enum _EscapeState {
-  /// No escape sequence is currently being decoded.
+  /// The decoder is not consuming an escape sequence.
   idle,
 
-  /// An ESC byte has been received.
+  /// ESC has been received.
   prefix,
 
-  /// An ANSI Control Sequence Introducer was received.
+  /// An ANSI Control Sequence Introducer is active.
   csi,
 
-  /// An ANSI Single Shift Three sequence was received.
+  /// An ANSI Single Shift Three sequence is active.
   ss3,
 }
