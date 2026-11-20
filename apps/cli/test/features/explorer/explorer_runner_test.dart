@@ -2,13 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:rudra_cli/rudra_cli.dart';
+
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
+
 import 'package:rudra_cli/src/features/explorer/terminal/dart_explorer_terminal_host.dart';
+
 import 'package:rudra_cli/src/features/explorer/application/explorer_controller.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_runner.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_action_registry.dart';
+import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
+
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
+
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
 
@@ -40,7 +46,10 @@ void main() {
       expect(scenario.inspector.listed, ['/root']);
       expect(scenario.renderer.frames, hasLength(1));
 
-      expect(scenario.renderer.frames.single.header.current_directory, '/root');
+      expect(
+        scenario.renderer.frames.single.header.explorer.current_directory.value,
+        '/root',
+      );
 
       expect(
         scenario.renderer.frames.single.directory.visible_rows.single.name,

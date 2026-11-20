@@ -39,7 +39,7 @@ void main() {
 
       final lines = header.build(constraints).toList();
 
-      expect(lines[2].text, 'Workflow: NOT LOADED');
+      expect(lines[2].text, 'Workflow: NONE');
       expect(lines[2].role, TerminalRole.muted);
     });
 

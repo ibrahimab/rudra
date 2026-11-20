@@ -1,10 +1,10 @@
 # Rudra — Epic 6: Architectural Realignment
 
-**Status:** Architecture agreed on 2026-11-20; implementation in progress, **not verified complete**.  
+**Status:** In progress. Slice 6A complete and verified. Slices 6B–6F remain open. 
 **Previous title:** Feature Isolation, Extensibility & Test Architecture  
 **Canonical repository:** https://github.com/ibrahimab/rudra  
 **Original review baseline:** `ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513` (2026-11-20).  
-**Latest inspected implementation:** `edbc075d43e7a1de734d82ebeacf5b6b9f12917c` (2026-11-20; amended incomplete 6A implementation).  
+**Latest inspected implementation:** `434a92556c24883f604bcd93e179459c8b949af8` (2026-11-20; 6A.4b tests migrated and verified in the CLI suite).  
 **Preceding milestone:** Block 5C: Start → Active → Stop → Ended workflow lifecycle, SDK state machine, SQLite persistence, CLI and Explorer interactions.  
 **Document purpose:** Architectural source of truth and implementation plan. Agreements below are **targets**, not assertions that all APIs exist. Inspect the latest `main` before working on a slice.
 
@@ -254,13 +254,29 @@ Continue to use `RudraCliModule` and `package:args`. Independently owned Start, 
 
 Source references for the original findings are retained at the pinned baseline: [runner](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/application/explorer_runner.dart), [terminal input](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/terminal/terminal_input.dart), [presenter](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/presentation/explorer_presenter.dart), [workflow composition](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/composition/product_workflow_composition.dart), [state reader](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/reading/workflow_state_reader.dart), [processor](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/processing/workflow_processor.dart), [committer](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/persistence/sqlite/lib/src/features/workflow/history/drift_workflow_committer.dart).
 
-### 5.3 Actual implementation status as of `edbc075`
+### 5.3 Actual implementation status as of `434a925`
 
-**Partially implemented (production code only):** `TerminalKey`/physical decoding, a concrete callback-based `ExplorerActionRegistry`, generic runner dispatch, generic status/hints in presentation, Start/Stop Explorer action functions, `WorkflowExplorerState`, and composition registration in `rudra_cli.dart`. Initial cleanup was amended and pushed.
+**Slice 6A — implemented; pending final repository-wide verification.**
 
-**Not yet complete or accepted as final design:** Interface-based feature-owned action classes; removal/replacement of duplicate frontend lifecycle state and policy; compositional ViewModel/widget refactor and reevaluation of Presenter; SDK composite snapshot, slices and observation; portable SDK workflow use cases; generic safe persistence continuation; nested CLI contributions; test restructuring. Existing tests were **not migrated** when inspected. No passing test run has been established for the amended commit.
+The Explorer architecture has been realigned:
 
-Some existing code is expected to be replaced by this agreed design; do not freeze the current `WorkflowExplorerState` or callback-based registry merely to make tests green temporarily. No compatibility shims are required for pre-production experimental APIs.
+- `TerminalKey` and `TerminalInput` represent physical input independently of application commands. Printable characters are dispatched through registered actions.
+- `ExplorerActionRegistry` uses a small `ExplorerAction` interface and immutable feature contributions. It validates feature IDs, action IDs, shortcuts and reserved bindings.
+- Workflow Start and Stop are separate feature-owned Explorer action classes. They invoke explicit application operations and preserve error propagation and workflow identity checks.
+- `WorkflowExplorerState` and its frontend lifecycle mutation methods have been removed. Workflow presentation uses an immutable `WorkflowExplorerViewModel` built from confirmed, read-only workflow restoration.
+- `ExplorerPresenter` has been removed. `ExplorerViewModel` composes focused Header, Directory, Footer and Actions view models. Stateless widgets own their presentation decisions.
+- Directory viewport calculations belong to `ExplorerDirectoryViewModel`. Shared filesystem metadata formatting remains in `DirectoryListingPresenter`.
+- `ExplorerRunner` coordinates navigation, physical input, generic action dispatch, presentation and terminal lifecycle without workflow-specific action branches.
+- Product composition explicitly registers workflow actions, restores persisted workflow state before entering Explorer and refreshes read-only confirmed state after successful actions.
+- Tests are organized by component and feature. Generic input, registry and runner tests use physical keys or synthetic actions; workflow adapters have independent tests. Existing real persistence integration tests remain intact.
+
+**Verification:** The CLI test suite passed at commit `434a925`. The user subsequently reported changing the no-workflow display from `Workflow: NOT LOADED` to `Workflow: NONE` throughout the local implementation and affected tests; that correction was not yet present in the inspected commit. A complete `./rudra verify all` result has not yet been confirmed.
+
+**Remaining 6A closure requirement:** Run `./rudra format`, `./rudra verify all`, `git diff --check` and confirm a clean working tree on the committed result. Record the resulting commit and mark 6A complete when successful.
+
+**Deferred decision:** `ExplorerRunner` still coordinates viewport position, rendering and application-state refresh. Its responsibilities were reviewed, but no extra abstraction was justified. Revisit during subsequent SDK state-observation work if a clearer boundary emerges; do not add a dependency bundle or another state machine solely to shorten its constructor.
+
+**Remaining Epic 6 work:** SDK composite state and typed slices (6B), portable operations and reactive observation (6C), safe processing and persistence extensibility (6D), independent nested CLI commands (6E), and final documentation/change-impact verification (6F).
 
 ## 6. Safe persistence and workflow processing
 
@@ -325,7 +341,7 @@ apps/cli/test/
 
 These are **implementation boundaries**, not invitations to implement the entire future application at once. Review exact contracts and source before each slice; preserve safety at every migration. No code is claimed complete by this plan.
 
-### 6A — Explorer physical input, action and compositional UI realignment (IN PROGRESS)
+### 6A — Explorer physical input, action and compositional UI realignment (COMPLETE)
 
 - Keep physical key decoding separate from feature dispatch; retain `S`, `X`, `Q`, arrows, Enter and Backspace semantics.
 - Refine the partially implemented registry to a small interface-based action contract, with feature-owned implementations and explicit composition.
@@ -337,6 +353,8 @@ These are **implementation boundaries**, not invitations to implement the entire
 - **No SDK workflow/persistence schema changes in this slice.** Avoid short-lived compatibility shims.
 
 **Done when:** The generic decoder/runner need no modifications to wire an additional workflow action; views are compositional; no frontend lifecycle state processor remains; tests and behavior are green.
+
+**Implementation:** Completed through 6A.4b at `434a925`. CLI tests passed and the 6A.5 audit found no blocking architectural issues. The no-workflow label correction was subsequently reported complete. Repository-wide verification and the final pushed implementation remain to be confirmed before marking 6A complete.
 
 ### 6B — SDK composite state and typed slice contracts
 
@@ -431,7 +449,8 @@ A green generic unit suite is insufficient: check domain contracts, persistence 
 - [ADR 0005 — CLI Feature-First Structure](../decisions/0005-cli-feature-first-structure.md): isolate CLI features and tests; retain compositional core rendering.
 - [ADR 0006 — Event-Sourced Workflow and Reactive SDK Architecture](../decisions/0006-event-sourced-workflow-architecture.md): durable commands, state-machine authority, event journal, reactive SDK state, host trust and execution gatekeeper.
 - [Current SDK workflow module registry](../../packages/sdk/lib/src/workflow/modules/workflow_module_registry.dart) and [workflow runtime](../../packages/sdk/lib/src/workflow/workflow_runtime.dart).
-- [Current Explorer action registry](../../apps/cli/lib/src/features/explorer/application/explorer_action_registry.dart), [Runner](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart), [workflow interaction snapshot](../../apps/cli/lib/src/features/workflow/explorer/workflow_explorer_state.dart).
+- [Explorer action registry](../../apps/cli/lib/src/features/explorer/application/explorer_action_registry.dart), [Runner](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart), and [screen ViewModel](../../apps/cli/lib/src/features/explorer/presentation/explorer_view_model.dart).
+- [Workflow Explorer ViewModel](../../apps/cli/lib/src/features/workflow/explorer/workflow_explorer_view_model.dart), [Start action](../../apps/cli/lib/src/features/workflow/explorer/workflow_start_explorer_action.dart), and [Stop action](../../apps/cli/lib/src/features/workflow/explorer/workflow_stop_explorer_action.dart).
 
 This epic **extends** existing ADRs; it does not silently supersede their safety invariants. Once concrete SDK composite-state and observation contracts are implemented, record any genuinely new permanent design decision in an ADR rather than silently treating illustrative names here as final APIs.
 
@@ -443,9 +462,10 @@ This epic **extends** existing ADRs; it does not silently supersede their safety
 - Keep DartDoc useful: purpose, contract, safety/side effects, parameter meaning, errors and examples where appropriate.
 - Preserve working functionality and safety tests; avoid unnecessary replacement of stable subsystems.
 - Verify each completed slice and update this epic's status to reflect actual merged work, not aspirational contracts.
+- Use a new Git commit per completed slice so changes and review baselines remain independently inspectable; avoid routinely amending and force-pushing previous slices.
 
 ### Resume prompt
 
-> Continue Rudra Epic 6 using `docs/epics/rudra-epic-6-architectural-realignment.md` as the agreed architectural reference. Inspect the latest `main` at https://github.com/ibrahimab/rudra before proposing code. We agreed on one authoritative event-sourced composite SDK workflow state with typed slices and reactive observation; SDK-owned behaviors and operations; a non-null workflows slice with nullable current workflow; no duplicated frontend lifecycle state or additional capability framework; ViewModel-as-frontend-state; small stateless compositional widgets; optional presenters; explicit frontend action composition; and safety-preserving extensibility. The amended Explorer 6A code is incomplete and the tests still need migration. Propose the next minimal, coherent 6A change using exact BEFORE/AFTER blocks and retain SDK/persistence work for the appropriate subsequent slices.
+> Continue Rudra Epic 6 using `docs/epics/rudra-epic-6-architectural-realignment.md` as the agreed architectural reference. Inspect the latest `main` at https://github.com/ibrahimab/rudra before proposing changes. Slice 6A realigned physical input, feature-owned Explorer actions, compositional widgets/view models and isolated tests; CLI verification passed, and the no-workflow status-label correction was subsequently reported complete. Confirm full repository verification and formally close 6A before proceeding. Next is 6B: design one coherent immutable SDK workflow snapshot with mandatory identity/version/lifecycle and independently registered typed state slices. Preserve the event journal, state machine, persistence safety, trusted ownership and fail-closed guarantees. Do not introduce another frontend workflow state machine, `NullWorkflowSnapshot`, an extra capability framework or unnecessary compatibility layers. Discuss precise contracts before implementation; test features and layers independently. Leave comprehensive `docs/ARCHITECTURE.md` reconciliation for 6F.
 
-**Provenance:** Updated from the existing Epic 6 document and a fresh GitHub inspection of `edbc075` on 2026-11-20, incorporating the agreed SDK-to-frontend architectural review. This update changes documentation only; it is **not** evidence of implementation or verification.
+**Provenance:** Architecture agreed on 2026-11-20. Progress updated after inspection of commit `434a925` and the user's successful CLI test run; the subsequent status-label correction is user-reported and not independently verified in the inspected commit. Original findings and architectural decisions are retained as historical context. Full repository verification and final 6A closure remain pending.

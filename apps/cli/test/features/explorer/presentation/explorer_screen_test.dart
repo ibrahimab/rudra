@@ -51,7 +51,7 @@ void main() {
 
       expect(lines[0].text, 'RUDRA / EXPLORER  |  FILESYSTEM READ ONLY');
       expect(lines[1].text, 'Directory: /fixture');
-      expect(lines[2].text, 'Workflow: NOT LOADED');
+      expect(lines[2].text, 'Workflow: NONE');
 
       expect(lines[3].text, contains('NAME'));
       expect(lines[4].text, contains('(empty directory)'));

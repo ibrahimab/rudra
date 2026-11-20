@@ -316,7 +316,7 @@ void main() {
 
         expect(
           fixture.terminal.output_buffer.toString(),
-          contains('Workflow: NOT LOADED'),
+          contains('Workflow: NONE'),
         );
 
         expect(fixture.terminal.restored, isTrue);
@@ -362,7 +362,7 @@ void main() {
 
           final first_screen = first.terminal.output_buffer.toString();
 
-          expect(first_screen, contains('Workflow: NOT LOADED'));
+          expect(first_screen, contains('Workflow: NONE'));
           expect(first_screen, contains('Workflow: ACTIVE'));
           expect(
             first_screen,
@@ -491,7 +491,7 @@ void main() {
         expect(screen, contains('Workflow: ACTIVE'));
         expect(screen, contains('ID: ${original!.identity.workflow_id}'));
         expect(screen, contains('X Stop Workflow'));
-        expect(screen, contains('Workflow: NOT LOADED'));
+        expect(screen, contains('Workflow: NONE'));
         expect(screen, contains('S Start Workflow'));
 
         // The Stop is committed, not merely submitted.
@@ -510,7 +510,7 @@ void main() {
 
         expect(
           reopened.terminal.output_buffer.toString(),
-          contains('Workflow: NOT LOADED'),
+          contains('Workflow: NONE'),
         );
 
         expect(await workflows.current(), isNull);

@@ -56,10 +56,7 @@ final class ExplorerHeader implements TerminalWidget {
     if (workflows == null) {
       yield const TerminalLine('Explorer ready.', role: TerminalRole.muted);
     } else if (active == null) {
-      yield const TerminalLine(
-        'Workflow: NOT LOADED',
-        role: TerminalRole.muted,
-      );
+      yield const TerminalLine('Workflow: NONE', role: TerminalRole.muted);
     } else {
       yield TerminalLine(
         'Workflow: ACTIVE'
