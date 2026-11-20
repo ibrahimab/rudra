@@ -1,4 +1,4 @@
-import '../workflow/workflow/states/workflows_state.dart';
+import '../workflow/states/workflows_state.dart';
 
 /// Immutable composite application state exposed by Rudra's SDK.
 ///

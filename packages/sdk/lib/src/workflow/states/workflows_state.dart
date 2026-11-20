@@ -1,3 +1,5 @@
+import 'workflow_snapshot.dart';
+
 /// Immutable owner-scoped view of established workflow state.
 ///
 /// [current_workflow] identifies the sole unfinished workflow
