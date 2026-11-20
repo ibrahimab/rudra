@@ -6,6 +6,7 @@ import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
 import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/workflow/application/workflow_start_exception.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -325,7 +326,7 @@ void main() {
     });
 
     test(
-      'S commits workflow and Q preserves it across Explorer launches',
+      'Start commits once and rejects a conflicting second request',
       () async {
         final directory = await Directory.systemTemp.createTemp(
           'rudra-explorer-start-key-',
@@ -374,9 +375,11 @@ void main() {
           final second = _Fixture(children: {'/fixture': []}, keys: 'sq')
             ..workflow_composition = workflows;
 
-          expect(
-            await second.create_cli().run(['explore']),
-            RudraExitCode.success.value,
+          // The second explicit Start conflicts with the
+          // workflow established by the first invocation.
+          await expectLater(
+            second.create_cli().run(['explore']),
+            throwsA(isA<WorkflowAlreadyActiveException>()),
           );
 
           final second_screen = second.terminal.output_buffer.toString();

@@ -6,6 +6,7 @@ import 'package:rudra_cli/src/core/rendering/renderer.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/dart_explorer_terminal_host.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_controller.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_runner.dart';
+import 'package:rudra_cli/src/features/explorer/application/explorer_action_registry.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
@@ -98,7 +99,9 @@ void main() {
       );
 
       expect(
-        scenario.renderer.frames.map((frame) => frame.header.current_directory),
+        scenario.renderer.frames.map(
+          (frame) => frame.header.explorer.current_directory.value,
+        ),
         orderedEquals(['/root', '/root/docs', '/root']),
       );
 
@@ -125,7 +128,9 @@ void main() {
       expect(scenario.inspector.capability_reads, 0);
 
       expect(
-        scenario.renderer.frames.map((frame) => frame.header.current_directory),
+        scenario.renderer.frames.map(
+          (frame) => frame.header.explorer.current_directory.value,
+        ),
         everyElement('/root'),
       );
 
@@ -160,8 +165,8 @@ void main() {
       expect(scenario.renderer.frames.first.directory.is_incomplete, isTrue);
 
       expect(
-        scenario.renderer.frames.first.footer.inspection_status,
-        contains('1 inspection issue(s)'),
+        scenario.renderer.frames.first.directory.inspection_issues.issues,
+        hasLength(1),
       );
 
       // The child inspection succeeds, but the earlier
@@ -470,247 +475,163 @@ void main() {
       expect(scenario.terminal.invocations, 0);
     });
 
-    test('renders a supplied active workflow without changing it', () async {
-      final identity = WorkflowIdentity(
-        workflow_id: 'workflow-1',
-        os_user_id: 'trusted-user',
-        target_id: 'fixture-target',
-        root: TargetPath('/root'),
-      );
-
-      final active_state = WorkflowStateMachine().replay([
-        WorkflowStartEvent(
-          target_id: 'fixture-target',
-          root: TargetPath('/root'),
-        ),
-        WorkflowStartedEvent(identity: identity),
-      ]) as WorkflowActiveState;
-
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-        active_workflow: active_state,
-        keys: 'q',
-      );
-
-      final status = await scenario.runner.run();
-
-      expect(status, RudraExitCode.success.value);
-
-      final header = scenario.renderer.frames.single.header;
-
-      expect(header.workflow_status, 'ACTIVE');
-      expect(header.workflow_id, identity.workflow_id);
-      expect(header.workflow_version, 2);
-
-      // Quitting ends only the terminal interaction.
-      expect(scenario.controller.model?.is_closed, isTrue);
-      expect(scenario.terminal.restored, isTrue);
-      expect(active_state.is_terminal, isFalse);
-    });
-
-    test('S starts once, updates the header, and Q preserves state', () async {
-      final identity = WorkflowIdentity(
-        workflow_id: 'started-by-key',
-        os_user_id: 'trusted-user',
-        target_id: 'fixture-target',
-        root: TargetPath('/root'),
-      );
-
-      final active = WorkflowStateMachine().replay([
-        WorkflowStartEvent(
-          target_id: 'fixture-target',
-          root: TargetPath('/root'),
-        ),
-        WorkflowStartedEvent(identity: identity),
-      ]) as WorkflowActiveState;
-
-      var starts = 0;
-
-      final scenario = _Scenario(
-        children: {'/root': []},
-        entries: [],
-        keys: 'ssq',
-        start_workflow: (root) async {
-          starts++;
-          expect(root.value, '/root');
-          return active;
-        },
-      );
-
-      final status = await scenario.runner.run();
-
-      expect(status, RudraExitCode.success.value);
-      expect(starts, 1);
-      expect(scenario.renderer.frames, hasLength(2));
-
-      final before = scenario.renderer.frames.first;
-      final after = scenario.renderer.frames.last;
-
-      expect(before.header.workflow_status, 'NOT LOADED');
-      expect(before.footer.navigation_hints, contains('S Start Workflow'));
-
-      expect(after.header.workflow_status, 'ACTIVE');
-      expect(after.header.workflow_id, 'started-by-key');
-      expect(after.header.workflow_version, 2);
-      expect(
-        after.footer.navigation_hints,
-        isNot(contains('S Start Workflow')),
-      );
-
-      expect(scenario.inspector.listed, ['/root']);
-      expect(scenario.controller.model?.is_closed, isTrue);
-      expect(scenario.terminal.restored, isTrue);
-      expect(active.is_terminal, isFalse);
-    });
-
     test(
-      'X stops only the displayed workflow and updates the header',
+      'dispatches contributed actions and refreshes after completion',
       () async {
-        final identity = WorkflowIdentity(
-          workflow_id: 'workflow-1',
-          os_user_id: 'trusted-user',
-          target_id: 'fixture-target',
-          root: TargetPath('/root'),
-        );
+        var executions = 0;
+        var refreshes = 0;
 
-        final active = WorkflowActiveState(identity: identity, version: 2);
-
-        var stops = 0;
+        final registry = ExplorerActionRegistry([
+          ExplorerFeatureContribution(
+            id: 'fixture',
+            actions: [
+              _SyntheticAction(
+                id: 'fixture.probe',
+                shortcut: 'p',
+                operation: (model) async {
+                  expect(model.current_directory.value, '/root');
+                  executions++;
+                },
+              ),
+            ],
+          ),
+        ]);
 
         final scenario = _Scenario(
           children: {'/root': []},
           entries: [],
-          active_workflow: active,
-          keys: 'xxq',
-          stop_workflow: (workflow_id) async {
-            stops++;
-            expect(workflow_id, identity.workflow_id);
-            return workflow_id;
-          },
-          start_workflow: (root) async {
-            throw StateError('Unexpected Start.');
+          keys: 'pPq',
+          action_registry: registry,
+          refresh_application_state: () async {
+            refreshes++;
           },
         );
 
         expect(await scenario.runner.run(), RudraExitCode.success.value);
-        expect(stops, 1);
 
-        // The second X and Q never submit additional Stop actions.
-        expect(scenario.renderer.frames, hasLength(2));
+        expect(executions, 2);
+        expect(refreshes, 2);
 
-        final before = scenario.renderer.frames.first;
-        final after = scenario.renderer.frames.last;
-
-        expect(before.header.workflow_status, 'ACTIVE');
-        expect(before.footer.navigation_hints, contains('X Stop Workflow'));
-
-        expect(after.header.workflow_status, 'NOT LOADED');
-        expect(after.header.workflow_id, isNull);
-        expect(after.footer.navigation_hints, contains('S Start Workflow'));
-        expect(
-          after.footer.navigation_hints,
-          isNot(contains('X Stop Workflow')),
-        );
-
-        expect(scenario.inspector.listed, ['/root']);
-        expect(scenario.controller.model?.is_closed, isTrue);
+        // Initial frame plus one frame for each completed action.
+        expect(scenario.renderer.frames, hasLength(3));
         expect(scenario.terminal.restored, isTrue);
       },
     );
 
-    test('navigation and Q never request workflow stop', () async {
-      final active = WorkflowActiveState(
-        identity: WorkflowIdentity(
-          workflow_id: 'workflow-1',
-          os_user_id: 'trusted-user',
-          target_id: 'fixture-target',
-          root: TargetPath('/root'),
-        ),
-        version: 2,
-      );
-
-      var stops = 0;
+    test('ignores printable keys without registered actions', () async {
+      var refreshes = 0;
 
       final scenario = _Scenario(
         children: {'/root': []},
         entries: [],
-        active_workflow: active,
-        keys: '\x1B[Bq',
-        stop_workflow: (workflow_id) async {
-          stops++;
-          return workflow_id;
+        keys: 'sXp?q',
+        refresh_application_state: () async {
+          refreshes++;
         },
       );
 
       expect(await scenario.runner.run(), RudraExitCode.success.value);
-      expect(stops, 0);
 
-      expect(scenario.renderer.frames.last.header.workflow_status, 'ACTIVE');
+      expect(refreshes, 0);
+      expect(scenario.renderer.frames, hasLength(1));
       expect(scenario.terminal.restored, isTrue);
     });
 
-    test(
-      'failed stop preserves displayed state and restores terminal',
-      () async {
-        final active = WorkflowActiveState(
-          identity: WorkflowIdentity(
-            workflow_id: 'workflow-1',
-            os_user_id: 'trusted-user',
-            target_id: 'fixture-target',
-            root: TargetPath('/root'),
-          ),
-          version: 2,
-        );
+    test('propagates action failures through terminal restoration', () async {
+      var refreshes = 0;
 
-        final scenario = _Scenario(
-          children: {'/root': []},
-          entries: [],
-          active_workflow: active,
-          keys: 'xq',
-          stop_workflow: (workflow_id) async {
-            throw StateError('Injected stop failure.');
-          },
-        );
+      final registry = ExplorerActionRegistry([
+        ExplorerFeatureContribution(
+          id: 'fixture',
+          actions: [
+            _SyntheticAction(
+              id: 'fixture.failure',
+              shortcut: 'f',
+              operation: (_) async {
+                throw StateError('Injected action failure.');
+              },
+            ),
+          ],
+        ),
+      ]);
 
-        await expectLater(scenario.runner.run(), throwsStateError);
-
-        expect(scenario.renderer.frames.last.header.workflow_status, 'ACTIVE');
-        expect(scenario.terminal.restored, isTrue);
-        expect(scenario.controller.model?.is_closed, isTrue);
-      },
-    );
-
-    test('failed workflow start restores terminal modes', () async {
       final scenario = _Scenario(
         children: {'/root': []},
         entries: [],
-        keys: 'sq',
-        start_workflow: (root) async {
-          throw StateError('Injected persistence failure.');
+        keys: 'fq',
+        action_registry: registry,
+        refresh_application_state: () async {
+          refreshes++;
         },
       );
 
       await expectLater(scenario.runner.run(), throwsStateError);
 
+      expect(refreshes, 0);
+      expect(scenario.renderer.frames, hasLength(1));
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.is_closed, isTrue);
+    });
 
-      // A failed command must not be presented as active.
-      expect(
-        scenario.renderer.frames.last.header.workflow_status,
-        'NOT LOADED',
+    test('restores terminal when application-state refresh fails', () async {
+      final registry = ExplorerActionRegistry([
+        ExplorerFeatureContribution(
+          id: 'fixture',
+          actions: [
+            _SyntheticAction(
+              id: 'fixture.refresh',
+              shortcut: 'r',
+              operation: (_) async {},
+            ),
+          ],
+        ),
+      ]);
+
+      final scenario = _Scenario(
+        children: {'/root': []},
+        entries: [],
+        keys: 'rq',
+        action_registry: registry,
+        refresh_application_state: () async {
+          throw StateError('Injected refresh failure.');
+        },
       );
+
+      await expectLater(scenario.runner.run(), throwsStateError);
+
+      expect(scenario.renderer.frames, hasLength(1));
+      expect(scenario.terminal.restored, isTrue);
+      expect(scenario.controller.model?.is_closed, isTrue);
     });
   });
 }
 
-/// Composes one isolated Explorer interaction fixture.
+/// Composes an isolated Explorer interaction for runner tests.
 ///
-/// Uses the real public SDK and navigation controller.
-/// Only external filesystem and terminal operations are faked.
+/// Uses the real SDK navigation controller with an in-memory
+/// filesystem inspector, terminal host and recording renderer.
+///
+/// Action contributions are synthetic and supplied through the
+/// generic registry.
 final class _Scenario {
-  /// Creates a scenario using the configured input and observations.
+  /// Creates a runner scenario from deterministic inputs.
+  ///
+  /// [children] maps directory paths to their observed child paths.
+  ///
+  /// [entries] contains entry metadata returned by the inspector.
+  ///
+  /// [failures] identifies paths that produce inspection failures.
+  ///
+  /// [keys] is the terminal input sequence used when [source] is null.
+  ///
+  /// [source] optionally supplies a custom terminal byte stream.
+  ///
+  /// [rows] is the terminal height for the initial frame.
+  ///
+  /// [action_registry] supplies optional synthetic feature actions.
+  ///
+  /// [refresh_application_state] is an optional callback invoked
+  /// after an action completes successfully.
   _Scenario({
     required Map<String, List<String>> children,
     required List<FilesystemEntry> entries,
@@ -718,10 +639,8 @@ final class _Scenario {
     String keys = 'q',
     Stream<List<int>>? source,
     int rows = 24,
-    WorkflowActiveState? active_workflow,
-    EventSubmissionReceipt? pending_submission,
-    Future<WorkflowActiveState> Function(TargetPath)? start_workflow,
-    Future<String> Function(String workflow_id)? stop_workflow,
+    ExplorerActionRegistry? action_registry,
+    Future<void> Function()? refresh_application_state,
   }) {
     inspector = _Inspector(
       children: children,
@@ -747,30 +666,83 @@ final class _Scenario {
       terminal: terminal,
       renderer: renderer,
       error_output: errors,
-      active_workflow: active_workflow,
-      pending_submission: pending_submission,
-      start_workflow: start_workflow,
-      stop_workflow: stop_workflow,
+      create_view_model:
+          (
+            explorer, {
+            required int visible_row_limit,
+            required int first_visible_index,
+          }) {
+            return ExplorerViewModel.from_navigation(
+              explorer: explorer,
+              workflows: null,
+              visible_row_limit: visible_row_limit,
+              first_visible_index: first_visible_index,
+            );
+          },
+      refresh_application_state: refresh_application_state,
+      action_registry: action_registry,
     );
   }
 
-  /// Configured SDK inspection fixture.
+  /// Configured in-memory filesystem inspector.
   late final _Inspector inspector;
 
-  /// Injected terminal lifecycle.
+  /// Fake interactive terminal and lifecycle host.
   late final _FakeTerminalHost terminal;
 
-  /// Captured presentation snapshots.
+  /// Renderer capturing generated Explorer view models.
   late final _RecordingRenderer renderer;
 
-  /// Configuration diagnostics.
+  /// Buffer for terminal configuration diagnostics.
   late final StringBuffer errors;
 
-  /// Actual SDK-backed navigation controller.
+  /// SDK-backed Explorer navigation controller.
   late final ExplorerController controller;
 
-  /// Workflow under test.
+  /// Interactive Explorer runner under test.
   late final ExplorerRunner runner;
+}
+
+/// Synthetic Explorer action for runner interaction tests.
+///
+/// The supplied operation records execution or injects failures
+/// without requiring an application service.
+final class _SyntheticAction implements ExplorerAction {
+  /// Creates an action with an injected operation.
+  ///
+  /// [id] uniquely identifies the action within its registry.
+  ///
+  /// [shortcut] is the printable character used for dispatch.
+  ///
+  /// [operation] receives the navigation snapshot passed by
+  /// the runner and completes or fails asynchronously.
+  const _SyntheticAction({
+    required this.id,
+    required this.shortcut,
+    required this.operation,
+  });
+
+  /// Unique identifier for the synthetic action.
+  @override
+  final String id;
+
+  /// Physical keyboard shortcut used by the registry.
+  @override
+  final String shortcut;
+
+  /// Operation invoked when the action is dispatched.
+  final Future<void> Function(ExplorerModel) operation;
+
+  /// Executes the injected operation.
+  ///
+  /// [model] is the current navigation snapshot supplied by
+  /// the runner.
+  ///
+  /// Returns the operation's future and propagates its failures.
+  @override
+  Future<void> execute(ExplorerModel model) {
+    return operation(model);
+  }
 }
 
 /// Provides read-only in-memory filesystem observations.

@@ -4,7 +4,7 @@ import 'package:rudra_cli/src/core/rendering/theme.dart';
 
 import 'package:rudra_cli/src/features/explorer/presentation/bare_explorer_renderer.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
-import 'package:rudra_cli/src/features/explorer/presentation/explorer_presenter.dart';
+import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_view_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -290,9 +290,19 @@ void main() {
   });
 }
 
-/// Creates a deterministic Explorer presentation snapshot.
+/// Builds an Explorer presentation from deterministic observations.
 ///
-/// All filesystem observations are supplied in memory.
+/// [entries] contains the observed directory entries.
+///
+/// [selected_index] is the initially selected entry when entries exist.
+///
+/// [visible_row_limit] controls the directory viewport height.
+///
+/// [is_complete] records observation completeness.
+///
+/// [is_closed] determines whether the navigation interaction has ended.
+///
+/// [issues] contains typed inspection diagnostics.
 ExplorerViewModel _view_model(
   List<FilesystemEntry> entries, {
   int selected_index = 0,
@@ -303,7 +313,7 @@ ExplorerViewModel _view_model(
 }) {
   final directory = TargetPath('/fixture');
 
-  var model = ExplorerModel(
+  var explorer = ExplorerModel(
     root_directory: directory,
     listing: DirectoryListing(
       target_id: 'fixture-target',
@@ -315,15 +325,16 @@ ExplorerViewModel _view_model(
   );
 
   if (entries.isNotEmpty) {
-    model = model.with_selection(selected_index);
+    explorer = explorer.with_selection(selected_index);
   }
 
   if (is_closed) {
-    model = model.close();
+    explorer = explorer.close();
   }
 
-  return const ExplorerPresenter().present(
-    model,
+  return ExplorerViewModel.from_navigation(
+    explorer: explorer,
+    workflows: const WorkflowExplorerViewModel(current_workflow: null),
     visible_row_limit: visible_row_limit,
   );
 }

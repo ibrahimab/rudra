@@ -3,13 +3,14 @@ import 'package:rudra_cli/src/core/rendering/widgets/terminal_widget.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
 
 import 'package:rudra_cli/src/features/explorer/presentation/bare_explorer_renderer.dart';
-import 'package:rudra_cli/src/features/explorer/presentation/explorer_presenter.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/directory/explorer_directory.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/footer/explorer_footer.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/header/explorer_header.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
+
+import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -123,21 +124,37 @@ void main() {
       expect(output.toString(), contains('unsafe?[2J'));
       expect(output.toString(), isNot(contains('\x1B[2J')));
     });
+
+    test('composes component models from one navigation snapshot', () {
+      final view_model = _view_model(visible_row_limit: 3);
+
+      expect(view_model.header.explorer, same(view_model.directory.explorer));
+
+      expect(view_model.footer.directory, same(view_model.directory));
+
+      expect(
+        view_model.footer.actions.explorer,
+        same(view_model.directory.explorer),
+      );
+    });
   });
 }
 
-/// Creates an immutable Explorer presentation for widget tests.
+/// Creates a composed Explorer presentation from an in-memory
+/// directory observation.
 ///
-/// The observed directory is empty and entirely in memory.
+/// [visible_row_limit] is the number of directory entry rows.
 ///
-/// No filesystem operation occurs during construction.
+/// [root] is the target-native directory displayed by Explorer.
+///
+/// Returns a complete view model with no active workflow.
 ExplorerViewModel _view_model({
   required int visible_row_limit,
   String root = '/fixture',
 }) {
   final directory = TargetPath(root);
 
-  final model = ExplorerModel(
+  final explorer = ExplorerModel(
     root_directory: directory,
     listing: DirectoryListing(
       target_id: 'fixture-target',
@@ -147,8 +164,9 @@ ExplorerViewModel _view_model({
     ),
   );
 
-  return const ExplorerPresenter().present(
-    model,
+  return ExplorerViewModel.from_navigation(
+    explorer: explorer,
+    workflows: const WorkflowExplorerViewModel(current_workflow: null),
     visible_row_limit: visible_row_limit,
   );
 }
