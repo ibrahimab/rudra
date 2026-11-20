@@ -1,73 +1,75 @@
 import 'package:rudra_sdk/rudra_sdk.dart' show TargetPath, WorkflowActiveState;
 
 import '../../explorer/application/explorer_action_registry.dart';
-import 'workflow_explorer_state.dart';
+import '../../explorer/application/explorer_model.dart';
 
-/// Creates the Explorer contribution for workflow creation.
+/// Explorer action for starting a workflow.
 ///
-/// This action is owned by the Workflow feature, not by the
-/// generic Explorer runner or terminal input decoder.
+/// The S shortcut starts a workflow using the directory currently
+/// displayed in Explorer as its requested filesystem root.
 ///
-/// The action binds the S shortcut to the same application
-/// operation used by the non-interactive workflow CLI.
-///
-/// The current Explorer directory is passed as the requested
-/// workflow root without modifying navigation state.
-///
-/// Availability is determined from [state]. Execution also
-/// checks availability independently, so direct invocation
-/// cannot bypass the action's interaction-level guard.
-///
-/// [start_workflow] must return an authoritatively committed
-/// and restored [WorkflowActiveState]. A submission receipt
-/// or provisional result must not be reported as success.
-///
-/// Backend ownership, persistence, and concurrency checks
-/// remain the responsibility of the injected application
-/// operation.
-///
-/// The state snapshot is updated only after successful
-/// completion. An operation failure propagates unchanged.
+/// Workflow creation is performed by the supplied application
+/// operation, which returns a confirmed [WorkflowActiveState].
 ///
 /// Example:
 /// ```dart
-/// final state = WorkflowExplorerState();
-///
-/// final action = create_workflow_start_action(
-///   state: state,
-///   start_workflow: application.start,
+/// final action = WorkflowStartExplorerAction(
+///   start_workflow: (root) => workflows.start(
+///     target_id: target_id,
+///     root: root,
+///   ),
 /// );
 ///
-/// // Composition registers action under the Workflow feature.
-/// // Explorer dispatches it only after an explicit S keypress.
+/// final contribution = ExplorerFeatureContribution(
+///   id: 'workflow',
+///   actions: [action],
+/// );
 /// ```
-ExplorerAction create_workflow_start_action({
-  required WorkflowExplorerState state,
-  required Future<WorkflowActiveState> Function(TargetPath) start_workflow,
-}) {
-  return ExplorerAction(
-    id: 'workflow.start',
-    shortcut: 's',
-    hint: 'Start Workflow',
-    is_available: (_) => state.can_start,
-    execute: (model) async {
-      // An action must enforce its own interaction guard.
-      // Registry availability alone is not authorization.
-      if (!state.can_start) {
-        throw StateError('Workflow Start is not available.');
-      }
+final class WorkflowStartExplorerAction implements ExplorerAction {
+  /// Creates a workflow Start action.
+  ///
+  /// [start_workflow] is the application operation responsible for
+  /// creating a workflow at the requested filesystem root.
+  ///
+  /// The operation must return an authoritatively committed
+  /// [WorkflowActiveState]. Submission acceptance alone is
+  /// insufficient.
+  ///
+  /// Construction does not invoke the supplied operation.
+  const WorkflowStartExplorerAction({required this.start_workflow});
 
-      // Use the exact directory displayed at the moment
-      // the explicit action is dispatched.
-      final root = model.current_directory;
+  /// Application operation used to create a workflow.
+  ///
+  /// Receives a [TargetPath] identifying the requested root
+  /// and returns the resulting committed [WorkflowActiveState].
+  ///
+  /// Validation, persistence, and processing exceptions propagate
+  /// through the returned future.
+  final Future<WorkflowActiveState> Function(TargetPath) start_workflow;
 
-      // The injected operation performs authoritative
-      // persistence checks and returns committed state.
-      final committed = await start_workflow(root);
+  /// Stable identifier for workflow creation.
+  @override
+  String get id => 'workflow.start';
 
-      // Never display an accepted-but-uncommitted request
-      // as an active workflow.
-      state.record_started(committed);
-    },
-  );
+  /// Keyboard shortcut used to start a workflow.
+  @override
+  String get shortcut => 's';
+
+  /// Starts a workflow for the currently displayed directory.
+  ///
+  /// [model] supplies the Explorer navigation snapshot at dispatch
+  /// time. Its [ExplorerModel.current_directory] determines the
+  /// requested workflow root.
+  ///
+  /// Returns a future that completes when the application operation
+  /// confirms workflow creation.
+  ///
+  /// Errors from [start_workflow] propagate to the caller.
+  @override
+  Future<void> execute(ExplorerModel model) async {
+    // Capture the root associated with this keyboard interaction.
+    final root = model.current_directory;
+
+    await start_workflow(root);
+  }
 }

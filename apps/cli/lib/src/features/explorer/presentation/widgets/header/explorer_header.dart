@@ -3,34 +3,41 @@ import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
 import 'explorer_header_view_model.dart';
 
+/// Renders Explorer's title, current directory, and workflow status.
+///
+/// The header occupies three terminal rows. Workflow information
+/// is derived from the supplied presentation snapshot.
+///
+/// Example:
+/// ```dart
+/// final header = ExplorerHeader(header_view_model);
+///
+/// print(header.height);
+/// // 3
+/// ```
 final class ExplorerHeader implements TerminalWidget {
-  /// Creates a header from its prepared presentation model.
+  /// Creates a header from its presentation state.
   ///
-  /// Construction performs no application operations or
-  /// terminal I/O.
+  /// [view_model] contains the navigation and workflow objects
+  /// represented by this header.
   const ExplorerHeader(this.view_model);
 
-  /// Immutable, feature-independent presentation snapshot.
+  /// Current header presentation state.
   final ExplorerHeaderViewModel view_model;
 
-  /// Fixed height of the generic Explorer header.
-  ///
-  /// The title, directory, and status each occupy one row.
-  /// Keeping this value stable preserves viewport sizing.
+  /// Fixed number of rows occupied by the header.
   static const int fixed_rows = 3;
 
-  /// Number of terminal rows occupied by this widget.
+  /// Returns the header's fixed terminal height.
   @override
   int get height => fixed_rows;
 
-  /// Builds exactly three terminal lines.
+  /// Renders the header for the supplied terminal constraints.
   ///
-  /// The status is supplied as prepared presentation data.
-  /// This widget does not interpret feature-specific states
-  /// or determine whether application operations are allowed.
+  /// [constraints] supplies the available layout dimensions.
+  /// The renderer handles sanitization and final text fitting.
   ///
-  /// Terminal text sanitization and truncation remain the
-  /// responsibility of the shared rendering backend.
+  /// Returns the title, directory, and workflow status lines.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine(
@@ -39,15 +46,28 @@ final class ExplorerHeader implements TerminalWidget {
     );
 
     yield TerminalLine(
-      'Directory: ${view_model.current_directory}',
+      'Directory: ${view_model.explorer.current_directory.value}',
       role: TerminalRole.path,
     );
 
-    // The owning feature has already prepared the status.
-    // The header selects only its presentation style.
-    yield TerminalLine(
-      view_model.status_line,
-      role: view_model.emphasized ? TerminalRole.heading : TerminalRole.muted,
-    );
+    final workflows = view_model.workflow;
+    final active = workflows?.current_workflow;
+
+    if (workflows == null) {
+      yield const TerminalLine('Explorer ready.', role: TerminalRole.muted);
+    } else if (active == null) {
+      yield const TerminalLine(
+        'Workflow: NOT LOADED',
+        role: TerminalRole.muted,
+      );
+    } else {
+      yield TerminalLine(
+        'Workflow: ACTIVE'
+        '  |  ID: ${active.identity.workflow_id}'
+        '  |  Version: ${active.version}'
+        '  |  Target: ${active.identity.target_id}',
+        role: TerminalRole.heading,
+      );
+    }
   }
 }

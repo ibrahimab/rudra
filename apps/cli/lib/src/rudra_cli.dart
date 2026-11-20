@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 
-import 'package:rudra_sdk/rudra_sdk.dart'
-    show application_name, WorkflowActiveState, TargetPath;
+import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
 
 import 'composition/product_sdk_composition.dart';
 
@@ -33,15 +32,15 @@ import 'features/explorer/cli/explorer_cli_module.dart';
 
 import 'features/explorer/application/explorer_controller.dart';
 import 'features/explorer/application/explorer_runner.dart';
-import 'features/workflow/application/workflow_start_exception.dart';
 
 import 'features/workflow/cli/workflow_cli_module.dart';
 
 import 'features/explorer/application/explorer_action_registry.dart';
-import 'features/workflow/explorer/workflow_explorer_state.dart';
-import 'features/workflow/explorer/workflow_explorer_status.dart';
 import 'features/workflow/explorer/workflow_start_explorer_action.dart';
 import 'features/workflow/explorer/workflow_stop_explorer_action.dart';
+import 'features/explorer/application/explorer_model.dart';
+import 'features/explorer/presentation/explorer_view_model.dart';
+import 'features/workflow/explorer/workflow_explorer_view_model.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///
@@ -229,75 +228,74 @@ final class RudraCli {
         ExplorerCliModule(
           working_directory: composition.working_directory,
           create_runner: (directory) async {
-            // Restore authoritative persisted workflow state on every
-            // Explorer invocation.
-            //
-            // This is a read-only query. It does not submit commands,
-            // process pending requests, or change workflow lifecycle.
-            //
-            // If restoration detects corrupted history, the failure
-            // propagates before entering interactive terminal mode.
-            final active_workflow = await workflows?.current();
+            // Keep one immutable workflow presentation snapshot
+            // for the current Explorer invocation.
+            WorkflowExplorerViewModel? workflow_view_model;
 
-            // Explicit Explorer workflow creation uses the same
-            // application action as the `workflow start` CLI command.
-            //
-            // If another process established the workflow first,
-            // restore that authoritative state rather than attempting
-            // to create a competing workflow.
-            Future<WorkflowActiveState> start_from_explorer(
-              TargetPath root,
-            ) async {
-              final service = workflows!;
-
-              try {
-                return await service.start(
-                  target_id: composition.sdk.target_id,
-                  root: root,
-                );
-              } on WorkflowAlreadyActiveException {
-                final existing = await service.current();
-
-                if (existing == null) {
-                  rethrow;
-                }
-
-                return existing;
+            /// Restores the current workflow through the read-only
+            /// application query.
+            ///
+            /// A missing workflow is represented by a null
+            /// [WorkflowExplorerViewModel.current_workflow].
+            ///
+            /// An unsuccessful restoration propagates its error.
+            Future<void> refresh_workflow_view_model() async {
+              if (workflows == null) {
+                return;
               }
+
+              final current_workflow = await workflows.current();
+
+              // Replace the entire immutable presentation snapshot.
+              // No frontend lifecycle transition is inferred.
+              workflow_view_model = WorkflowExplorerViewModel(
+                current_workflow: current_workflow,
+              );
             }
 
-            // Create the workflow state displayed during this
-            // Explorer invocation.
-            //
-            // This snapshot is initialized from authoritative,
-            // read-only restoration performed above.
-            //
-            // Its construction never submits workflow events.
-            final workflow_state = WorkflowExplorerState(
-              active_workflow: active_workflow,
-            );
+            // Load authoritative state before terminal activation.
+            await refresh_workflow_view_model();
 
-            // Assemble feature contributions before interaction.
-            //
-            // The generic Explorer runner receives only the
-            // action registry. It does not depend directly on
-            // workflow lifecycle implementations.
-            //
-            // New feature actions are contributed here without
-            // modifying terminal decoding or Explorer dispatch.
+            /// Builds the composed Explorer presentation.
+            ///
+            /// [explorer] is the current navigation snapshot.
+            ///
+            /// [visible_row_limit] is the allocated entry viewport.
+            ///
+            /// [first_visible_index] is the preferred scroll offset.
+            ///
+            /// Returns a complete presentation snapshot.
+            ExplorerViewModel create_view_model(
+              ExplorerModel explorer, {
+              required int visible_row_limit,
+              required int first_visible_index,
+            }) {
+              return ExplorerViewModel.from_navigation(
+                explorer: explorer,
+                workflows: workflow_view_model,
+                visible_row_limit: visible_row_limit,
+                first_visible_index: first_visible_index,
+              );
+            }
+
+            // Action implementations are registered explicitly.
+            // Their application operations use the configured
+            // trusted workflow composition.
             final action_registry = ExplorerActionRegistry([
               ExplorerFeatureContribution(
                 id: 'workflow',
-                status: () => workflow_explorer_status(workflow_state),
                 actions: [
                   if (workflows != null)
-                    create_workflow_start_action(
-                      state: workflow_state,
-                      start_workflow: start_from_explorer,
+                    WorkflowStartExplorerAction(
+                      start_workflow: (root) => workflows.start(
+                        target_id: composition.sdk.target_id,
+                        root: root,
+                      ),
                     ),
                   if (workflows != null)
-                    create_workflow_stop_action(
-                      state: workflow_state,
+                    WorkflowStopExplorerAction(
+                      displayed_workflow: () =>
+                          workflow_view_model?.current_workflow,
                       stop_workflow: (expected_workflow_id) => workflows.stop(
                         expected_workflow_id: expected_workflow_id,
                       ),
@@ -334,6 +332,8 @@ final class RudraCli {
               terminal: terminal,
               renderer: renderer,
               error_output: diagnostic_output,
+              create_view_model: create_view_model,
+              refresh_application_state: refresh_workflow_view_model,
               action_registry: action_registry,
             );
           },

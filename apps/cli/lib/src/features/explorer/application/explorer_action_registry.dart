@@ -1,222 +1,168 @@
 import 'explorer_model.dart';
 
-/// A feature-owned status contribution for Explorer.
+/// Represents an action invoked through an Explorer keyboard shortcut.
 ///
-/// Status values are presentation data only. They must not
-/// be interpreted as authorization to perform an operation.
+/// Each action defines a stable identifier, a keyboard shortcut, and
+/// an operation executed against the current Explorer navigation model.
 ///
-/// The feature producing a status is responsible for
-/// projecting its authoritative application snapshot.
-///
-/// Explorer is responsible only for displaying the result.
-final class ExplorerStatus {
-  /// Creates immutable status presentation data.
-  ///
-  /// [text] is the complete human-readable contribution.
-  ///
-  /// [emphasized] requests the existing heading style.
-  /// It does not indicate that an action is authorized.
-  const ExplorerStatus(this.text, {this.emphasized = false});
-
-  /// Human-readable text supplied by the owning feature.
-  final String text;
-
-  /// Whether presentation should emphasize this status.
-  final bool emphasized;
-}
-
-/// Describes one explicitly invoked Explorer action.
-///
-/// An action owns its identity, keyboard binding,
-/// availability rule, and application operation.
-///
-/// The registry does not inspect action-specific state or
-/// know which application capability the action represents.
-///
-/// [is_available] must be synchronous and side-effect-free.
-/// It may inspect a feature-owned in-memory snapshot.
-///
-/// [execute] may perform application operations. It is
-/// invoked only when a registered shortcut is explicitly
-/// received and the action is available.
-///
-/// Availability is a UI and dispatch decision, not a
-/// substitute for backend authorization or revalidation.
-///
-/// Implementations must independently enforce their
-/// application invariants before performing side effects.
+/// Implementations are registered through [ExplorerActionRegistry].
 ///
 /// Example:
 /// ```dart
-/// final action = ExplorerAction(
-///   id: 'example.inspect',
-///   shortcut: 'i',
-///   hint: 'Inspect',
-///   is_available: (_) => true,
-///   execute: (model) async {
+/// final class InspectAction implements ExplorerAction {
+///   const InspectAction();
+///
+///   @override
+///   String get id => 'filesystem.inspect';
+///
+///   @override
+///   String get shortcut => 'i';
+///
+///   @override
+///   Future<void> execute(ExplorerModel model) async {
 ///     print(model.current_directory.value);
-///   },
-/// );
+///   }
+/// }
 /// ```
-final class ExplorerAction {
-  /// Creates an action contribution.
+abstract interface class ExplorerAction {
+  /// Unique identifier for this action.
   ///
-  /// Construction does not execute the action or evaluate
-  /// its availability rule.
+  /// Identifiers should be feature-qualified, such as
+  /// `workflow.start` or `filesystem.inspect`.
   ///
-  /// The registry validates IDs, shortcuts, and collisions
-  /// when contributions are assembled.
-  const ExplorerAction({
-    required this.id,
-    required this.shortcut,
-    required this.hint,
-    required this.is_available,
-    required this.execute,
-  });
+  /// The registry rejects duplicate identifiers.
+  String get id;
 
-  /// Globally unique action identifier within Explorer.
+  /// Keyboard shortcut assigned to this action.
   ///
-  /// Prefer feature-qualified IDs such as `workflow.start`.
-  /// IDs must remain stable across refactoring.
-  final String id;
+  /// Must contain exactly one printable ASCII character.
+  /// Matching is case-insensitive.
+  ///
+  /// Duplicate and reserved shortcuts are rejected during
+  /// registration.
+  String get shortcut;
 
-  /// Printable ASCII shortcut for the action.
+  /// Executes the action using the current Explorer snapshot.
   ///
-  /// Registration is case-insensitive. The original value
-  /// is retained for presentation.
-  final String shortcut;
-
-  /// Short label displayed alongside the shortcut.
+  /// [model] contains the navigation state at the moment the
+  /// keyboard shortcut was dispatched.
   ///
-  /// Example: `Start Workflow`.
-  final String hint;
-
-  /// Determines whether the action can currently be offered.
+  /// Returns a future that completes when the action finishes.
   ///
-  /// This callback must not submit commands, mutate state,
-  /// or perform filesystem or persistence operations.
-  final bool Function(ExplorerModel) is_available;
-
-  /// Performs the action against the current Explorer snapshot.
-  ///
-  /// The callback is awaited by the generic runner.
-  /// Failures propagate through terminal restoration.
-  ///
-  /// The feature owns any required application state updates.
-  final Future<void> Function(ExplorerModel) execute;
+  /// Exceptions from the underlying application operation
+  /// propagate to the caller.
+  Future<void> execute(ExplorerModel model);
 }
 
-/// Groups the Explorer contributions owned by one feature.
+/// Groups the Explorer actions contributed by a feature.
 ///
-/// Features may contribute actions, a status projection,
-/// or both.
+/// Each contribution has a unique identifier and an immutable,
+/// ordered collection of actions.
 ///
-/// This contract separates feature implementation from
-/// frontend registration. A new feature can contribute
-/// behavior without modifying existing Explorer actions.
-///
-/// The supplied action collection is copied and made
-/// unmodifiable to prevent registration changes after
-/// the application has been composed.
+/// The registry uses these contributions to validate action
+/// identities and construct its keyboard shortcut index.
 ///
 /// Example:
 /// ```dart
 /// final contribution = ExplorerFeatureContribution(
-///   id: 'example',
-///   actions: [example_action],
-///   status: () => const ExplorerStatus('Example ready'),
+///   id: 'workflow',
+///   actions: [start_action, stop_action],
 /// );
 /// ```
 final class ExplorerFeatureContribution {
   /// Creates a feature contribution.
   ///
-  /// [id] identifies the contributing feature.
+  /// [id] uniquely identifies the contributing feature within
+  /// the Explorer registry.
   ///
-  /// [actions] contains the feature's registered actions,
-  /// in their desired presentation order.
+  /// [actions] contains the feature's action implementations.
+  /// The supplied collection is copied into an unmodifiable
+  /// list, preserving its original order.
   ///
-  /// [status] is an optional synchronous projection of
-  /// feature-owned presentation state.
-  ///
-  /// Construction never invokes supplied callbacks.
+  /// An empty action collection is permitted.
   ExplorerFeatureContribution({
     required this.id,
     Iterable<ExplorerAction> actions = const [],
-    this.status,
   }) : actions = List<ExplorerAction>.unmodifiable(actions);
 
-  /// Unique feature identifier within the Explorer.
+  /// Unique identifier for the contributing feature.
+  ///
+  /// Examples include `workflow`, `filesystem`, and `explorer`.
   final String id;
 
-  /// Immutable, ordered actions owned by this feature.
-  final List<ExplorerAction> actions;
-
-  /// Optional read-only feature status projection.
+  /// Immutable collection of actions registered by this feature.
   ///
-  /// The callback must not perform application operations.
-  final ExplorerStatus Function()? status;
+  /// Actions retain the order supplied to the constructor.
+  final List<ExplorerAction> actions;
 }
 
-/// Validates and exposes registered Explorer feature actions.
+/// Registry of keyboard actions contributed by Explorer features.
 ///
-/// The registry has three responsibilities:
-/// - Reject invalid or conflicting contributions.
-/// - Resolve currently available printable-key actions.
-/// - Expose ordered presentation contributions.
+/// Construction validates all contributions and builds an immutable
+/// shortcut-to-action lookup.
 ///
-/// It deliberately does not:
-/// - Construct SDK services or persistence adapters.
-/// - Know about workflow events or states.
-/// - Execute actions during registration.
-/// - Own terminal input or lifecycle.
-/// - Perform backend authorization.
-/// - Modify navigation or filesystem state.
+/// Feature identifiers and action identifiers must be unique across
+/// the registration. Shortcuts are matched case-insensitively.
 ///
-/// All contributions are supplied explicitly by composition.
-/// Registration finishes before the interaction begins.
-///
-/// Adding a new action requires a new contribution and
-/// composition registration, not registry modifications.
+/// Invalid registrations fail during construction.
 ///
 /// Example:
 /// ```dart
 /// final registry = ExplorerActionRegistry([
 ///   ExplorerFeatureContribution(
-///     id: 'example',
-///     actions: [example_action],
+///     id: 'workflow',
+///     actions: [start_action, stop_action],
 ///   ),
 /// ]);
 ///
-/// final action = registry.resolve('i', explorer_model);
+/// final action = registry.resolve('s');
 ///
 /// if (action != null) {
 ///   await action.execute(explorer_model);
 /// }
 /// ```
 final class ExplorerActionRegistry {
-  /// Constructs an immutable Explorer action registration.
+  /// Creates a registry from the supplied feature contributions.
   ///
-  /// Rejects:
-  /// - Empty or duplicate feature identifiers.
-  /// - Empty or duplicate action identifiers.
-  /// - Empty action labels.
-  /// - Non-ASCII or multi-character shortcuts.
-  /// - Duplicate shortcuts, ignoring character case.
-  /// - Shortcuts reserved for built-in Explorer behavior.
+  /// [features] contains the feature registrations to validate
+  /// and index. Contributions are processed in iteration order.
   ///
-  /// Validation occurs before any interaction starts.
-  /// No application action is executed by construction.
+  /// Throws [ArgumentError] when:
+  /// - A feature identifier is empty or duplicated.
+  /// - An action identifier is empty or duplicated.
+  /// - A shortcut is not one printable ASCII character.
+  /// - A shortcut conflicts with another action.
+  /// - A shortcut is reserved by Explorer.
+  ///
+  /// The registry becomes available only after all contributions
+  /// have been validated successfully.
   ExplorerActionRegistry(Iterable<ExplorerFeatureContribution> features)
-    : _features = List<ExplorerFeatureContribution>.unmodifiable(features) {
+    : _by_shortcut = _register(features);
+
+  /// Immutable lookup of registered actions by keyboard shortcut.
+  ///
+  /// Shortcut keys are normalized to lowercase during registration.
+  final Map<String, ExplorerAction> _by_shortcut;
+
+  /// Validates contributions and builds the shortcut index.
+  ///
+  /// [features] contains the contributions to register.
+  ///
+  /// Returns an unmodifiable map indexed by normalized shortcuts.
+  ///
+  /// Throws [ArgumentError] for invalid or conflicting
+  /// contributions.
+  static Map<String, ExplorerAction> _register(
+    Iterable<ExplorerFeatureContribution> features,
+  ) {
     final feature_ids = <String>{};
     final action_ids = <String>{};
+    final actions = <String, ExplorerAction>{};
 
-    // Quit is a built-in lifecycle operation.
-    // Navigation uses non-printable keys and therefore
-    // cannot collide with printable action bindings.
-    final shortcuts = <String>{'q'};
+    // Quit is handled by Explorer's interaction lifecycle.
+    const reserved_shortcuts = {'q'};
 
-    for (final feature in _features) {
+    for (final feature in features) {
       if (feature.id.trim().isEmpty || !feature_ids.add(feature.id)) {
         throw ArgumentError('Invalid or duplicate Explorer feature ID.');
       }
@@ -226,14 +172,11 @@ final class ExplorerActionRegistry {
           throw ArgumentError('Invalid or duplicate Explorer action ID.');
         }
 
-        if (action.hint.trim().isEmpty) {
-          throw ArgumentError('Explorer action hints cannot be empty.');
-        }
-
         final shortcut = action.shortcut;
 
-        // Only visible printable ASCII characters are
-        // supported as action shortcuts in this version.
+        // Restrict shortcuts to printable ASCII characters.
+        // ANSI control sequences and whitespace are handled
+        // separately by the terminal input decoder.
         if (shortcut.length != 1 ||
             shortcut.codeUnitAt(0) < 0x21 ||
             shortcut.codeUnitAt(0) > 0x7E) {
@@ -243,81 +186,41 @@ final class ExplorerActionRegistry {
           );
         }
 
+        // Normalize before collision detection so uppercase
+        // and lowercase forms cannot identify different actions.
         final normalized = shortcut.toLowerCase();
 
-        if (!shortcuts.add(normalized)) {
+        if (reserved_shortcuts.contains(normalized) ||
+            actions.containsKey(normalized)) {
           throw ArgumentError(
             'Duplicate or reserved Explorer shortcut: $shortcut',
           );
         }
 
-        _by_shortcut[normalized] = action;
+        actions[normalized] = action;
       }
     }
+
+    // Expose only the fully validated action index.
+    return Map<String, ExplorerAction>.unmodifiable(actions);
   }
 
-  /// Ordered feature registrations.
-  final List<ExplorerFeatureContribution> _features;
-
-  /// Indexed actions using normalized printable characters.
+  /// Resolves the action registered for a keyboard shortcut.
   ///
-  /// Populated only during registry construction.
-  final Map<String, ExplorerAction> _by_shortcut = {};
-
-  /// Resolves an action for a user-entered character.
+  /// [character] is the decoded character received from terminal
+  /// input. Lookup is case-insensitive.
   ///
-  /// Matching is case-insensitive.
+  /// Returns the registered [ExplorerAction], or null when no
+  /// action is associated with the supplied character.
   ///
-  /// Returns null when:
-  /// - No action owns the supplied shortcut.
-  /// - The registered action is currently unavailable.
+  /// Resolution does not execute the returned action.
   ///
-  /// Availability is checked against [model] at dispatch
-  /// time, not cached during registration.
-  ///
-  /// This method never executes the resolved action.
-  ExplorerAction? resolve(String character, ExplorerModel model) {
-    final action = _by_shortcut[character.toLowerCase()];
-
-    if (action == null || !action.is_available(model)) {
-      return null;
-    }
-
-    return action;
-  }
-
-  /// Returns hints for currently available actions.
-  ///
-  /// Hints retain feature and action registration order.
-  /// Unavailable actions are omitted.
-  ///
-  /// The result is unmodifiable and describes the
-  /// availability snapshot observed at this invocation.
-  ///
-  /// The generic presenter decides how hints are displayed.
-  List<String> available_hints(ExplorerModel model) {
-    return List<String>.unmodifiable([
-      for (final feature in _features)
-        for (final action in feature.actions)
-          if (action.is_available(model))
-            '${action.shortcut.toUpperCase()} ${action.hint}',
-    ]);
-  }
-
-  /// Builds ordered feature status contributions.
-  ///
-  /// Each callback reads the owning feature's current
-  /// interaction-local presentation state.
-  ///
-  /// Status is never treated as authorization, and this
-  /// method must not initiate application operations.
-  ///
-  /// A callback error propagates to the caller rather
-  /// than being silently converted into a valid status.
-  List<ExplorerStatus> statuses() {
-    return List<ExplorerStatus>.unmodifiable([
-      for (final feature in _features)
-        if (feature.status != null) feature.status!(),
-    ]);
+  /// Example:
+  /// ```dart
+  /// final start_action = registry.resolve('S');
+  /// final unknown_action = registry.resolve('?');
+  /// ```
+  ExplorerAction? resolve(String character) {
+    return _by_shortcut[character.toLowerCase()];
   }
 }

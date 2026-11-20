@@ -1,54 +1,36 @@
-/// Immutable presentation data for the Explorer header.
+import '../../../application/explorer_model.dart';
+import '../../../../workflow/explorer/workflow_explorer_view_model.dart';
+
+/// Presentation state for the Explorer header.
 ///
-/// The header contains the current directory and one
-/// feature-contributed status line.
+/// Holds the current Explorer navigation snapshot and optional
+/// workflow presentation state.
 ///
-/// Explorer does not interpret the meaning of that status.
-/// Workflow, filesystem or future application features
-/// prepare their own status projections before rendering.
-///
-/// Presentation values have no application authority.
-/// They do not authorize operations or represent
-/// persistence locks.
-///
-/// Text sanitization and truncation remain the
-/// responsibility of the terminal rendering backend.
+/// The header uses these objects to display the current directory
+/// and workflow status.
 ///
 /// Example:
 /// ```dart
-/// final header = ExplorerHeaderViewModel(
-///   current_directory: '/workspace',
-///   status_line: 'Workflow: ACTIVE',
-///   emphasized: true,
+/// final view_model = ExplorerHeaderViewModel(
+///   explorer: explorer_model,
+///   workflow: workflow_view_model,
 /// );
 /// ```
 final class ExplorerHeaderViewModel {
-  /// Creates an immutable header presentation snapshot.
+  /// Creates the header presentation state.
   ///
-  /// [current_directory] is the currently displayed path.
+  /// [explorer] supplies the currently displayed directory.
   ///
-  /// [status_line] contains generic, already prepared
-  /// status text supplied by the presentation layer.
-  ///
-  /// [emphasized] requests heading styling for the status.
-  ///
-  /// Empty directory and status values are invalid.
-  ExplorerHeaderViewModel({
-    required this.current_directory,
-    this.status_line = 'Explorer ready.',
-    this.emphasized = false,
-  }) {
-    if (current_directory.isEmpty || status_line.isEmpty) {
-      throw ArgumentError('Explorer header values cannot be empty.');
-    }
-  }
+  /// [workflow] supplies workflow status when workflow support
+  /// is configured. Null indicates no workflow integration.
+  const ExplorerHeaderViewModel({
+    required this.explorer,
+    required this.workflow,
+  });
 
-  /// Directory currently displayed by Explorer.
-  final String current_directory;
+  /// Navigation snapshot associated with the displayed header.
+  final ExplorerModel explorer;
 
-  /// Prepared feature status, without Explorer interpretation.
-  final String status_line;
-
-  /// Whether status presentation should use heading styling.
-  final bool emphasized;
+  /// Workflow presentation state, if configured.
+  final WorkflowExplorerViewModel? workflow;
 }

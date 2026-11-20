@@ -5,11 +5,26 @@ import 'explorer_controller.dart';
 import 'explorer_model.dart';
 import 'explorer_action_registry.dart';
 
-import '../presentation/explorer_presenter.dart';
 import '../terminal/explorer_terminal_host.dart';
 import '../presentation/explorer_view_model.dart';
 import '../terminal/terminal_input.dart';
 import '../terminal/terminal_key.dart';
+
+/// Builds an Explorer presentation from a navigation snapshot.
+///
+/// [explorer] supplies the current directory and selection state.
+///
+/// [visible_row_limit] is the number of rows available for directory
+/// entries after fixed screen elements have been reserved.
+///
+/// [first_visible_index] is the requested scroll position.
+///
+/// Returns a complete, immutable [ExplorerViewModel].
+typedef ExplorerViewModelBuilder = ExplorerViewModel Function(
+  ExplorerModel explorer, {
+  required int visible_row_limit,
+  required int first_visible_index,
+});
 
 /// Coordinates one interactive Explorer invocation.
 ///
@@ -17,7 +32,7 @@ import '../terminal/terminal_key.dart';
 /// - [ExplorerController] owns read-only filesystem navigation.
 /// - [TerminalInput] decodes physical terminal keys.
 /// - [ExplorerActionRegistry] resolves contributed actions.
-/// - [ExplorerPresenter] builds immutable UI snapshots.
+/// - [ExplorerViewModelBuilder] creates immutable UI snapshots.
 /// - [Renderer] displays those snapshots.
 /// - [ExplorerTerminalHost] owns terminal mode restoration.
 ///
@@ -60,26 +75,26 @@ import '../terminal/terminal_key.dart';
 final class ExplorerRunner {
   /// Creates an Explorer interaction coordinator.
   ///
-  /// [controller] owns SDK-backed read-only navigation.
+  /// [controller] owns SDK-backed filesystem navigation.
   ///
-  /// [terminal] owns the interactive terminal lifecycle,
-  /// including input, dimensions, and restoration.
+  /// [terminal] provides input, terminal dimensions, and
+  /// guarded terminal lifecycle management.
   ///
-  /// [renderer] displays immutable Explorer view models.
+  /// [renderer] renders complete Explorer view models.
   ///
-  /// [error_output] receives terminal configuration errors.
+  /// [error_output] receives terminal configuration diagnostics.
   ///
-  /// [presenter] constructs immutable presentation snapshots.
+  /// [create_view_model] builds the presentation snapshot for
+  /// the current navigation state and available viewport.
   ///
-  /// [action_registry] supplies optional feature contributions.
-  /// When omitted, Explorer supports navigation and Quit only.
+  /// [refresh_application_state] optionally reloads authoritative
+  /// application state after a successfully executed action.
   ///
-  /// The registry is assembled before interaction begins.
-  /// The runner does not register or construct feature actions.
+  /// [action_registry] supplies the registered keyboard actions.
+  /// When omitted, only built-in navigation and Quit are available.
   ///
-  /// Construction does not inspect the filesystem, decode
-  /// terminal input, execute actions, submit workflow events,
-  /// or change terminal modes.
+  /// Construction does not begin filesystem inspection or
+  /// interactive terminal operation.
   ///
   /// Example:
   /// ```dart
@@ -88,6 +103,7 @@ final class ExplorerRunner {
   ///   terminal: terminal,
   ///   renderer: renderer,
   ///   error_output: stderr,
+  ///   create_view_model: create_view_model,
   ///   action_registry: registry,
   /// );
   /// ```
@@ -96,29 +112,40 @@ final class ExplorerRunner {
     required ExplorerTerminalHost terminal,
     required ViewportRenderer<ExplorerViewModel> renderer,
     required StringSink error_output,
-    ExplorerPresenter presenter = const ExplorerPresenter(),
+    required ExplorerViewModelBuilder create_view_model,
+    Future<void> Function()? refresh_application_state,
     ExplorerActionRegistry? action_registry,
   }) : _controller = controller,
        _terminal = terminal,
        _renderer = renderer,
        _error_output = error_output,
-       _presenter = presenter,
+       _create_view_model = create_view_model,
+       _refresh_application_state = refresh_application_state,
        _action_registry = action_registry ?? ExplorerActionRegistry(const []);
 
-  /// Read-only navigation coordinator.
+  /// Controller responsible for filesystem navigation.
   final ExplorerController _controller;
 
-  /// Terminal lifecycle and input boundary.
+  /// Interactive terminal lifecycle and input provider.
   final ExplorerTerminalHost _terminal;
 
-  /// Backend-independent renderer with an explicit viewport contract.
+  /// Renderer for complete Explorer presentation snapshots.
   final ViewportRenderer<ExplorerViewModel> _renderer;
 
-  /// Destination for configuration diagnostics.
+  /// Output destination for terminal configuration diagnostics.
   final StringSink _error_output;
 
-  /// Stateless Explorer presentation coordinator.
-  final ExplorerPresenter _presenter;
+  /// Constructs the current Explorer view model.
+  ///
+  /// Invoked on each render using the latest navigation state
+  /// and terminal viewport dimensions.
+  final ExplorerViewModelBuilder _create_view_model;
+
+  /// Reloads confirmed application state after action completion.
+  ///
+  /// The callback is awaited before the next presentation is
+  /// built. Errors propagate through terminal restoration.
+  final Future<void> Function()? _refresh_application_state;
 
   /// Whether this runner has already been invoked.
   bool _has_started = false;
@@ -127,14 +154,10 @@ final class ExplorerRunner {
   /// the terminal's alternate screen.
   static const int _terminal_safety_rows = 1;
 
-  /// Explicitly registered Explorer feature contributions.
+  /// Immutable registration of Explorer keyboard actions.
   ///
-  /// The runner never mutates registration or inspects
-  /// individual feature implementations.
-  ///
-  /// Registry availability is checked before dispatch.
-  /// Each feature remains responsible for its own
-  /// application-level safeguards.
+  /// Shortcut resolution uses the current physical character.
+  /// Actions are invoked sequentially.
   final ExplorerActionRegistry _action_registry;
 
   /// Terminal rows reserved outside the scrollable viewport.
@@ -252,15 +275,12 @@ final class ExplorerRunner {
 
           final visible_row_limit = rows - reserved_rows;
 
-          // The registry projects current feature state into
-          // presentation-only values. Neither operation executes
-          // as part of rendering.
-          final view_model = _presenter.present(
+          // Construct the screen from the latest navigation and
+          // application snapshots at the current terminal size.
+          final view_model = _create_view_model(
             current_model,
             visible_row_limit: visible_row_limit,
             first_visible_index: first_visible_index,
-            statuses: _action_registry.statuses(),
-            action_hints: _action_registry.available_hints(current_model),
           );
 
           _renderer.render(view_model);
@@ -289,24 +309,25 @@ final class ExplorerRunner {
               break;
             }
 
-            // Resolve the binding against the current snapshot.
-            // Unknown and unavailable actions perform no operation.
-            final action = _action_registry.resolve(
-              key.character,
-              current_model,
-            );
+            // Resolve the physical shortcut through the
+            // registered action index.
+            final action = _action_registry.resolve(key.character);
 
             if (action == null) {
               continue;
             }
 
-            // Await one explicit operation before processing
-            // the next physical key. Exceptions are propagated
-            // through the guarded terminal lifecycle.
+            // Complete and validate the requested operation
+            // before refreshing the displayed application state.
             await action.execute(current_model);
 
-            // A feature may have changed its presentation state.
-            // Re-render using the same navigation and viewport.
+            final refresh = _refresh_application_state;
+
+            if (refresh != null) {
+              await refresh();
+            }
+
+            // Build the next frame from the refreshed snapshot.
             render_current();
             continue;
           }
