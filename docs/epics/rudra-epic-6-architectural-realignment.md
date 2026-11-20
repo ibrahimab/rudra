@@ -1,200 +1,308 @@
 # Rudra — Epic 6: Architectural Realignment
 
-**Status:** Architectural direction agreed in conversation on 2026-11-20; implementation not started. Detailed contracts and sequencing remain subject to slice-level review.  
+**Status:** Architecture agreed on 2026-11-20; implementation in progress, **not verified complete**.  
 **Previous title:** Feature Isolation, Extensibility & Test Architecture  
 **Canonical repository:** https://github.com/ibrahimab/rudra  
-**Review baseline:** `main` at `ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513` (commit message: `fixed product workflow composition`; inspected 2026-11-20).  
-**Preceding milestone:** Block 5C complete: event-sourced workflow Start → Active → Stop → Ended; SQLite persistence; CLI actions; Explorer `S` and `X`; tests.  
-**Nature of this document:** Project architectural source of truth for Epic 6, not evidence that the proposed refactors have been implemented. Reinspect `main` before each implementation slice.
+**Original review baseline:** `ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513` (2026-11-20).  
+**Latest inspected implementation:** `edbc075d43e7a1de734d82ebeacf5b6b9f12917c` (2026-11-20; amended incomplete 6A implementation).  
+**Preceding milestone:** Block 5C: Start → Active → Stop → Ended workflow lifecycle, SDK state machine, SQLite persistence, CLI and Explorer interactions.  
+**Document purpose:** Architectural source of truth and implementation plan. Agreements below are **targets**, not assertions that all APIs exist. Inspect the latest `main` before working on a slice.
 
-## 1. Epic objective
+## 1. Objective and architectural acceptance test
 
-Realign Rudra toward a **feature-isolated, extensible, testable** architecture: adding functionality should primarily mean adding feature-owned code and registering explicit contributions, not repeatedly changing generic infrastructure, unrelated feature implementations and shared test fixtures.
+Rudra must be an SDK-first, event-sourced, safety-first filesystem application whose domain behavior is implemented **once** and consumed by independent frontends. Its CLI, interactive Explorer, Flutter desktop, Android, web/trusted-host interfaces and third-party clients must not implement competing workflow rules.
 
-The Start/Stop workflow and Explorer `S`/`X` implementation exposed excessive coupling across input decoding, action dispatch, presentation, CLI subcommands, application composition, persistence and testing.
+Epic 6 realigns boundaries so that adding a capability primarily adds feature-owned behavior, contracts and tests. It must not routinely require edits to terminal key decoding, generic interaction dispatch, unrelated constructors, unrelated tests, or a centralized workflow-state class.
 
-The target is **independent behavior ownership**, not merely more registries or fewer constructor parameters.
+**Open/Closed applies at the appropriate boundary:** generic infrastructure should be closed to feature-specific changes, while a view or view model **may and should change** when the actual product UI changes. Adding a visible `P Pause` instruction is a legitimate reason to change the relevant Actions/Footer widget and its tests. A registry is not a goal in itself.
 
-### Architectural acceptance test
+**Change-impact litmus test:** hypothetically introduce `workflow pause` (not an implementation request). Review the required changes through SDK domain behavior, state slices, persistence, application operations, state observation, CLI, Explorer and tests. The architecture passes if changes remain concentrated in the feature and intended UI surfaces, with explicit composition updates and necessary safety/schema changes. Passing an isolated registry test is insufficient.
 
-Use a *hypothetical* `workflow pause` operation (not part of the current implementation) as a full-stack extensibility litmus test. The test must cover SDK behavior, restored state, authoritative persistence, frontend action contributions, CLI command registration and isolated tests. Passing only a registry unit test is insufficient.
+## 2. Decisions and invariants
 
-## 2. Non-negotiable principles
+1. **One domain authority:** The SDK owns workflow lifecycle, domain rules, event processing, safe operations, state transitions and authoritative state reconstruction.
+2. **Event sourcing:** The committed append-only event journal is the source of truth. A derived projection or observed snapshot must be reconstructable and validated against that journal.
+3. **Composite SDK state:** Expose one coherent immutable, versioned workflow snapshot with a mandatory lifecycle component and typed, independently owned domain slices.
+4. **Reactive SDK state:** Frontends obtain consistent current snapshots and observe committed updates. They do **not** need to replay domain events or rely on notification listeners for correctness.
+5. **Distinct submission state:** Durable acceptance, processing, rejection, quarantine and committed completion are not interchangeable with domain lifecycle state.
+6. **Behaviors own decisions:** Registered SDK behaviors, transition guards and state-machine validation own domain decisions. Do not reproduce Start/Stop/Pause lifecycle conditions in frontend state holders.
+7. **No separate capability framework:** Do not introduce an additional capability/policy evaluation layer merely to determine which UI actions to display. Offer/hide decisions are presentation; execution remains authoritatively checked by SDK operations.
+8. **UI state is view-model state:** No second frontend `ViewState` wrapper by default. Small view models hold the objects and local interaction information that their respective stateless widgets need.
+9. **Compositional presentation:** Screens compose small widgets. Each widget consumes a focused view model and chooses how to render it. Presenters are optional, justified only by substantial transformation or composition.
+10. **Cohesive object contracts:** Prefer passing typed objects over repeatedly flattening them into growing primitive parameter lists such as `navigation_hints`, `status_line`, `can_start`, `workflow_id`, etc.
+11. **Explicit actions and composition:** Frontend action dispatch is registered where appropriate, independent of physical input decoding. SDK modules contribute behavior and typed state transitions through explicit registries. No reflection, service locator or universal plugin framework.
+12. **Safety and process independence:** Trusted OS-user identity, one unfinished workflow per OS user, expected-workflow-ID/version guards, transactional persistence, fail-closed integrity errors, idempotency and terminal restoration must be preserved.
+13. **No implicit writes:** Launch, navigation, inspection, rendering, restoration, subscription and Quit never implicitly submit workflow commands. Only explicit user/domain operations may do so.
+14. **Pre-production freedom:** Internal breaking refactors are acceptable; do not build compatibility shims around contracts that are being intentionally replaced. A finished slice must still be verified.
+15. **No abstraction for abstraction's sake:** A constructor, switch, or intentional UI edit is not automatically a design failure. Evaluate change locality and genuine responsibility.
 
-1. **Feature ownership:** Each feature owns its behavior, application operations, frontend adapters/contributions, and related tests.
-2. **Contract-based contributions:** Stable contracts and explicit registries replace workflow-specific hardcoded switches, enums and presentation conditionals *where extensibility justifies it*.
-3. **Explicit composition:** Registration happens at application boundaries; no reflection, automatic discovery, service locator or global event bus.
-4. **Frontend independence:** CLI, interactive Explorer, Flutter desktop, Android and web/trusted-host interfaces consume reusable SDK application operations. Frontend input and presentation remain frontend-specific.
-5. **Explicit-action semantics:** Browsing, navigation, rendering and read-only restoration never implicitly submit persistent workflow events. Only explicit user/domain commands may submit them.
-6. **Safety preservation:** Keep append-only authoritative event history, trusted OS-user ownership, expected-workflow-ID guards, replay validation, durable submissions, transactional persistence, fail-closed errors and terminal restoration.
-7. **Avoid unnecessary abstractions:** Dependency injection, explicit composition, constructor parameters and switches are not automatically defects. Refactor where changes repeatedly cross unrelated ownership boundaries.
-8. **Behavior first:** Keep observable CLI behavior, keys, outputs, exit codes, persistence semantics and safety guarantees across incremental refactoring.
-9. **Pre-production flexibility:** Breaking internal changes are acceptable if deliberate and verified; there is no need for compatibility shims indefinitely.
-10. **Documentation parity:** Update the relevant ADRs, architectural documentation and test conventions alongside changes; do not let this epic's source document drift from implemented code.
+## 3. Three kinds of state — different ownership, no duplication
 
-## 3. Repository review findings — 2026-11-20
+| Kind | Owner | Contains | Never does |
+|---|---|---|---|
+| **Authoritative domain state** | SDK | Workflow identity, version, lifecycle, inspection/planning/execution/recovery slices | Depend on widgets, terminal, Flutter or display layout |
+| **Operation/submission state** | SDK | Accepted/pending/processing/completed/rejected/quarantined status, correlated to a command | Claim an accepted command established a workflow |
+| **Frontend view-model state** | Frontend | SDK snapshot references, navigation selection/history, scroll/viewport and other UI-specific data | Enforce workflow transitions, persist events, create a second domain state machine |
 
-All links below are pinned to reviewed commit `ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513`; later commits require fresh inspection.
+A view model may legitimately contain typed SDK models or expose simple computed getters over them. This is **reuse**, not boundary leakage. The boundary is crossed when the frontend reconstructs domain policy or mutates authoritative state on its own.
 
-### 3.1 Strengths to preserve
+The UI may temporarily display an operation's progress, error or loading state; this must not be confused with the committed workflow's lifecycle. A workflow absent, a snapshot not yet loaded, and a restoration integrity failure are three **different** conditions.
 
-- **SDK workflow module system:** `WorkflowModuleRegistry` stages registrations, rejects duplicate handlers/serializers, commits only validated contributions and exposes immutable snapshots. `WorkflowRuntime.from_registry()` creates a coherent configuration. [Registry](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/modules/workflow_module_registry.dart), [Runtime](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/workflow_runtime.dart).
-- **Top-level CLI modules:** `RudraCliModule` and `RudraCli.register_module()` support explicit command contributions, duplicate detection and pre-execution registration. Preserve and extend this idiom rather than inventing a competing CLI framework. [Module contract](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/core/cli/rudra_cli_module.dart), [Registration](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/rudra_cli.dart#L331-L392).
-- **Explorer components:** Terminal host guards lifecycle; controller handles navigation/inspection; presenter creates immutable view models; rendering is separated. Preserve successful boundaries rather than rebuilding Explorer wholesale. [Runner](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/application/explorer_runner.dart), [Terminal host contract](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/terminal/explorer_terminal_host.dart).
-- **Integration and safety tests:** Existing tests check no database created by read-only Explorer, durable Start/Stop, identity mismatch rejection, terminal restoration and real persistence. Preserve these assurances during moves/refactors.
+### 3.1 SDK application state and workflow collection
 
-### 3.2 Finding A: terminal decoder depends on workflow features
+The SDK should expose a non-null top-level application state (conceptually `RudraState`) with a non-null workflows slice (conceptually `WorkflowsState`). The workflows slice exposes a computed **current unfinished workflow** selector, which is nullable by design.
 
-`TerminalInput.read_keys()` outputs `ExplorerKey`, whose enum includes `start_workflow` and `stop_workflow`. `S`/`X` key mapping lives inside `_ordinary_key`; workflow-specific decoder tests live in `terminal_input_test.dart`. [Decoder](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/terminal/terminal_input.dart#L11-L38), [Mapping](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/terminal/terminal_input.dart#L195-L225), [Tests](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/test/features/explorer/terminal_input_test.dart#L142-L159).
+```dart
+// Illustrative contracts; not current API signatures.
+abstract interface class RudraState {
+  WorkflowsState get workflows;
+}
 
-**Diagnosis:** Raw terminal decoding and semantic action binding are separate responsibilities. Adding `P` must not require changing the decoder or its tests.
-
-### 3.3 Finding B: ExplorerRunner is turning into a workflow controller
-
-The runner constructor accepts `active_workflow`, `pending_submission`, `start_workflow`, `stop_workflow`; it owns `_can_start_workflow` and `_can_stop_workflow`, the dedicated `S`/`X` branches, workflow-specific state mutation, workflow-ID result checks and the `ExplorerKey` switch. [Runner constructor](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/application/explorer_runner.dart#L64-L151), [Dispatch](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/application/explorer_runner.dart#L268-L385).
-
-**Diagnosis:** Each additional workflow action forces modifications to generic Explorer orchestration. Identity protection is correct and must be kept, but should be owned by the feature's action/operation or shared safety contract, not duplicated across generic runners.
-
-### 3.4 Finding C: presentation knows workflow-specific action availability
-
-`ExplorerPresenter.present()` takes `can_start_workflow` and `can_stop_workflow`, then conditionally includes `S Start Workflow` and `X Stop Workflow` in navigation hints. [Presenter](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/presentation/explorer_presenter.dart#L175-L193).
-
-**Diagnosis:** Keybinding, availability, dispatch and displayed hint are currently separate hardcoded sources of truth. Derive them from the same registered action definition and per-render availability snapshot. A visible action is *not* authorization; trusted operations must always revalidate.
-
-**Preserve:** `ExplorerFooterViewModel` already consumes immutable prepared text and need not know workflow specifics. Do not needlessly remodel this component.
-
-### 3.5 Finding D: nested workflow CLI subcommands are hardwired
-
-`WorkflowCliModule` takes separate Start/Stop operation callbacks and `_WorkflowCommand` constructs private `_WorkflowStartCommand` and `_WorkflowStopCommand` directly. [Module](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/workflow/cli/workflow_cli_module.dart#L16-L91).
-
-**Diagnosis:** A hypothetical Pause requires changing the existing group constructor and registration logic. Allow independently contributed nested subcommands while continuing to use `package:args` and explicit composition.
-
-### 3.6 Finding E: workflow application use cases live in CLI composition
-
-`ProductWorkflowComposition` combines trusted macOS identity and database-location assembly with `current`, `start`, `stop`, event submission, SDK processor construction, resolution polling, error translation and committed-result checks. Start and Stop duplicate parts of the submission resolution flow. [Composition](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/composition/product_workflow_composition.dart).
-
-**Diagnosis:** Other frontends should not import `rudra_cli` or reimplement these operations. Move reusable, typed application use cases into the pure-Dart SDK (or SDK-owned application contracts and implementations), with trusted identity, persistence and platform adapters injected at composition. Preserve read-only `current()` semantics and the distinction between accepted submission and committed outcome. Platform-specific secure provisioning may remain in host composition.
-
-### 3.7 Finding F: SDK registration extensibility is not end-to-end
-
-The state machine and behavior registry are generic, but downstream processing contains concrete assumptions:
-
-- `WorkflowProcessor` classifies some rejections only for Stop and permits Initial/Active source states explicitly. [Processor](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/processing/workflow_processor.dart#L110-L163).
-- `DriftWorkflowInbox` restores history specifically for `WorkflowStopEvent`. [Inbox](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/persistence/sqlite/lib/src/features/workflow/submissions/drift_workflow_inbox.dart#L133-L154).
-- `WorkflowStateReader.current()` accepts an unfinished `WorkflowActiveState`, and treats other nonterminal histories as invalid. [Reader](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/reading/workflow_state_reader.dart#L146-L252).
-- `DriftWorkflowCommitter.commit()` dispatches only `WorkflowStartEvent` / `WorkflowStopEvent` to `_commit_start()` / `_commit_stop()`. [Committer](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/persistence/sqlite/lib/src/features/workflow/history/drift_workflow_committer.dart#L57-L79).
-
-**Diagnosis:** A registered Pause command would fail the full pipeline. This is a real architectural defect, but the dedicated Start and Stop SQL paths enforce essential safety invariants. Generalize safe *commit categories* and invariant checks without creating an unrestricted generic event writer.
-
-### 3.8 Test architecture findings
-
-- `terminal_input_test.dart` contains S/X business mapping tests that belong to feature-owned keyboard contribution tests.
-- `explorer_runner_test.dart` (~970 lines) includes Start/Stop scenarios; `_Scenario` grows feature-specific constructor arguments. [Runner tests](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/test/features/explorer/explorer_runner_test.dart#L473-L774).
-- `explore_command_test.dart` and `workflow_command_test.dart` include full production composition and SQLite scenarios, mixed with smaller tests. Preserve them as integration coverage but locate/name them consistently by responsibility. [Explorer command tests](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/test/features/explorer/explore_command_test.dart), [Workflow CLI tests](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/test/features/workflow/cli/workflow_command_test.dart).
-- `workflow_module_test.dart` and `command_registration_test.dart` already use synthetic contributions for generic contract tests: extend that pattern. [SDK registration tests](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/test/workflow/workflow_module_test.dart), [CLI registration tests](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/test/integration/command_registration_test.dart).
-
-## 4. Target architecture
-
-### 4.1 Dependency direction
-
-```text
-CLI commands / Explorer keyboard actions / Flutter desktop / Android / trusted web host
-                            |
-                            v
-             SDK-owned typed application operations
-                            |
-                            v
-           SDK workflow engine (registered behaviors,
-         transitions, submission processing, validation)
-                            |
-                            v
-                  Persistence contracts
-                            ^
-                            |
-                SQLite / Drift adapter
-
-Trusted application composition constructs and injects concrete dependencies.
+abstract interface class WorkflowsState {
+  /// The only unfinished workflow for the trusted OS user, if any.
+  WorkflowSnapshot? get current_workflow;
+}
 ```
 
-- No SDK import of CLI / Flutter / Drift / macOS implementations.
-- Platform-specific identity and filesystem access remain under trusted host authority.
-- Explicit application-level operations are reusable; UI adapters are independent.
-- Read-only queries must not enqueue or process persistent events.
-- Domain event subscription is informative, never a mandatory prerequisite for rendering correctly restored frontend state.
+- **No `NullWorkflowSnapshot`:** A workflow snapshot implies a real workflow with identity, ownership, original target/root and a committed version. Absence must not be modeled as a fictitious authoritative workflow.
+- **No mandatory eager history list:** Historical workflows remain separately queryable; the SDK does not have to load all histories to supply `current_workflow`.
+- **No `active == unfinished` assumption:** Paused, awaiting recovery and other nonterminal phases still occupy the unfinished-workflow slot.
+- **Never downgrade errors to absence:** Failed restoration, incomplete observation, unknown ownership or corrupted history cannot silently become `current_workflow == null`.
+- Typed observation/loading/failure semantics are part of the observation contract, not fabricated domain snapshots.
 
-### 4.2 Explorer interaction: separate three concerns
+### 3.2 Composite immutable workflow snapshot and slices
 
-1. **Physical terminal decoding:** decode bytes/chunks/ANSI sequences into physical keys, independent of feature semantics. Input errors propagate; lifecycle remains with terminal host.
-2. **Feature action contributions:** a minimal explicit `ExplorerAction`-style contract with unique `action_id`, keybinding, human-readable hint, availability predicate, and typed execution handler. Names/API are provisional; agree contracts before implementation. Include deterministic registration order, reserved keys and conflict validation. Keep the contract small.
-3. **Generic dispatch:** Explorer coordinates input, controller navigation, rendering and registered actions. Do not add direct Stop/Pause branches. Keep core navigation directly inside Explorer where appropriate; do not build a universal UI-command framework.
+The SDK's long-term workflow representation is a **whole** workflow snapshot, not one giant concrete subclass for every lifecycle phase.
 
-**Crucial:** Invocation uses an explicit user action. Action availability drives hints and offered bindings, but is not authorization. A selected operation revalidates against authoritative domain state. Only after confirmed completion may displayed state change.
+```dart
+// Illustrative design, not an instruction to implement these names.
+abstract interface class WorkflowSnapshot {
+  WorkflowIdentity get identity;
+  int get version;
+  WorkflowLifecycle get lifecycle;
 
-### 4.3 Presentation contributions
+  T? slice<T extends WorkflowSlice>(WorkflowSliceKey<T> key);
+}
+```
 
-- Action hints and availability derive from the same action configuration used by dispatch.
-- Feature-owned state projection can supply workflow status and action descriptors without forcing `ExplorerPresenter` to know individual Start/Stop/Pause commands.
-- Preserve read-only filesystem presentation, existing view models, viewport handling and terminal sanitization.
-- Avoid introducing a universal widget framework.
+- **Identity**, **version** and **lifecycle** are foundational mandatory data; lifecycle is not an optional plugin slice. Every established workflow has immutable owner, workflow ID, target and original inspection root.
+- **Inspection**, **cleanup plan**, **execution**, **recovery** and future concerns may contribute typed domain slices. Do not pre-implement all these hypothetical slices; introduce them when the capability exists.
+- Slice registration needs stable identity, type ownership and deterministic projection/transition contracts. Avoid unchecked string-to-`dynamic` maps and reflection.
+- Slices do not each get to own a separate authoritative lifecycle. A committed event produces one coherent new aggregate snapshot and increments the workflow version according to the event/version contract.
+- A future Pause changes lifecycle and any justified slice data while retaining the rest of the workflow. It must not require copying an expanding bag of domain fields into `WorkflowPausedState`.
+- The current SDK `WorkflowState` / `WorkflowActiveState` hierarchy is a **minimal lifecycle implementation**, not proof that the composite state design has been implemented. Reconcile/migrate it deliberately, including replay and persistence.
+- Domain slices are SDK types, not frontend `ViewModel`/widget packages.
 
-### 4.4 Nested CLI command contributions
+### 3.3 Behaviors, transitions and reducers
 
-- Keep `RudraCliModule` and `package:args`.
-- Workflow Start, Stop and future Pause contribute their own nested `Command<int>` objects, with explicit assembly into the `workflow` group.
-- No per-subcommand additions to unrelated command constructors or generic registration code.
-- Top-level product composition is allowed (and expected) to enumerate enabled contributions.
+Retain and evolve the existing SDK `WorkflowModuleRegistry` and `WorkflowRuntime` pattern. They currently register command behaviors, exact state/event transitions and serializers. Extend them where warranted for typed snapshot/slice projection rather than inventing a parallel state engine.
 
-### 4.5 SDK application operations
+- **Command behavior:** Handles a typed command and proposes domain outcome events; it does not commit or present them.
+- **Transition guard:** Determines whether the event is valid against the authoritative domain state and global invariants.
+- **Transition / slice projection:** Deterministically constructs the next immutable snapshot and the affected typed slice(s); it performs no I/O.
+- **State machine:** Resolves the registered behavior/transition, validates resulting identity/version/invariants and reconstructs history by replay.
+- **Application processor:** Coordinates trusted identity, command processing, outcome validation and persistence contracts.
+- **Persistence committer:** Rechecks trusted owner, expected workflow ID/version, unfinished reservation, journal and projection consistency inside an atomic transaction.
 
-- Place reusable `current`, `start`, `stop` and future use cases within the SDK's application boundary rather than `apps/cli`.
-- Share common submission tracking/processing logic where reasonable without hiding transaction and identity semantics.
-- Retain typed domain conflicts distinct from unexpected infrastructure/integrity errors.
-- Continue to distinguish durable *acceptance* from committed *outcome*.
-- Keep configuration of trusted OS identity, database location, permissions and concrete persistence at trusted composition boundaries.
-- Avoid a giant service class that centralizes every future feature.
+Do not permit independent reducers to overwrite arbitrary slices or bypass global lifecycle/authorization invariants. Feature-owned reductions must compose into one validated transition, with deterministic ordering or explicit conflict rejection. A transition failure must leave authoritative state unchanged.
 
-### 4.6 Extensible safe persistence
+**No `WorkflowExplorerState.record_started()` / `.record_stopped()` / `.record_paused()`.** These represent domain lifecycle assumptions leaking into the frontend. Similarly, no frontend `can_start`/`can_stop` guard should reproduce SDK processing rules. SDK behavior and execution validation are the source of truth.
 
-Persist general lifecycle categories, each with appropriate invariants:
+### 3.4 Reactive snapshots versus informational events
 
-| Category | Meaning | Commit obligations |
+The SDK observation interface must provide:
+
+- A current coherent snapshot and subsequent committed changes **without an unreported gap** between the initial snapshot and updates.
+- Versioning/ordering appropriate to its observation scope; a workflow-local version alone cannot order a transition between *different* current workflows.
+- Recovery after disconnect/restart and visibility of other processes' commits.
+- Explicit loading, unavailable and error conditions where applicable; malformed or inconsistent persisted state fails closed.
+- A way to reconcile notifications with authoritative persistence rather than trusting delivery alone.
+
+Domain-event subscriptions remain **optional and informational** (audit, diagnostics, activity, external integrations). Missed notifications must never make the frontend's view of current state permanently incorrect. Do not make clients replay domain histories to maintain their UI.
+
+### 3.5 Commands and operation outcomes
+
+```text
+Explicit user action
+  -> frontend action adapter
+  -> public SDK application operation / durable command submission
+  -> registered SDK behavior + state machine validation
+  -> trusted transactional persistence
+  -> committed SDK state observation
+  -> view model and widget rebuild
+```
+
+The frontend never directly invokes a `WorkflowStartBehavior` or mutates a domain snapshot. It invokes a public SDK operation. That operation may expose a durable receipt immediately and a separate eventual result, or may offer a higher-level confirmed-completion method. These are distinct contracts. An accepted submission cannot be shown as a successful transition; rejection, quarantine and pending work remain visible as such.
+
+Execution guards must be authoritative at processing/commit time even if a UI action was visible based on an earlier snapshot. For destructive work, only the execution gatekeeper and durable outbox may authorize and coordinate filesystem mutation.
+
+## 4. Frontend interaction and presentation architecture
+
+### 4.1 Portable SDK, independent frontends
+
+```text
+CLI / Explorer         Flutter Desktop / Android         Web / remote
+       \                       |                           /
+        \                      |           trusted host ---/
+         \                     |                 /
+           Public SDK application + observation contracts
+                              |
+               SDK workflow runtime and state
+             /                              \
+  Persistence contracts                Target contracts
+         |                                    |
+     SQLite / Drift                 macOS / other adapters
+```
+
+- The pure-Dart SDK contains no CLI/Flutter/SQLite/macOS presentation implementation dependencies.
+- Trusted composition supplies identity, target access, persistence and concrete adapters. Remote/web frontends access trusted operations over a host service; a browser-provided ID does not grant OS-user authority.
+- Shared derived **domain** information (e.g. validated plan totals) belongs in SDK selectors/domain models. Terminal text, padding, widget visibility and layout belong to each frontend.
+- The current `RudraSdk` facade exposes filesystem inspection; reusable workflow operations and observation are still to be integrated into an appropriate SDK application API.
+
+### 4.2 ViewModel **is** frontend view state
+
+Do not default to `ViewState -> ViewModel -> Presenter -> Widget`. This is redundant when those layers merely forward the same objects.
+
+- A **ViewModel is the state a widget consumes**: a narrow, typed, preferably immutable object containing the relevant SDK object references and local UI interaction data.
+- The controller/observation coordinator handles user interactions and SDK updates and produces a new view model or causes rebuilding from a new immutable SDK snapshot. **Widgets do not mutate their view models.**
+- View models can expose simple computed getters as conveniences (e.g. `show_start` from an SDK workflows slice's `current_workflow == null`). These are **UI visibility**, not domain permission or authoritative transition checks.
+- Pass cohesive objects, not growing sets of primitive flags. For example, an Actions view model can receive a `WorkflowsState`, not separate `active_workflow`, `pending_submission`, `workflow_id`, `can_start`, `can_stop` and label parameters.
+- A view model is not required to contain another `ExplorerModel` plus copies of every field. Reassess existing `ExplorerModel` and `ExplorerViewModel` responsibilities together rather than preserving both by renaming them.
+
+Illustration:
+
+```dart
+final class WorkflowActionsViewModel {
+  const WorkflowActionsViewModel(this.workflows);
+
+  final WorkflowsState workflows;
+
+  bool get show_start => workflows.current_workflow == null;
+  bool get show_stop => workflows.current_workflow != null;
+}
+```
+
+The example deliberately shows *presentation choices*, not authorization. An actual Stop action must still be validated by the SDK, and later UI design may distinguish Pause/Resume/Stop visibility. A snapshot may also be loading or erroneous; the observation owner must not present unknown state as established absence.
+
+### 4.3 Stateless, compositional widgets
+
+Follow the useful part of Flutter's `StatelessWidget` approach in the CLI terminal UI:
+
+```text
+ExplorerScreen
+  +-- ExplorerHeader(HeaderViewModel)
+  +-- ExplorerDirectory(DirectoryViewModel)
+  +-- ExplorerFooter(FooterViewModel)
+       +-- WorkflowActions(ActionsViewModel), as appropriate
+```
+
+- A widget receives its view model and chooses **what and how** to render; it does not fetch SDK data or run domain commands.
+- A screen composes its children. Each child owns its rendering concerns and does not know the source or lifecycle of the underlying data.
+- It is **appropriate to edit** an Actions widget or view model when adding a visible `P Pause` instruction, visibility condition or revised layout. OCP does not prohibit intentional view changes.
+- Do not force action-hint rendering through a universal action-descriptor registry. The **interaction dispatch registry** and the **actual view design** have different reasons to change.
+- A parent/layout boundary owns viewport constraints; children render within allocated constraints. Preserve terminal safety rows, truncation, sanitization and restoration behavior.
+- Do not replace one massive `ExplorerViewModel` with another. Keep Header, Directory, Footer, Actions and Screen composed and independently testable.
+
+### 4.4 Presenter: optional, not architectural middleware
+
+There is **no mandatory Presenter stage**. A presenter may remain only where it performs a substantial, independently useful transformation—e.g. shared filesystem-entry display formatting or a complex viewport calculation that does not belong naturally in a small view model/widget/layout helper.
+
+Do not preserve `ExplorerPresenter` solely for historic MVC symmetry, and do not move all of its logic into a giant `ExplorerViewModel`. Review its existing viewport/row transformation behavior method by method; preserve useful algorithms in the proper compositional component or narrowly scoped utility. Tests should follow the final owner.
+
+### 4.5 Controller, action dispatch, and composition
+
+Keep the boundaries distinct:
+
+1. `TerminalInput` converts bytes/ANSI sequences to **physical keys**. It knows nothing about Start/Stop/Pause.
+2. Explorer's navigation controller handles navigation, SDK read-only inspection and local selection/history state. It does not register workflow behavior itself.
+3. Explicit **product composition** registers frontend action adapters, e.g. `WorkflowStartExplorerAction` and `WorkflowStopExplorerAction`.
+4. A small **Explorer action contract** describes shortcut, identity and typed execution. Prefer feature-owned implementations over growing closures/construction-time dependencies inside generic infrastructure. Dispatch remains generic.
+5. An action adapter invokes a **public SDK application operation**, not an SDK transition/behavior directly.
+6. The SDK's updated state is then observed; the widget renders it. Never call frontend `record_started`/`record_stopped` to emulate domain transitions.
+
+Generic action registration should validate shortcut conflicts, duplicate IDs, reserved input and deterministic registration without execution side effects. Core arrows, Enter, Backspace and Quit can remain built-in; do not create a universal UI-command framework. Actions execute sequentially where the interactive host contract requires it; failures propagate through guarded terminal restoration.
+
+UI visibility and action execution are **different decisions**. A hidden shortcut may be declined by the generic dispatcher as a UX policy; a visible one is still not permission. Avoid embedding SDK lifecycle policy in dispatch availability checks. If the UI elects to offer Start even when it will be rejected, that is acceptable as long as the SDK rejects invalid requests correctly and renders the result honestly.
+
+### 4.6 Nested workflow CLI commands
+
+Continue to use `RudraCliModule` and `package:args`. Independently owned Start, Stop and later Pause commands are explicitly added under `rudra workflow` by composition. Do not make nested subcommands add more constructor arguments to a central workflow command group or introduce a second command framework.
+
+## 5. Existing repository diagnosis and current progress
+
+### 5.1 Strengths to retain (original audit at `ffa62313`)
+
+- `WorkflowModuleRegistry` stages and validates module behaviors, transitions and serializers; `WorkflowRuntime.from_registry()` snapshots coherent registration.
+- `RudraCliModule` already supports explicit top-level CLI registration and collision detection.
+- SDK-backed Explorer navigation, terminal host lifecycle guards, shared directory observation formatting and rendering contracts are valuable investments.
+- Tests already cover read-only Explorer, durable Start/Stop, ownership mismatch, terminal restoration and real persistence; do not replace these with shallow mocks.
+
+### 5.2 Coupling findings (original audit)
+
+| Finding | Originally observed issue | Required boundary |
 |---|---|---|
-| Establishment | Create the user's unfinished workflow | Trusted identity, unique unfinished reservation, validated events, atomic journal + projection + submission resolution |
-| Continuation | Advance an existing nonterminal workflow, e.g. Pause | Exact identity and version, journal replay, retained ownership, atomic journal + updated projection + submission resolution |
-| Terminal completion | End an existing workflow | Exact identity and version, terminal-state validation, atomic journal + ownership release + submission resolution |
+| A — Input | `TerminalInput` mapped `S` and `X` to workflow-specific `ExplorerKey` values | Physical key decoding independent of semantic commands |
+| B — Runner | `ExplorerRunner` accepted workflow-specific callbacks, state and branches | Generic dispatch; feature-owned action adapter |
+| C — Presentation | Presenter assembled workflow hints and `can_start_workflow`/`can_stop_workflow` flags | Small widget/view-model composition; no duplicated domain policy |
+| D — Commands | Workflow group hardcoded Start and Stop subcommands | Explicit independent nested contributions |
+| E — Operations | `ProductWorkflowComposition` owned reusable Start/Stop submission and outcome logic | SDK-owned typed application operations, trusted host composition |
+| F — End-to-end registration | Processor, reader, inbox and Drift committer assumed Initial/Active and Start/Stop | Support registered continuation through safe generic contracts |
+| G — Tests | Workflow scenarios and S/X mappings lived in generic input/runner tests | Feature-owned unit tests, synthetic infrastructure tests |
+| H — State separation (new) | `WorkflowExplorerState` mirrored active state with `record_started`, `record_stopped`, `can_start`, `can_stop` | SDK owns lifecycle; ViewModel owns view concerns only |
+| I — Aggregate state (new) | Concrete `WorkflowActiveState` is a lifecycle variant, not a composable whole-workflow snapshot | Mandatory lifecycle + registered typed domain slices |
+| J — Presenter/primitive explosion (new) | Repeated `navigation_hints`, statuses, booleans and callback parameters created extra data-shaping layers | Cohesive objects, small compositional widgets, optional presenter |
 
-The authoritative journal must remain append-only. Every state projection must be reconstructable from persisted events. The persistence adapter rechecks submitted events, trusted owner, history, version and completion status *inside transactions*; never trust a frontend's state snapshot or a previously read inbox entry as a lock.
+Source references for the original findings are retained at the pinned baseline: [runner](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/application/explorer_runner.dart), [terminal input](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/terminal/terminal_input.dart), [presenter](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/presentation/explorer_presenter.dart), [workflow composition](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/composition/product_workflow_composition.dart), [state reader](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/reading/workflow_state_reader.dart), [processor](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/processing/workflow_processor.dart), [committer](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/persistence/sqlite/lib/src/features/workflow/history/drift_workflow_committer.dart).
 
-Do **not** undertake this persistence refactor in Slice 6A; it is safety-sensitive and deserves its own targeted tests.
+### 5.3 Actual implementation status as of `edbc075`
 
-## 5. Test architecture and fixtures
+**Partially implemented (production code only):** `TerminalKey`/physical decoding, a concrete callback-based `ExplorerActionRegistry`, generic runner dispatch, generic status/hints in presentation, Start/Stop Explorer action functions, `WorkflowExplorerState`, and composition registration in `rudra_cli.dart`. Initial cleanup was amended and pushed.
 
-### Five explicit layers
+**Not yet complete or accepted as final design:** Interface-based feature-owned action classes; removal/replacement of duplicate frontend lifecycle state and policy; compositional ViewModel/widget refactor and reevaluation of Presenter; SDK composite snapshot, slices and observation; portable SDK workflow use cases; generic safe persistence continuation; nested CLI contributions; test restructuring. Existing tests were **not migrated** when inspected. No passing test run has been established for the amended commit.
 
-1. **Component unit:** raw decoder, action handler, presenter, view model, pure SDK behavior. Fake only direct contracts.
-2. **Registration/contract:** synthetic contributions assert unique IDs, collision behavior, stable ordering, immutability, invalid contributions and non-execution at registration.
-3. **Feature-owned adapter/application:** Start/Stop/Pause CLI commands, Explorer actions and SDK operations, each under its own feature directory and using injected fakes.
-4. **Integration:** actual SDK + Drift + composition + terminal fakes as appropriate; verifies persisted results, ownership and restore semantics.
-5. **Representative end-to-end:** actual product entrypoint and, where practical, native terminal lifecycle; keep small, representative and deterministic.
+Some existing code is expected to be replaced by this agreed design; do not freeze the current `WorkflowExplorerState` or callback-based registry merely to make tests green temporarily. No compatibility shims are required for pre-production experimental APIs.
 
-### Representative test hierarchy (illustrative; not a bulk-move instruction)
+## 6. Safe persistence and workflow processing
+
+The journal remains authoritative, append-only and replayable. The persistence adapter must not trust the frontend's observed state, an in-memory capability hint or a previously read inbox record as transaction authority.
+
+| Commit category | Intent | Mandatory atomic protections |
+|---|---|---|
+| **Establishment** | Create one unfinished workflow | Trusted identity, uniqueness reservation, journal + projection + submission outcome |
+| **Continuation** | Advance existing nonterminal workflow (e.g. Pause) | Expected workflow ID/version, owner, validated replay, retained reservation, journal + projection + outcome |
+| **Terminal completion** | End a workflow | Expected ID/version, valid terminal transition, journal + ownership release + outcome |
+
+Generalize the current Start/Stop-specific inbox, processor, reader and Drift committer *without weakening* their identity/transaction checks and without introducing an unrestricted generic event writer.
+
+Only committed events establish domain state. A failed validation or transaction leaves journal, projection and submission status consistent. Recovery-required obligations, quarantine, approval and filesystem mutation must remain under the dedicated safety contracts from ADR 0006; these are **not** handled by generic reactive listeners.
+
+## 7. Tests and verification ownership
+
+### 7.1 Test layers
+
+1. **Component unit:** physical input, small widget/view-model, navigation controller, deterministic reducer/transition.
+2. **Registration/contract:** synthetic feature contributions, ID/key collisions, duplicate transitions/serializers, immutability, ordering, no side effects at registration.
+3. **Feature-owned adapter and operation:** Start/Stop/Pause action and command tests using fake public SDK operations; no SQLite required to prove key-to-operation mapping.
+4. **Integration:** real SDK + Drift + composition and fake terminal as needed; durable journaling, replay, expected identity/version, trusted owner, concurrent ownership, no implicit writes.
+5. **Representative end-to-end:** production CLI entrypoint and native terminal lifecycle where practical; small, deterministic and focused.
+
+Representative organization (adapt to final feature ownership, not a blind move script):
 
 ```text
 apps/cli/test/
-  core/
-    input/terminal_input_test.dart
-    actions/action_registry_test.dart
   features/
     explorer/
+      terminal/terminal_input_test.dart
       application/explorer_runner_test.dart
-      presentation/explorer_presenter_test.dart
+      presentation/explorer_header_test.dart
+      presentation/explorer_directory_test.dart
+      presentation/explorer_footer_test.dart
     workflow/
-      cli/start_command_test.dart
-      cli/stop_command_test.dart
       explorer/start_action_test.dart
       explorer/stop_action_test.dart
+      cli/start_command_test.dart
+      cli/stop_command_test.dart
   integration/
-    cli_registration_test.dart
     workflow_cli_lifecycle_test.dart
     explorer_workflow_lifecycle_test.dart
   support/
@@ -202,143 +310,110 @@ apps/cli/test/
     recording_renderer.dart
 ```
 
-Use corresponding boundaries within SDK and persistence packages; do not force directory nesting for trivial features.
+### 7.2 Rules
 
-### Fixture rules
+- Each stable generic contract gets generic tests using **synthetic** contributions, not production Workflow Start/Stop behavior.
+- Add a Pause feature test in Pause's own area; do not insert Pause scenarios into terminal decoding/navigation tests.
+- Widgets and small view models get local tests for actual presentation decisions; changing Actions/Footer UI appropriately updates **their own** tests.
+- An SDK snapshot/reducer test does not need an actual terminal or SQLite database. An integration test asserting persistence safety must use real persistence, not a mock.
+- Shared fakes model stable interfaces only; do not grow a monolithic `_Scenario` fixture with new fields for every feature.
+- Preserve and extend existing tests for read-only Explorer, restoration corruption, trusted ownership, transactional failure, crash/retry, ID/version mismatches, terminal restoration and no premature outcome display.
+- Test snapshot/observation reconnection, initial-subscribe race, ordering across successive workflows, loading/error versus absent, and cross-process state changes before claiming reactive correctness.
+- Check both test results **and the list of modified files** to catch unrelated infrastructure churn.
 
-- A shared fake may represent a stable generic contract (terminal host, renderer, fake persistence adapter, inspection contract).
-- Scenario assembly remains local to the responsible feature. Do not introduce one giant `_Scenario` builder with every new feature's callbacks/flags.
-- Generic runner tests use synthetic actions, not real Workflow Start/Stop behavior.
-- Action tests use fake SDK application operations; they should not need SQLite merely to test keypress-to-operation mapping.
-- Integration tests cover real persistence and command composition; do not eliminate or replace them with shallow mocks.
-- Tests may intentionally verify the complete enabled composition list; changes to such tests when registering new features are legitimate.
-- Preserve current safety tests for read-only Explorer, expected workflow ID mismatches, trusted ownership, crash/retry semantics, transaction failure, and terminal restoration.
+## 8. Revised Epic 6 implementation sequence
 
-### Minimum test matrix for each new action
+These are **implementation boundaries**, not invitations to implement the entire future application at once. Review exact contracts and source before each slice; preserve safety at every migration. No code is claimed complete by this plan.
 
-| Test boundary | Proof |
-|---|---|
-| Physical input decoder | Characters/ANSI sequences decode without feature knowledge |
-| Registry contract | Contributions register; conflicts fail atomically |
-| Feature action | Explicit action invokes only its typed operation with correct context |
-| Availability/presentation | Hint and action availability agree; state refresh is correct |
-| Generic runner | Synthetic action executes sequentially; failures restore terminal |
-| Application operation | Correct submission/result semantics and errors |
-| SDK state machine | Valid transitions; invalid transitions rejected; replay stable |
-| Persistence integration | Ownership, expected ID/version, journal/projection and atomicity |
-| Product composition | Real feature wired and available in desired frontend |
-| End-to-end | Representative user workflow and no unintended writes |
+### 6A — Explorer physical input, action and compositional UI realignment (IN PROGRESS)
 
-## 6. Alternatives and decision rationale
+- Keep physical key decoding separate from feature dispatch; retain `S`, `X`, `Q`, arrows, Enter and Backspace semantics.
+- Refine the partially implemented registry to a small interface-based action contract, with feature-owned implementations and explicit composition.
+- Remove `WorkflowExplorerState` lifecycle mutation/policy (`record_started`, `record_stopped`, `can_start`, `can_stop`); do not build another frontend state machine.
+- Converge navigation and UI state into narrow view-model ownership where appropriate. Pass cohesive SDK objects into small Header/Directory/Footer/Actions view models.
+- Make widgets stateless and compositional. Preserve useful directory formatting and viewport algorithms; remove or narrow Presenter only after reviewing its genuine responsibilities.
+- Keep UI visibility separate from SDK authorization. SDK state observation is a later SDK slice; use read-only confirmed SDK state/operation results in the meantime without inventing frontend transitions.
+- Migrate generic and feature-owned tests; preserve terminal lifecycle and real persistence integration tests.
+- **No SDK workflow/persistence schema changes in this slice.** Avoid short-lived compatibility shims.
 
-**A. Patch local extension points:** Easiest initially; leaves shared SDK operations and persistence as bottlenecks. Insufficient for full `workflow pause` acceptance test.
+**Done when:** The generic decoder/runner need no modifications to wire an additional workflow action; views are compositional; no frontend lifecycle state processor remains; tests and behavior are green.
 
-**B. Layer-specific explicit contribution contracts — SELECTED DIRECTION:** A small interaction registry, reuse CLI modules, reuse SDK module semantics, and safe lifecycle-aware persistence. Best balance of ownership, evolution and traceability; does require coordinated incremental slices.
+### 6B — SDK composite state and typed slice contracts
 
-**C. Universal plugin/service registry:** Would unify wiring superficially but adds a broad framework, obscures dependencies and complicates safety. Reject unless future concrete requirements justify it.
+- Design `WorkflowSnapshot` with mandatory identity/version/lifecycle, typed slice keys, immutable slice storage and module-owned deterministic transitions/reducers.
+- Reconcile the current `WorkflowState`/concrete lifecycle subclasses and exact-type transition graph deliberately rather than adding a parallel state model.
+- Define stable public selectors and a non-null SDK workflows state with nullable `current_workflow`.
+- Preserve event journal replay/version invariants; ensure no NullWorkflowSnapshot, no eager all-history requirement and no corruption-as-absence fallback.
+- Build pure domain and state-machine tests, including a synthetic new slice/phase.
 
-Do not equate every switch, constructor argument or composition update with a code smell. The relevant problem is whether a new feature routinely forces generic infrastructure and unrelated feature tests to change.
+**Done when:** New typed domain slices and a synthetic nonterminal lifecycle transition can extend the SDK without growing a central concrete state class.
 
-## 7. Incremental implementation slices
+### 6C — SDK portable operations, confirmed outcomes and observation
 
-**Important:** Architecture and order are agreed at a high level; no code has been written for Epic 6 as of this document. Each slice needs design approval and verification before coding the next.
+- Move reusable `current`, Start, Stop and command-outcome coordination from CLI product composition into public, typed SDK application use cases.
+- Add a coherent read/observe contract with gap-free initial snapshot + updates, ordering across workflow replacement, reconnect and error/loading semantics.
+- Expose durable submission/processing status independently of committed workflow state.
+- Keep platform identity, database location, permissions and concrete adapter creation at trusted host composition; remote clients use host authority.
+- Adapt CLI/Explorer to consume the SDK operations and state/observation contracts, not direct behavior calls or local transition methods.
 
-### 6A — Terminal decoding and action registration foundation (FIRST)
+**Done when:** Another frontend can consume the same workflow operations and reactive state without importing `rudra_cli` or reimplementing domain logic.
 
-- Separate physical key interpretation from semantic actions.
-- Design minimal explicit action registration and keybinding contract.
-- Validate duplicate IDs, conflicting bindings, reserved navigation shortcuts and deterministic ordering.
-- Add decoder-only tests and synthetic registration tests.
-- Preserve S/X/Q/arrows/Enter/Backspace behavior using the smallest compatible migration bridge until Slice 6B.
-- **No** persistence or SDK workflow changes.
+### 6D — End-to-end safe workflow extensibility in processing and persistence
 
-**Done when:** A synthetic action can claim an otherwise unused printable key without modifying the decoder, its tests, or generic action registry code. All existing terminal and Explorer behavior remains green.
+- Remove hardcoded Initial/Active source assumptions in the processor where contractually unjustified.
+- Generalize inbox history loading and restoration for valid nonterminal workflow phases.
+- Generalize safe commit categories: establishment, continuation and terminal completion, with explicit transaction invariants and fail-closed errors.
+- Validate synthetic continuation through the entire SDK/Drift pipeline, including reconciliation, identity/version conflicts, crash and transaction failures.
 
-### 6B — Feature-owned Explorer interactions
+**Done when:** A registered continuation can be processed, committed and restored without editing a concrete Start/Stop dispatcher branch or bypassing safety invariants.
 
-- Extract workflow Start and Stop into independently owned action contributions.
-- Make the Explorer runner dispatch actions without workflow-specific branches or injected operation proliferation.
-- Generate hints from registered, available actions.
-- Relocate Start/Stop action tests under workflow ownership; generic runner tests use synthetic contributions.
-- Preserve ID-concurrency checks, navigation semantics, viewport updates and guaranteed terminal restoration.
+### 6E — Independent nested workflow CLI commands
 
-**Done when:** A new action can be added without touching the generic runner, presenter conditions, physical decoder, or their unrelated tests.
+- Reuse `RudraCliModule` and `package:args` with independently contributed Start/Stop commands.
+- Ensure future Pause can register without expanding unrelated CLI constructors, framework switches or test fixtures.
+- Retain real command integration tests and existing flags/exit codes unless a change is explicitly approved.
 
-### 6C — Nested workflow CLI commands
+**Done when:** A new subcommand requires its own implementation/tests and explicit composition registration, not changes to unrelated framework code.
 
-- Allow independently contributed subcommands under `rudra workflow`.
-- Reuse `RudraCliModule`/`package:args` approach; do not create a parallel CLI system.
-- Move Start/Stop tests to feature-owned adapters; keep representative command integration tests.
+### 6F — Final realignment, tests, documentation and change-impact review
 
-**Done when:** A new workflow subcommand requires only its own implementation/test and explicit product composition registration.
+- Remove stale compatibility assumptions, redundant model/presenter layers and obsolete tests.
+- Reconcile `docs/ARCHITECTURE.md`, ADRs and developer conventions with the actual implementation. Consider a new ADR for the composite state and frontend presentation decisions.
+- Run the full verification suite and inspect file-level change locality.
+- Walk the hypothetical Pause addition across SDK, persistent projection, commands, CLI and UI; document intended UI modifications separately from unintended generic framework edits.
 
-### 6D — Portable SDK application operations
+**Done when:** The full suite passes, repository docs match reality, and the Pause litmus test succeeds without weakening safety.
 
-- Extract reusable `current`, `start`, `stop` and submission-outcome tracking from CLI-specific composition into SDK-owned typed application services/use cases.
-- Preserve trusted platform identity resolution and concrete adapter construction at appropriate host boundaries.
-- Ensure CLI/Explorer share identical application behavior without direct CLI coupling.
-- Add SDK unit/contract tests and real persisted integration tests.
+## 9. Safety and behavior regression checklist
 
-**Done when:** A separate frontend could consume the same operations without depending on `rudra_cli` or duplicating submission processing.
+- Explorer launch, navigation, read-only restoration, state observation, layout and Quit do not submit or process persistent workflow commands.
+- Read-only Explorer does not create a database where none existed.
+- Command acceptance is not misreported as committed workflow success; pending/rejected/quarantined outcomes remain distinguishable.
+- Committed history replays deterministically; corrupt or mismatched evidence causes explicit failure, not silent repair or null substitution.
+- Trusted OS-user identity is not replaceable by frontend identity; at most one unfinished workflow per OS user is reserved atomically.
+- A stale snapshot/expected ID/version cannot advance or terminate a replacement workflow.
+- Journal, projection, ownership and submission resolution obey transactional consistency.
+- Global candidate reservation, approval, execution gatekeeper, outbox, quarantine and recovery invariants from ADR 0006 remain intact.
+- Views, presenters, UI state and informational event listeners never trigger destructive filesystem operations.
+- Terminal host restores modes and screen state on normal exit and catchable exceptions; do not claim crash/SIGKILL/power-loss guarantees.
+- Public CLI keybindings, flags, user-facing messages and exit codes remain stable unless deliberately changed and documented.
+- A changed Actions/Footer widget may require its own test updates; unrelated decoder and runner tests must not need new feature-specific cases.
 
-### 6E — End-to-end SDK workflow extensibility
+## 10. Alternatives considered
 
-- Review processor source-state assumptions and business rejection classification.
-- Generalize inbox history restoration for continuation commands.
-- Allow replay/restoration of valid nonterminal workflow states.
-- Refactor persistence around safe establishment / continuation / terminal categories, preserving transaction checks and fail-closed behavior.
-- Test with synthetic nonterminal continuation behavior, **not** by prematurely implementing full Pause UX.
+- **Patch existing `can_start`/`record_started` helpers:** Rejected. Makes frontend code the keeper of workflow-specific lifecycle rules.
+- **Second frontend workflow state machine:** Rejected. Duplicates SDK authority and drifts across platforms.
+- **Additional capability/policy evaluation layer for button visibility:** Rejected for now. SDK behaviors and transitions already own business constraints; straightforward visibility is a frontend concern. Revisit only with concrete requirements.
+- **`NullWorkflowSnapshot` as a domain object:** Rejected. Falsifies workflow identity and can conceal absence versus error. Prefer a non-null `WorkflowsState` with a nullable current-workflow selector.
+- **Mandatory Presenter / separate ViewState / giant ViewModel:** Rejected. Use small view models as UI state and stateless compositional widgets; retain a presenter only for substantial useful transformation.
+- **Dynamic generic action-descriptor UI to avoid ever editing a widget:** Rejected. A real new `P Pause` instruction legitimately changes the relevant view and view model.
+- **Universal plugin/service registry or `Map<String, dynamic>` slices:** Rejected. Explicit, typed, layer-specific registration is sufficient and safer.
+- **Exact-state subclass tree carrying an ever-growing whole-workflow data bag:** Not accepted as the long-term model. Migrate the current minimal lifecycle state machine toward a composite immutable snapshot with typed slices.
+- **Mutable session as source of truth, ephemeral event bus, or independent frontend event replay:** Rejected by ADR 0006. Keep committed append-only history and authoritative SDK observation.
 
-**Done when:** A registered nonterminal command can pass through processing, persistence and authoritative restoration without modifying generic Start/Stop dispatcher branches or bypassing invariants.
+## 11. Verification procedure
 
-### 6F — Verification, docs and architecture enforcement
-
-- Finish fixture consolidation and integration-suite responsibility cleanup; avoid mass test rewrites without benefits.
-- Update ADR/ARCHITECTURE/DEVELOPMENT docs to reflect actual implementation.
-- Perform the hypothetical Pause change-impact review across all layers.
-- Establish maintainable architecture checks where justified (imports, contract conformance, registration tests), not a large custom framework.
-
-**Done when:** Full suite passes; documented boundaries match code; Pause litmus test demonstrates new-feature code + explicit composition rather than unrelated infrastructure modifications.
-
-## 8. Behavior and safety preservation checklist
-
-Do not declare a slice done if any of the following regresses:
-
-- No implicit workflow submission from Explorer launch, navigation, view rendering, quit or read-only restoration.
-- No database creation from read-only Explorer when no persistence exists.
-- Only explicit Start or Stop initiates corresponding persistent commands.
-- Accepted submission is not misreported as a committed workflow.
-- Restore state from the authoritative journal; corruption is not silently ignored/repaired.
-- Trusted OS-user identity cannot be overridden by frontend-provided ID.
-- Stale displayed workflow ID never causes termination of a replacement workflow.
-- New workflow ownership reservation is exclusive per OS user.
-- Transaction boundaries atomically update journal, projection and submitted-command completion.
-- Failed/quarantined/rejected operations are not misreported as success.
-- Terminal modes and interactive display state are restored on successful exit and catchable failures; do not claim SIGKILL/power-loss guarantees.
-- Existing CLI command names, flags, user-facing messages and exit codes remain unchanged unless intentionally revised and documented.
-
-## 9. Workflow Pause litmus test (not an implementation request)
-
-For a future `workflow pause` capability, expected changes should concentrate in:
-
-- New SDK command event + behavior + state transition(s) + serializer + typed operation;
-- New feature-owned CLI command, Explorer action/hint and their tests;
-- Registration in SDK/runtime and product/frontend composition;
-- New feature-specific persistence/domain tests and representative integration coverage.
-
-Expected **no routine changes** to:
-
-- `TerminalInput` and its physical decoding tests;
-- Generic Explorer action dispatcher/runner tests;
-- Start/Stop action and CLI test suites;
-- Generic CLI framework/command group internals;
-- SDK state machine, workflow processor and SQLite commit dispatcher for each new registered continuation behavior, once 6E has established the extension point.
-
-Changes to explicit registries, product wiring, intentional composition snapshots, database migrations required by real new domain data, and safety policy tests are legitimate. Goal is not zero modified existing files; goal is change-locality and no unrelated test churn.
-
-## 10. Verification approach
-
-Per focused slice, use (as available in the repository):
+Per coherent completed slice (commands subject to repo script availability):
 
 ```text
 ./rudra format
@@ -348,42 +423,29 @@ git diff --check
 git status --short
 ```
 
-These are **planned verification commands**. The architectural review was read-only: no local test execution or implementation is claimed. Confirm exact commands against current repository scripts before use.
+A green generic unit suite is insufficient: check domain contracts, persistence invariants, terminal lifecycle, integration tests and the list of files changed. No tests were run merely by updating this document.
 
-Review not only test pass/fail but the list of files changed. A new feature shouldn't unexpectedly touch raw terminal decoder, unrelated tests, generic runner and persistence dispatcher unless the slice intentionally changes a contract.
+## 12. ADR alignment and references
 
-## 11. Open design questions to settle during Slice 6A/6B
+- [ADR 0004 — SDK-First Application Architecture](../decisions/0004-sdk-first-application-architecture.md): shared domain/application behavior belongs in SDK; UI and composition are independent.
+- [ADR 0005 — CLI Feature-First Structure](../decisions/0005-cli-feature-first-structure.md): isolate CLI features and tests; retain compositional core rendering.
+- [ADR 0006 — Event-Sourced Workflow and Reactive SDK Architecture](../decisions/0006-event-sourced-workflow-architecture.md): durable commands, state-machine authority, event journal, reactive SDK state, host trust and execution gatekeeper.
+- [Current SDK workflow module registry](../../packages/sdk/lib/src/workflow/modules/workflow_module_registry.dart) and [workflow runtime](../../packages/sdk/lib/src/workflow/workflow_runtime.dart).
+- [Current Explorer action registry](../../apps/cli/lib/src/features/explorer/application/explorer_action_registry.dart), [Runner](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart), [workflow interaction snapshot](../../apps/cli/lib/src/features/workflow/explorer/workflow_explorer_state.dart).
 
-1. **Action context:** What minimal read-only contextual snapshot can an action inspect? How does an action propose an updated frontend model after an explicitly executed operation without owning generic Explorer navigation state?
-2. **Availability timing:** Evaluate at render time and recheck on dispatch? How to prevent stale UI races while preserving the SDK as final authority?
-3. **Key conflicts:** Which physical shortcuts are reserved by Explorer? How are duplicate action keys/IDs detected transactionally before entering terminal mode?
-4. **Error classification:** Which failures become typed frontend diagnostics vs propagated unexpected errors that must trigger terminal restoration?
-5. **State projection:** How to represent optional workflow status without giving generic Explorer headers a dependency on each future lifecycle state?
-6. **Command grouping:** Extend the existing `package:args` nesting naturally without making a new general command-registry DSL.
-7. **SDK persistence contracts:** Defer exact categories and contracts until Slice 6E review of all ownership, replay and concurrency guarantees.
+This epic **extends** existing ADRs; it does not silently supersede their safety invariants. Once concrete SDK composite-state and observation contracts are implemented, record any genuinely new permanent design decision in an ADR rather than silently treating illustrative names here as final APIs.
 
-## 12. ADR and prior decision alignment
+## 13. Working agreement and resumption
 
-- [ADR 0004 — SDK-First Application Architecture](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/docs/decisions/0004-sdk-first-application-architecture.md): shared operations belong to SDK; frontends supply UI; concrete adapters are composed externally.
-- [ADR 0005 — CLI Feature-First Structure](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/docs/decisions/0005-cli-feature-first-structure.md): feature ownership, shared core and test placement. Epic 6 makes extensibility real rather than purely structural.
-- [ADR 0006 — Event-Sourced Workflow Architecture](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/docs/decisions/0006-event-sourced-workflow-architecture.md): durable submission, replayable authoritative state, safe transactional persistence, frontend independence and explicit commands.
-
-Epic 6 should **extend these decisions**, not establish a competing architectural paradigm. A new ADR (e.g. 0007, depending on repository numbering at implementation time) can record the approved contribution/test boundaries once the concrete 6A/6B contracts are agreed. Avoid asserting that such an ADR already exists.
-
-## 13. Working agreement / resumption instructions
-
-- **Review and discuss design before implementation.** No code until slice-level agreement.
-- At the beginning of every new chat or slice: inspect the newest pushed `main` and compare it with this dated baseline. GitHub code remains the source of truth for *what is implemented*; this document is the reference for *why and where we are going*.
-- Challenge assumptions and distinguish legitimate coupling from true extensibility defects.
-- Prefer focused, verifiable slices and minimal changes to established working code.
-- Never add abstractions solely because they are fashionable or because constructor injection is visible.
-- Do not skip safety/integration tests to achieve more elegant source directories.
-- Reconcile this document with implementation as slices land; mark completed slices explicitly and record deviations and rationale.
+- Inspect newest pushed `main` at the start of each implementation slice; the latest code, not this dated review, determines what actually exists.
+- Discuss and approve focused interface changes before coding. Make architectural pushback explicit; do not turn the document's illustrative APIs into commitments without review.
+- For manual changes, give **file path, original commit-relative line range, complete BEFORE selection and complete AFTER replacement**. Nothing outside the BEFORE selection may implicitly be removed or edited. Prefer full-file replacements when the change warrants one.
+- Keep DartDoc useful: purpose, contract, safety/side effects, parameter meaning, errors and examples where appropriate.
+- Preserve working functionality and safety tests; avoid unnecessary replacement of stable subsystems.
+- Verify each completed slice and update this epic's status to reflect actual merged work, not aspirational contracts.
 
 ### Resume prompt
 
-> Continue Rudra Epic 6 — Architectural Realignment. Read the Epic 6 source document in Project Sources and inspect the latest pushed `main` at https://github.com/ibrahimab/rudra. We agreed on layer-specific explicit contributions, feature-owned action and CLI tests, SDK-owned application operations and end-to-end safe workflow extensibility. Begin by reviewing the document's Slice 6A and proposing minimal physical-key and Explorer action-registration contracts. Discuss trade-offs first; do not implement until we agree. Preserve the current S/X/navigation behavior and terminal safety guarantees.
+> Continue Rudra Epic 6 using `docs/epics/rudra-epic-6-architectural-realignment.md` as the agreed architectural reference. Inspect the latest `main` at https://github.com/ibrahimab/rudra before proposing code. We agreed on one authoritative event-sourced composite SDK workflow state with typed slices and reactive observation; SDK-owned behaviors and operations; a non-null workflows slice with nullable current workflow; no duplicated frontend lifecycle state or additional capability framework; ViewModel-as-frontend-state; small stateless compositional widgets; optional presenters; explicit frontend action composition; and safety-preserving extensibility. The amended Explorer 6A code is incomplete and the tests still need migration. Propose the next minimal, coherent 6A change using exact BEFORE/AFTER blocks and retain SDK/persistence work for the appropriate subsequent slices.
 
----
-
-**Document provenance:** Compiled from the user-provided Epic 6 brief and the detailed architectural review of latest pushed `main` on 2026-11-20. This is an architectural decision record and implementation plan; it is not a claim that any Epic 6 refactoring has been done.
+**Provenance:** Updated from the existing Epic 6 document and a fresh GitHub inspection of `edbc075` on 2026-11-20, incorporating the agreed SDK-to-frontend architectural review. This update changes documentation only; it is **not** evidence of implementation or verification.
