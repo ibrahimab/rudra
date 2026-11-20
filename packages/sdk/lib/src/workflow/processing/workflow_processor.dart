@@ -1,38 +1,61 @@
 import '../behaviors/workflow_behavior.dart';
+import '../behaviors/workflow_command_validation_exception.dart';
+
 import '../events/workflow_event.dart';
-import '../workflow_state_machine.dart';
-import '../workflow_runtime.dart';
-
 import '../events/workflow_stop_event.dart';
-import '../states/workflow_state.dart';
-import '../workflow_transition_exception.dart';
 
-import '../states/workflow_active_state.dart';
-import '../states/workflow_initial_state.dart';
+import '../states/workflow_snapshot.dart';
+
 import '../workflow_identity.dart';
+import '../workflow_runtime.dart';
+import '../workflow_state_machine.dart';
 
+import 'workflow_commit_exception.dart';
 import 'workflow_committer.dart';
 import 'workflow_identity_provider.dart';
 import 'workflow_inbox.dart';
 import 'workflow_processing_models.dart';
-import 'workflow_commit_exception.dart';
-import 'workflow_submission_resolution.dart';
 import 'workflow_processing_result.dart';
 import 'workflow_quarantine.dart';
+import 'workflow_submission_resolution.dart';
 
 /// Orchestrates durable workflow command processing.
 ///
-/// Reads commands, resolves registered behaviors, obtains
-/// proposed identities, and validates all state transitions.
+/// The processor consumes accepted commands from the inbox,
+/// restores committed workflow state, resolves registered SDK
+/// command behaviors, and validates proposed domain outcomes.
 ///
-/// Does not access SQLite, perform filesystem operations,
-/// or commit changes itself.
+/// Commands are validated by their owning behaviors. Only
+/// established domain outcomes are applied by the workflow
+/// state machine and proposed for journal commitment.
+///
+/// The processor delegates trusted identity acquisition to
+/// [WorkflowIdentityProvider] and atomic persistence to
+/// [WorkflowCommitter].
+///
+/// Business rejections and unreadable submissions have separate
+/// durable resolution paths. Unexpected domain or infrastructure
+/// failures propagate without claiming successful commitment.
+///
+/// This class performs no filesystem operations and contains
+/// no SQL or frontend-specific behavior.
 final class WorkflowProcessor {
-  /// [runtime] supplies the immutable command handlers and
-  /// transition graph shared with persistence composition.
+  /// Creates a processor sharing one authoritative workflow runtime.
   ///
-  /// The processor does not independently register modules
-  /// or construct a separate workflow configuration.
+  /// [runtime] supplies registered command handlers, lifecycle
+  /// transitions, and feature-owned domain-slice reducers.
+  ///
+  /// [inbox] supplies accepted pending commands and validated
+  /// committed outcome histories.
+  ///
+  /// [identity_provider] supplies proposed trusted identities
+  /// when establishing workflows.
+  ///
+  /// [committer] independently revalidates and persists proposals.
+  /// [rejector] persists recognized business rejections.
+  /// [quarantiner] durably resolves unreadable submissions.
+  ///
+  /// Construction performs no I/O or command processing.
   WorkflowProcessor({
     required WorkflowRuntime runtime,
     required WorkflowInbox inbox,
@@ -46,46 +69,55 @@ final class WorkflowProcessor {
        _rejector = rejector,
        _quarantiner = quarantiner,
        _handlers = runtime.command_behaviors,
-       _machine = WorkflowStateMachine(flow: runtime.flow);
+       _machine = WorkflowStateMachine(runtime: runtime);
 
+  /// Durable source of pending accepted commands.
   final WorkflowInbox _inbox;
+
+  /// Trusted identity provider used during workflow establishment.
   final WorkflowIdentityProvider _identity_provider;
+
+  /// Atomic authoritative workflow persistence boundary.
   final WorkflowCommitter _committer;
 
-  /// Persists confirmed business rejections independently
-  /// of the authoritative workflow event journal.
+  /// Durable resolution boundary for recognized business rejections.
   final WorkflowSubmissionRejector _rejector;
 
-  /// Persists unreadable accepted commands without interpreting
-  /// them as valid domain requests or business rejections.
+  /// Durable quarantine boundary for unreadable accepted commands.
   final WorkflowSubmissionQuarantiner _quarantiner;
 
+  /// Registered command behaviors indexed by exact Dart command type.
   final Map<Type, WorkflowCommandBehavior<dynamic>> _handlers;
+
+  /// Single authoritative outcome-driven domain state machine.
   final WorkflowStateMachine _machine;
 
-  /// Processes at most one pending workflow command.
+  /// Processes at most one accepted pending workflow command.
   ///
-  /// Returns [WorkflowProcessingIdle] when the inbox is empty.
+  /// Returns [WorkflowProcessingIdle] when no command is pending.
   ///
-  /// Returns [WorkflowProcessingCommitted] after authoritative
-  /// workflow changes have been durably committed.
+  /// Returns [WorkflowProcessingCommitted] only after the
+  /// proposed outcomes are atomically persisted.
   ///
-  /// Returns [WorkflowProcessingRejected] only after a
-  /// recognized business rejection has been durably recorded.
+  /// Returns [WorkflowProcessingRejected] only after a recognized
+  /// business rejection has been durably recorded.
   ///
-  /// Unexpected domain, concurrency, and infrastructure
-  /// failures propagate instead of producing success results.
+  /// Returns [WorkflowProcessingQuarantined] only after an
+  /// unreadable accepted command is durably quarantined.
+  ///
+  /// Invalid histories, unrecognized commands, invalid domain
+  /// outcomes, and infrastructure failures propagate.
+  ///
+  /// Reading or validating a command does not commit a workflow.
   Future<WorkflowProcessingResult> process_next() async {
     final PendingWorkflowCommand? pending;
 
     try {
       pending = await _inbox.next_pending();
     } on WorkflowInboxDecodingException catch (issue) {
-      // The inbox identified an unreadable persisted row.
-      // It deliberately did not change the database.
-      //
-      // This operation must commit before we return a
-      // quarantined result to the caller.
+      // Quarantine must commit before we report a resolution.
+      // The unreadable submission must never be interpreted
+      // as an ordinary business rejection.
       await _quarantiner.quarantine(issue);
 
       return WorkflowProcessingQuarantined(
@@ -107,37 +139,16 @@ final class WorkflowProcessor {
       );
     }
 
-    // Reconstruct the previously committed workflow state.
+    // Replay only previously committed domain outcomes.
+    // Invalid histories propagate and never become absence.
     final previous_state = _machine.replay(pending.committed_events);
 
-    // Validate the submitted command before proposing outcomes.
-    //
-    // Only two recognized stop-transition failures represent
-    // business rejections. Other failures must propagate.
-    late WorkflowState resulting_state;
+    // A Stop command with no established workflow is a known
+    // business rejection. No identity may be fabricated from
+    // the untrusted workflow ID supplied by the command.
+    if (pending.command is WorkflowStopEvent && previous_state == null) {
+      const rejection_code = WorkflowRejectionCode.workflow_not_active;
 
-    try {
-      resulting_state = _machine.transition(
-        state: previous_state,
-        event: pending.command,
-      );
-    } on WorkflowTransitionException catch (error) {
-      final WorkflowRejectionCode rejection_code;
-
-      if (pending.command is WorkflowStopEvent &&
-          previous_state is WorkflowInitialState &&
-          error.code == WorkflowTransitionErrorCode.invalid_transition) {
-        rejection_code = WorkflowRejectionCode.workflow_not_active;
-      } else if (pending.command is WorkflowStopEvent &&
-          previous_state is WorkflowActiveState &&
-          error.code == WorkflowTransitionErrorCode.workflow_id_mismatch) {
-        rejection_code = WorkflowRejectionCode.workflow_id_mismatch;
-      } else {
-        rethrow;
-      }
-
-      // Persist the business rejection before reporting it.
-      // A failed or stale rejection write must propagate.
       await _rejector.reject(submission: pending, code: rejection_code);
 
       return WorkflowProcessingRejected(
@@ -147,66 +158,38 @@ final class WorkflowProcessor {
     }
 
     // New workflows require a proposed trusted identity.
-    // Existing workflows must retain their committed identity.
+    // Existing workflows always retain their committed identity.
     //
-    // Unsupported source states fail closed.
+    // The command behavior validates these bindings before
+    // proposing domain outcomes.
     final WorkflowIdentity identity;
 
-    if (previous_state is WorkflowInitialState) {
+    if (previous_state == null) {
       identity = await _identity_provider.propose_identity(pending);
-    } else if (previous_state is WorkflowActiveState) {
-      identity = previous_state.identity;
     } else {
-      throw StateError(
-        'Unsupported workflow source state for command processing.',
-      );
+      identity = previous_state.identity;
     }
 
-    final outcomes = behavior.propose_outcomes(
-      pending.command,
-      identity: identity,
-    );
-
-    if (outcomes.isEmpty) {
-      throw StateError('A workflow command must propose an outcome.');
-    }
-
-    if (outcomes.any((event) => event is WorkflowCommandEvent)) {
-      throw StateError('A command handler cannot emit command events.');
-    }
-
-    // Validate all proposed outcomes before touching persistence.
-    for (final outcome in outcomes) {
-      resulting_state = _machine.transition(
-        state: resulting_state,
-        event: outcome,
-      );
-    }
-
-    final plan = WorkflowProcessingPlan(
-      submission: pending,
-      previous_state: previous_state,
-      resulting_state: resulting_state,
-      events_to_append: [pending.command, ...outcomes],
-    );
-
-    // The committer rechecks transactional invariants.
-    // Only its successful completion establishes the workflow.
     try {
-      await _committer.commit(plan);
-    } on WorkflowCommitException catch (error) {
-      // Only confirmed business conflicts may become durable
-      // rejections. Integrity and infrastructure failures propagate.
+      behavior.validate_submission(
+        pending.command,
+        previous: previous_state,
+        identity: identity,
+      );
+    } on WorkflowCommandValidationException catch (error) {
       final rejection_code = switch (error.code) {
-        WorkflowCommitErrorCode.ownership_conflict =>
+        WorkflowCommandValidationErrorCode.workflow_already_active =>
           WorkflowRejectionCode.ownership_conflict,
-        WorkflowCommitErrorCode.workflow_not_active =>
+        WorkflowCommandValidationErrorCode.workflow_not_active =>
           WorkflowRejectionCode.workflow_not_active,
-        WorkflowCommitErrorCode.workflow_id_mismatch =>
+        WorkflowCommandValidationErrorCode.workflow_id_mismatch =>
           WorkflowRejectionCode.workflow_id_mismatch,
         _ => null,
       };
 
+      // Identity and original-request mismatches indicate invalid
+      // processing proposals. They must fail closed rather than
+      // becoming ordinary business rejections.
       if (rejection_code == null) {
         rethrow;
       }
@@ -219,8 +202,90 @@ final class WorkflowProcessor {
       );
     }
 
-    // A committed result is returned only after the
-    // authoritative persistence transaction succeeds.
+    // The behavior proposes domain outcomes but cannot commit them.
+    final proposed_events = behavior.propose_outcomes(
+      pending.command,
+      identity: identity,
+    );
+
+    if (proposed_events.isEmpty) {
+      throw StateError(
+        'A workflow command must propose at least one domain outcome.',
+      );
+    }
+
+    // Validate the outcome-only journal contract before replay.
+    // A command handler cannot append submitted command events
+    // or arbitrary non-outcome event implementations.
+    final outcomes = <WorkflowOutcomeEvent>[];
+
+    for (final proposed in proposed_events) {
+      if (proposed is! WorkflowOutcomeEvent) {
+        throw StateError(
+          'A workflow command behavior produced a '
+          'non-outcome event: ${proposed.runtimeType}.',
+        );
+      }
+
+      outcomes.add(proposed);
+    }
+
+    // Every outcome is validated against the immutable result
+    // of the preceding transition. No domain state is persisted
+    // during this evaluation.
+    WorkflowSnapshot? resulting_state = previous_state;
+
+    for (final outcome in outcomes) {
+      resulting_state = _machine.transition(
+        state: resulting_state,
+        event: outcome,
+      );
+    }
+
+    if (resulting_state == null) {
+      throw StateError(
+        'Outcome processing did not establish a workflow snapshot.',
+      );
+    }
+
+    final plan = WorkflowProcessingPlan(
+      submission: pending,
+      previous_state: previous_state,
+      resulting_state: resulting_state,
+      events_to_append: outcomes,
+    );
+
+    try {
+      // The persistence adapter must repeat its critical checks
+      // against current transactional state. This processor's
+      // validated snapshot alone cannot authorize a commit.
+      await _committer.commit(plan);
+    } on WorkflowCommitException catch (error) {
+      final rejection_code = switch (error.code) {
+        WorkflowCommitErrorCode.ownership_conflict =>
+          WorkflowRejectionCode.ownership_conflict,
+        WorkflowCommitErrorCode.workflow_not_active =>
+          WorkflowRejectionCode.workflow_not_active,
+        WorkflowCommitErrorCode.workflow_id_mismatch =>
+          WorkflowRejectionCode.workflow_id_mismatch,
+        _ => null,
+      };
+
+      // Integrity, invalid-plan, and infrastructure failures
+      // must propagate without claiming a durable rejection.
+      if (rejection_code == null) {
+        rethrow;
+      }
+
+      await _rejector.reject(submission: pending, code: rejection_code);
+
+      return WorkflowProcessingRejected(
+        receipt: pending.receipt,
+        code: rejection_code,
+      );
+    }
+
+    // Authoritative success is reported only after commitment.
     return WorkflowProcessingCommitted(plan: plan);
   }
 }
