@@ -169,7 +169,7 @@ void main() {
     expect(restored, isA<WorkflowSnapshot>());
     expect(restored!.version, 1);
 
-    final active = restored as WorkflowSnapshot;
+    final active = restored;
 
     expect(active.identity.workflow_id, identity.workflow_id);
     expect(active.identity.os_user_id, os_user_id);

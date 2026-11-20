@@ -190,7 +190,7 @@ void main() {
             as WorkflowOutcomeEvent,
     ]);
     expect(replayed!.is_terminal, isTrue);
-    expect(replayed!.version, 2);
+    expect(replayed.version, 2);
 
     expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
     final current = await WorkflowStateReader(
@@ -699,7 +699,7 @@ void main() {
     expect(restored, isA<WorkflowSnapshot>());
     expect(restored!.version, 1);
 
-    final active = restored as WorkflowSnapshot;
+    final active = restored;
 
     expect(active.identity.workflow_id, 'workflow-1');
     expect(active.identity.os_user_id, os_user_id);
@@ -721,10 +721,7 @@ void main() {
   test('rolls back all writes if outcome serialization fails', () async {
     await submit('/workspace');
 
-    final pending = await inbox.next_pending();
-    expect(pending, isNotNull);
-
-    final command = pending!.command;
+    final pending = (await inbox.next_pending())!;
 
     final identity = WorkflowIdentity(
       workflow_id: 'workflow-1',
@@ -900,11 +897,7 @@ void main() {
   test('refuses workflow ownership for a different OS user', () async {
     await submit('/workspace');
 
-    final pending = await inbox.next_pending();
-
-    expect(pending, isNotNull);
-
-    final command = pending!.command;
+    final pending = (await inbox.next_pending())!;
 
     final identity = WorkflowIdentity(
       workflow_id: 'workflow-1',
