@@ -45,6 +45,7 @@ export 'transitions/workflow_outcome_transition.dart';
 export 'transitions/workflow_slice_reducer.dart';
 
 export 'behaviors/workflow_behavior.dart';
+export 'behaviors/workflow_command_validation_exception.dart';
 
 export 'modules/workflow_module.dart';
 export 'modules/workflow_module_registry.dart';
