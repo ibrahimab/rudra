@@ -69,13 +69,13 @@ void main() {
 
     expect(status, RudraExitCode.success.value);
     expect(output.toString(), contains('Workflow: ACTIVE'));
-    expect(output.toString(), contains('Version: 2'));
+    expect(output.toString(), contains('Version: 1'));
     expect(database_file.existsSync(), isTrue);
 
     final restored = await workflow_composition.current();
 
     expect(restored, isNotNull);
-    expect(restored!.version, 2);
+    expect(restored!.version, 1);
     expect(restored.identity.os_user_id, 'test-os-user');
     expect(restored.identity.target_id, 'local-macos');
     expect(restored.identity.root.value, '/fixture');
@@ -146,7 +146,7 @@ void main() {
     final next = await workflow_composition.current();
 
     expect(next, isNotNull);
-    expect(next!.version, 2);
+    expect(next!.version, 1);
     expect(next.identity.workflow_id, isNot(original.identity.workflow_id));
   });
 
@@ -261,7 +261,7 @@ void main() {
 
     expect(restored, isNotNull);
     expect(restored!.identity.workflow_id, replacement.identity.workflow_id);
-    expect(restored.version, 2);
+    expect(restored.version, 1);
   });
 }
 

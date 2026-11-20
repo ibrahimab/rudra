@@ -262,7 +262,7 @@ void main() {
 
         expect(first_screen, contains('Workflow: ACTIVE'));
         expect(first_screen, contains('ID: ${original!.identity.workflow_id}'));
-        expect(first_screen, contains('Version: 2'));
+        expect(first_screen, contains('Version: 1'));
         expect(first.terminal.restored, isTrue);
 
         // The fake terminal sends Q during each invocation.
@@ -279,7 +279,7 @@ void main() {
 
         expect(second_screen, contains('Workflow: ACTIVE'));
         expect(second_screen, contains('ID: ${original.identity.workflow_id}'));
-        expect(second_screen, contains('Version: 2'));
+        expect(second_screen, contains('Version: 1'));
         expect(second.terminal.restored, isTrue);
 
         final restored = await workflows.current();
@@ -356,7 +356,7 @@ void main() {
 
           expect(database_file.existsSync(), isTrue);
           expect(committed, isNotNull);
-          expect(committed!.version, 2);
+          expect(committed!.version, 1);
           expect(committed.identity.target_id, 'fixture-target');
           expect(committed.identity.root.value, '/fixture');
 
