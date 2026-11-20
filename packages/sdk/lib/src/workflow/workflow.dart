@@ -7,6 +7,7 @@ export 'workflow_identity.dart';
 /// Immutable lifecycle and typed domain slice contracts.
 export 'states/workflow_lifecycle.dart';
 export 'states/workflow_slice.dart';
+export 'states/workflow_snapshot.dart';
 
 /// Domain events.
 

@@ -82,3 +82,37 @@ final class WorkflowSliceKey<T extends WorkflowSlice> {
     return value;
   }
 }
+
+/// Associates a registered slice identity with an immutable domain value.
+///
+/// [T] preserves the relationship between the declared slice key
+/// and its concrete value, including when bindings are collected
+/// through the shared [WorkflowSlice] base type.
+///
+/// Bindings are used to assemble immutable workflow snapshots.
+/// They do not authorize state transitions or establish persistence.
+///
+/// Example:
+/// ```dart
+/// final binding = WorkflowSliceBinding<InspectionSlice>(
+///   key: inspection_key,
+///   value: inspection,
+/// );
+/// ```
+final class WorkflowSliceBinding<T extends WorkflowSlice> {
+  /// Creates a typed association between [key] and [value].
+  ///
+  /// Validates that the supplied value satisfies the concrete
+  /// slice type declared by the key.
+  ///
+  /// Throws [StateError] when the types are incompatible.
+  WorkflowSliceBinding({required this.key, required this.value}) {
+    key.require_type(value);
+  }
+
+  /// Stable, typed identity of the associated domain slice.
+  final WorkflowSliceKey<T> key;
+
+  /// Immutable domain value associated with [key].
+  final T value;
+}
