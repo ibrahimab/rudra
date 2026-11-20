@@ -48,6 +48,9 @@ export 'src/filesystem/filesystem.dart';
 /// Workflow engine and domain API.
 export 'src/workflow/workflow.dart';
 
+/// Immutable composite SDK application state.
+export 'src/state/rudra_state.dart';
+
 /// Main SDK application facade.
 export 'src/rudra_sdk.dart';
 

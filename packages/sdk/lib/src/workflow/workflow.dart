@@ -8,6 +8,7 @@ export 'workflow_identity.dart';
 export 'states/workflow_lifecycle.dart';
 export 'states/workflow_slice.dart';
 export 'states/workflow_snapshot.dart';
+export 'states/workflows_state.dart';
 
 /// Domain events.
 
