@@ -3,6 +3,8 @@ import 'modules/standard_workflow_modules.dart';
 import 'modules/workflow_module_registry.dart';
 import 'serialization/workflow_event_codec.dart';
 import 'workflow_flow.dart';
+import 'states/workflow_lifecycle.dart';
+import 'states/workflow_slice.dart';
 
 /// Immutable configuration for a Rudra workflow runtime.
 ///
@@ -34,8 +36,16 @@ final class WorkflowRuntime {
       flow: WorkflowFlow(transitions: registry.transitions),
       codec: WorkflowEventCodec.from_registry(registry),
       command_behaviors: registry.command_behaviors,
+      lifecycles: registry.lifecycles,
+      slice_keys: registry.slice_keys,
     );
   }
+
+  /// Immutable lifecycle definitions enabled in this runtime.
+  final Map<String, WorkflowLifecycle> lifecycles;
+
+  /// Immutable typed slice ownership enabled in this runtime.
+  final Map<String, WorkflowSliceKey<WorkflowSlice>> slice_keys;
 
   /// Creates the standard Rudra workflow configuration.
   ///
@@ -56,7 +66,11 @@ final class WorkflowRuntime {
     required this.flow,
     required this.codec,
     required Map<Type, WorkflowCommandBehavior<dynamic>> command_behaviors,
-  }) : command_behaviors = Map.unmodifiable(command_behaviors);
+    required Map<String, WorkflowLifecycle> lifecycles,
+    required Map<String, WorkflowSliceKey<WorkflowSlice>> slice_keys,
+  }) : command_behaviors = Map.unmodifiable(command_behaviors),
+       lifecycles = Map.unmodifiable(lifecycles),
+       slice_keys = Map.unmodifiable(slice_keys);
 
   /// Immutable state-transition graph.
   final WorkflowFlow flow;

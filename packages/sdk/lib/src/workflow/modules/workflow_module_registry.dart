@@ -1,5 +1,7 @@
 import '../behaviors/workflow_behavior.dart';
 import '../serialization/workflow_event_serializer.dart';
+import '../states/workflow_lifecycle.dart';
+import '../states/workflow_slice.dart';
 import '../transitions/workflow_transition.dart';
 import 'workflow_module.dart';
 
@@ -15,6 +17,16 @@ final class WorkflowModuleRegistry {
   final List<WorkflowTransitionDefinition> _transitions = [];
 
   final Map<Type, WorkflowCommandBehavior<dynamic>> _command_behaviors = {};
+
+  /// Registered lifecycle identities.
+  final Map<String, WorkflowLifecycle> _lifecycles = {};
+
+  /// Registered slice ownership, indexed by stable identity.
+  final Map<String, WorkflowSliceKey<WorkflowSlice>> _slice_keys = {};
+
+  /// Reverse index preventing one slice type from being
+  /// registered under multiple identities.
+  final Map<Type, String> _slice_ids_by_type = {};
 
   /// Registered serialization strategies.
   ///
@@ -107,6 +119,41 @@ final class WorkflowModuleRegistry {
       known_ids[serializer.dart_type] = serializer.event_type;
     }
 
+    // Validate lifecycle ownership before publishing anything.
+    final pending_lifecycles = <String, WorkflowLifecycle>{};
+
+    for (final lifecycle in staging.lifecycles) {
+      if (_lifecycles.containsKey(lifecycle.id) ||
+          pending_lifecycles.containsKey(lifecycle.id)) {
+        throw StateError('Duplicate workflow lifecycle: ${lifecycle.id}');
+      }
+
+      pending_lifecycles[lifecycle.id] = lifecycle;
+    }
+
+    // Slice identities and types must both have one owner.
+    final pending_slice_keys = <String, WorkflowSliceKey<WorkflowSlice>>{};
+    final pending_slice_types = <Type, String>{};
+
+    for (final key in staging.slice_keys) {
+      if (key.slice_type == WorkflowSlice) {
+        throw StateError('Workflow slice ${key.id} requires a concrete type.');
+      }
+
+      if (_slice_keys.containsKey(key.id) ||
+          pending_slice_keys.containsKey(key.id)) {
+        throw StateError('Duplicate workflow slice identifier: ${key.id}');
+      }
+
+      if (_slice_ids_by_type.containsKey(key.slice_type) ||
+          pending_slice_types.containsKey(key.slice_type)) {
+        throw StateError('Duplicate workflow slice type: ${key.slice_type}');
+      }
+
+      pending_slice_keys[key.id] = key;
+      pending_slice_types[key.slice_type] = key.id;
+    }
+
     // All checks succeeded. Commit the configuration together.
     _transitions.addAll(staging.transitions);
 
@@ -116,6 +163,10 @@ final class WorkflowModuleRegistry {
 
     _serializers.addAll(staging.serializers);
     _serializer_keys.addAll(pending_serializer_keys);
+
+    _lifecycles.addAll(pending_lifecycles);
+    _slice_keys.addAll(pending_slice_keys);
+    _slice_ids_by_type.addAll(pending_slice_types);
 
     _module_ids.add(module_id);
   }
@@ -132,6 +183,17 @@ final class WorkflowModuleRegistry {
   List<WorkflowEventSerializer> get serializers =>
       List.unmodifiable(_serializers);
 
+  /// Immutable snapshot of registered lifecycle definitions.
+  Map<String, WorkflowLifecycle> get lifecycles =>
+      Map.unmodifiable(_lifecycles);
+
+  /// Immutable snapshot of registered typed slice identities.
+  ///
+  /// The type-erased registry representation retains each
+  /// key's runtime type validation.
+  Map<String, WorkflowSliceKey<WorkflowSlice>> get slice_keys =>
+      Map.unmodifiable(_slice_keys);
+
   /// Finds the handler responsible for an exact command type.
   WorkflowCommandBehavior<dynamic>? handler_for({required Type command_type}) {
     return _command_behaviors[command_type];
@@ -143,6 +205,8 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   final List<WorkflowTransitionDefinition> transitions = [];
   final List<WorkflowCommandBehavior<dynamic>> command_behaviors = [];
   final List<WorkflowEventSerializer> serializers = [];
+  final List<WorkflowLifecycle> lifecycles = [];
+  final List<WorkflowSliceKey<WorkflowSlice>> slice_keys = [];
 
   /// Stages a workflow behavior and its optional command handler.
   @override
@@ -164,9 +228,18 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
     transitions.add(transition);
   }
 
-  /// Stages an event serializer without executing it.
   @override
   void add_serializer(WorkflowEventSerializer serializer) {
     serializers.add(serializer);
+  }
+
+  @override
+  void add_lifecycle(WorkflowLifecycle lifecycle) {
+    lifecycles.add(lifecycle);
+  }
+
+  @override
+  void add_slice<T extends WorkflowSlice>(WorkflowSliceKey<T> key) {
+    slice_keys.add(key);
   }
 }

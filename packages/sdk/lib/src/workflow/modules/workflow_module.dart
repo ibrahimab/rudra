@@ -1,30 +1,45 @@
 import '../behaviors/workflow_behavior.dart';
 import '../serialization/workflow_event_serializer.dart';
+import '../states/workflow_lifecycle.dart';
+import '../states/workflow_slice.dart';
 
 /// A composable contribution to Rudra's workflow engine.
 ///
-/// Modules register their behaviors without executing them.
+/// Modules register their behavior and domain-state contracts
+/// without executing them or performing I/O.
 abstract interface class WorkflowModule {
   /// Stable identifier unique across registered modules.
   String get module_id;
 
-  /// Contributes this module's workflow behaviors.
+  /// Contributes this module's workflow contracts.
   ///
-  /// Registration must not perform persistence or I/O.
+  /// All registrations are staged and committed atomically.
   void register(WorkflowModuleRegistration registration);
 }
 
-/// Receives behaviors contributed by a workflow module.
+/// Receives contracts contributed by a workflow module.
 ///
-/// All contributions are collected before the module
-/// registration is committed.
+/// Registrations become visible only after the complete module
+/// has passed validation. Duplicate ownership fails closed.
 abstract interface class WorkflowModuleRegistration {
-  /// Registers one self-contained workflow behavior.
+  /// Registers one workflow behavior.
   void add(WorkflowBehavior behavior);
 
   /// Registers an event-specific serialization strategy.
   ///
-  /// Multiple versions of the same event type may be registered,
-  /// but the same event type and schema version must be unique.
+  /// A concrete event may have multiple schema versions, but
+  /// the same event identifier and version must be unique.
   void add_serializer(WorkflowEventSerializer serializer);
+
+  /// Registers a module-owned lifecycle phase.
+  ///
+  /// Lifecycle identifiers must be globally unique within
+  /// the runtime, including across separate modules.
+  void add_lifecycle(WorkflowLifecycle lifecycle);
+
+  /// Registers ownership of one typed domain-state slice.
+  ///
+  /// Both the stable identifier and the concrete slice type
+  /// must be unique within the runtime.
+  void add_slice<T extends WorkflowSlice>(WorkflowSliceKey<T> key);
 }
