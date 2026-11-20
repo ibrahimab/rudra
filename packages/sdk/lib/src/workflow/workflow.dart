@@ -41,7 +41,11 @@ export 'workflow_runtime.dart';
 
 /// Extension contracts and module registration.
 export 'transitions/workflow_transition.dart';
+export 'transitions/workflow_outcome_transition.dart';
+export 'transitions/workflow_slice_reducer.dart';
+
 export 'behaviors/workflow_behavior.dart';
+
 export 'modules/workflow_module.dart';
 export 'modules/workflow_module_registry.dart';
 export 'modules/lifecycle_workflow_module.dart';
