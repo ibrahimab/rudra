@@ -236,12 +236,39 @@ void main() {
   });
 }
 
-/// Creates a registry containing the standard lifecycle definitions.
+/// Creates an isolated registry with the lifecycle identities
+/// required by outcome-registration tests.
 ///
-/// This uses the existing lifecycle module while the new
-/// outcome-transition contracts are introduced.
+/// The fixture deliberately registers only lifecycle definitions.
+/// It does not depend on standard lifecycle behaviors, serializers,
+/// or outcome transitions.
+///
+/// This ensures that changes to production module composition
+/// cannot invalidate tests of independent registration contracts.
+///
+/// Example:
+/// ```dart
+/// final registry = _registry_with_lifecycle();
+///
+/// expect(registry.lifecycles, hasLength(2));
+/// expect(registry.outcome_transitions, isEmpty);
+/// ```
 WorkflowModuleRegistry _registry_with_lifecycle() {
-  return WorkflowModuleRegistry()..register(const LifecycleWorkflowModule());
+  final registry = WorkflowModuleRegistry();
+
+  registry.register(
+    _TestModule('test.lifecycle', (registration) {
+      registration
+        ..add_lifecycle(
+          WorkflowLifecycle(id: 'rudra.workflow.active', is_terminal: false),
+        )
+        ..add_lifecycle(
+          WorkflowLifecycle(id: 'rudra.workflow.ended', is_terminal: true),
+        );
+    }),
+  );
+
+  return registry;
 }
 
 /// Synthetic module for isolated workflow registration tests.
