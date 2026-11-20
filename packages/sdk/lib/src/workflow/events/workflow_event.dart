@@ -1,57 +1,83 @@
-/// Platform-independent event consumed by a workflow state machine.
+import '../workflow_identity.dart';
+
+/// Base contract for a workflow-related command or domain outcome.
 ///
-/// Events represent submitted requests or established outcomes.
-/// They cannot mutate state or authorize filesystem operations.
+/// [event_type] identifies the event's stable semantic contract.
+/// The SDK uses concrete Dart types for behavior and transition
+/// dispatch, never an untrusted string supplied by an event.
 ///
-/// [event_type] provides a stable semantic identifier for future
-/// persistence and diagnostics. It is not used for runtime
-/// transition dispatch, which matches exact Dart types.
+/// Command events represent requested operations and are stored
+/// in the durable submission infrastructure.
 ///
-/// Durable event IDs, correlation metadata, and serialization
-/// are introduced by later event infrastructure.
+/// Outcome events represent established domain facts and form
+/// the authoritative workflow journal after successful commitment.
 ///
-/// Example:
-/// ```dart
-/// final WorkflowEvent event = WorkflowStartEvent(
-///   target_id: 'local-macos',
-///   root: TargetPath('/tmp'),
-/// );
-///
-/// print(event.event_type);
-/// // workflow.start
-/// ```
+/// Implementing this interface does not authorize persistence,
+/// workflow transitions, or filesystem operations.
 abstract interface class WorkflowEvent {
-  /// Stable, implementation-independent event type identifier.
+  /// Stable semantic identifier of the event contract.
+  ///
+  /// The identifier is used for serialization and diagnostics.
+  /// It does not determine which transition may execute.
   String get event_type;
 }
 
-/// A workflow event that an application may submit as a request.
+/// A durable request submitted to the SDK workflow application.
 ///
-/// Command events express intent rather than an established outcome.
+/// Commands express intent rather than established domain state.
 ///
-/// Only this interface is accepted by `EventManager.trigger`.
-/// Outcome events such as WorkflowStartedEvent are created by
-/// trusted SDK processing, never submitted as frontend commands.
+/// Only command events may be submitted through EventManager.
+/// The application processor evaluates them through registered
+/// command behaviors and proposes corresponding domain outcomes.
 ///
-/// Implementing this interface is not authorization to perform
-/// filesystem operations.
+/// Accepted commands remain independently tracked by the durable
+/// submission infrastructure, including processing and rejection.
+///
+/// A command does not increment the committed workflow version.
+abstract interface class WorkflowCommandEvent implements WorkflowEvent {}
+
+/// An established workflow-domain outcome.
+///
+/// Outcomes are proposed by trusted SDK processing, validated
+/// against registered domain transitions, and committed atomically.
+///
+/// Only committed outcomes belong to the authoritative workflow
+/// journal. Each committed outcome advances its workflow version
+/// exactly once.
+///
+/// An outcome object is not authoritative merely because it exists.
+/// Persistence and replay validation establish authoritative state.
+abstract interface class WorkflowOutcomeEvent implements WorkflowEvent {}
+
+/// A domain outcome that establishes a new workflow identity.
+///
+/// The first committed event of a workflow must satisfy this
+/// contract. It supplies the immutable identity and original
+/// bindings required to construct the first `WorkflowSnapshot`.
+///
+/// The state machine uses this interface rather than depending
+/// on a concrete lifecycle feature or event implementation.
+///
+/// [identity] must originate from trusted SDK processing.
+/// Before commitment, the processor and persistence boundary
+/// must validate its consistency with the accepted command
+/// and authenticated operating-system user.
+///
+/// Subsequent domain outcomes must preserve the established
+/// workflow identity and cannot establish a replacement identity.
 ///
 /// Example:
 /// ```dart
-/// final WorkflowCommandEvent request = WorkflowStartEvent(
-///   target_id: 'local-macos',
-///   root: TargetPath('/workspace'),
-/// );
+/// final WorkflowEstablishmentOutcomeEvent outcome =
+///     WorkflowStartedEvent(identity: identity);
+///
+/// print(outcome.identity.workflow_id);
 /// ```
-abstract interface class WorkflowCommandEvent implements WorkflowEvent {}
-
-/// A workflow event representing an established domain outcome.
-///
-/// Outcome events are produced by trusted workflow processing.
-/// They describe committed lifecycle changes rather than
-/// requesting operations.
-///
-/// Only command events may be submitted through EventManager.
-/// Outcome events must pass state-machine validation and
-/// durable commitment before becoming authoritative.
-abstract interface class WorkflowOutcomeEvent implements WorkflowEvent {}
+abstract interface class WorkflowEstablishmentOutcomeEvent
+    implements WorkflowOutcomeEvent {
+  /// Original identity and bindings of the established workflow.
+  ///
+  /// These values remain unchanged throughout the workflow's
+  /// lifetime, including after a terminal outcome.
+  WorkflowIdentity get identity;
+}
