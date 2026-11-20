@@ -1,8 +1,14 @@
 import '../behaviors/workflow_behavior.dart';
+
 import '../serialization/workflow_event_serializer.dart';
+
 import '../states/workflow_lifecycle.dart';
 import '../states/workflow_slice.dart';
+
 import '../transitions/workflow_transition.dart';
+import '../transitions/workflow_outcome_transition.dart';
+import '../transitions/workflow_slice_reducer.dart';
+
 import 'workflow_module.dart';
 
 /// Collects and validates workflow capabilities contributed by SDK modules.
@@ -70,6 +76,27 @@ final class WorkflowModuleRegistry {
   /// under different identifiers.
   final Map<Type, String> _slice_ids_by_type = {};
 
+  /// Outcome-driven lifecycle transitions contributed by modules.
+  ///
+  /// The runtime validates referenced lifecycle definitions
+  /// after all modules have been registered.
+  final List<WorkflowOutcomeTransitionDefinition> _outcome_transitions = [];
+
+  /// Registered source-lifecycle and outcome-event combinations.
+  ///
+  /// A null source lifecycle represents workflow establishment.
+  final Set<(String?, Type)> _outcome_transition_pairs = {};
+
+  /// Feature-owned reducers of immutable workflow domain slices.
+  ///
+  /// Each reducer changes one registered slice for one event type.
+  final List<WorkflowSliceReducerDefinition> _slice_reducers = [];
+
+  /// Registered slice-identifier and outcome-event combinations.
+  ///
+  /// Each combination has exactly one contributing reducer.
+  final Set<(String, Type)> _slice_reducer_pairs = {};
+
   /// Event serializers contributed by registered modules.
   ///
   /// Multiple schema versions may exist for one event type,
@@ -93,8 +120,10 @@ final class WorkflowModuleRegistry {
   ///
   /// Throws [StateError] for duplicate module identifiers, command
   /// handlers, lifecycle identifiers, slice identifiers or slice types,
-  /// conflicting serializer identities, and invalid command/transition
-  /// associations.
+  /// conflicting serializer identities, duplicate outcome-transition
+  /// pairs, duplicate slice-reducer pairs, reducers referencing slices
+  /// not owned by the contributing module, and invalid
+  /// command/transition associations.
   ///
   /// Exceptions raised by the module during registration propagate
   /// without modifying previously accepted registrations.
@@ -217,6 +246,42 @@ final class WorkflowModuleRegistry {
       pending_slice_types[key.slice_type] = key.id;
     }
 
+    // An exact lifecycle/event pair must have one transition.
+    // The same event may have different transitions from
+    // different source lifecycles.
+    final pending_outcome_pairs = <(String?, Type)>{};
+
+    for (final transition in staging.outcome_transitions) {
+      final pair = (transition.source_lifecycle_id, transition.event_type);
+
+      if (!pending_outcome_pairs.add(pair) ||
+          _outcome_transition_pairs.contains(pair)) {
+        throw StateError('Duplicate workflow outcome transition: $pair');
+      }
+    }
+
+    // A module may reduce only a slice it declares ownership of.
+    // Validate ownership independently of staging call order.
+    final pending_reducer_pairs = <(String, Type)>{};
+
+    for (final reducer in staging.slice_reducers) {
+      final owned_key = pending_slice_keys[reducer.key.id];
+
+      if (owned_key == null || owned_key.slice_type != reducer.key.slice_type) {
+        throw StateError(
+          'Workflow module $module_id does not own '
+          'reducer slice ${reducer.key.id}.',
+        );
+      }
+
+      final pair = (reducer.key.id, reducer.event_type);
+
+      if (!pending_reducer_pairs.add(pair) ||
+          _slice_reducer_pairs.contains(pair)) {
+        throw StateError('Duplicate workflow slice reducer: $pair');
+      }
+    }
+
     // Every validation has passed. Publish the staged contributions
     // together so registration failures cannot leave partial ownership.
     _transitions.addAll(staging.transitions);
@@ -231,6 +296,12 @@ final class WorkflowModuleRegistry {
     _lifecycles.addAll(pending_lifecycles);
     _slice_keys.addAll(pending_slice_keys);
     _slice_ids_by_type.addAll(pending_slice_types);
+
+    _outcome_transitions.addAll(staging.outcome_transitions);
+    _outcome_transition_pairs.addAll(pending_outcome_pairs);
+
+    _slice_reducers.addAll(staging.slice_reducers);
+    _slice_reducer_pairs.addAll(pending_reducer_pairs);
 
     _module_ids.add(module_id);
   }
@@ -280,6 +351,26 @@ final class WorkflowModuleRegistry {
   /// Subsequent registrations do not modify the returned map.
   Map<String, WorkflowSliceKey<WorkflowSlice>> get slice_keys =>
       Map.unmodifiable(_slice_keys);
+
+  /// Returns an immutable snapshot of outcome lifecycle transitions.
+  ///
+  /// Definitions are retained in registration order, but this
+  /// ordering does not determine transition precedence.
+  ///
+  /// Each definition identifies one source lifecycle and one
+  /// concrete committed outcome event type.
+  List<WorkflowOutcomeTransitionDefinition> get outcome_transitions =>
+      List.unmodifiable(_outcome_transitions);
+
+  /// Returns an immutable snapshot of registered slice reducers.
+  ///
+  /// Reducers retain their owning typed slice identities.
+  /// Multiple features may reduce different slices for the same
+  /// outcome event without introducing write conflicts.
+  ///
+  /// Subsequent registrations do not modify the returned list.
+  List<WorkflowSliceReducerDefinition> get slice_reducers =>
+      List.unmodifiable(_slice_reducers);
 
   /// Finds the command behavior registered for [command_type].
   ///
@@ -341,6 +432,19 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   /// including their concrete slice-type information.
   final List<WorkflowSliceKey<WorkflowSlice>> slice_keys = [];
 
+  /// Outcome lifecycle transitions staged by this module.
+  ///
+  /// Duplicate pairs are validated before publication.
+  /// Referenced lifecycle definitions are resolved at runtime
+  /// assembly after all modules have contributed their contracts.
+  final List<WorkflowOutcomeTransitionDefinition> outcome_transitions = [];
+
+  /// Typed domain-slice reducers staged by this module.
+  ///
+  /// Every reducer must refer to a slice key registered by
+  /// this same module. Ownership is validated before publication.
+  final List<WorkflowSliceReducerDefinition> slice_reducers = [];
+
   /// Stages [behavior] and its associated state transition.
   ///
   /// Every behavior contributes one transition definition.
@@ -401,5 +505,30 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   @override
   void add_slice<T extends WorkflowSlice>(WorkflowSliceKey<T> key) {
     slice_keys.add(key);
+  }
+
+  /// Stages an outcome-driven lifecycle transition.
+  ///
+  /// [transition] declares the source lifecycle, destination
+  /// lifecycle, and exact event type accepted by the rule.
+  ///
+  /// Duplicate pairs are checked by the enclosing registry.
+  /// Cross-module lifecycle references are resolved when the
+  /// complete workflow runtime is constructed.
+  @override
+  void add_outcome_transition(WorkflowOutcomeTransitionDefinition transition) {
+    outcome_transitions.add(transition);
+  }
+
+  /// Stages a reducer for one module-owned domain slice.
+  ///
+  /// [reducer] supplies the typed slice key and exact outcome
+  /// type responsible for invoking its pure reduction callback.
+  ///
+  /// The enclosing registry verifies slice ownership and
+  /// duplicate reducer pairs before accepting the module.
+  @override
+  void add_slice_reducer(WorkflowSliceReducerDefinition reducer) {
+    slice_reducers.add(reducer);
   }
 }

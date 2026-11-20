@@ -1,10 +1,17 @@
 import 'behaviors/workflow_behavior.dart';
+
 import 'modules/standard_workflow_modules.dart';
 import 'modules/workflow_module_registry.dart';
+
 import 'serialization/workflow_event_codec.dart';
-import 'workflow_flow.dart';
+
 import 'states/workflow_lifecycle.dart';
 import 'states/workflow_slice.dart';
+
+import 'transitions/workflow_outcome_transition.dart';
+import 'transitions/workflow_slice_reducer.dart';
+
+import 'workflow_flow.dart';
 
 /// Immutable configuration for a Rudra workflow runtime.
 ///
@@ -27,17 +34,87 @@ import 'states/workflow_slice.dart';
 /// final machine = WorkflowStateMachine(flow: runtime.flow);
 /// ```
 final class WorkflowRuntime {
-  /// Builds a runtime from an explicitly configured registry.
+  /// Builds a runtime from a completed module registry.
   ///
-  /// Registration is complete at this boundary. The runtime
-  /// validates and snapshots the transition graph and serializers.
+  /// Validates lifecycle references and reducer event ownership
+  /// after all modules have been registered. This permits
+  /// cross-module lifecycle references without imposing a
+  /// particular module registration order.
+  ///
+  /// Throws [StateError] for unknown lifecycle references,
+  /// transitions originating from terminal lifecycles, or
+  /// reducers referencing unsupported outcome events.
+  ///
+  /// The resulting runtime captures immutable copies of all
+  /// registered capabilities.
   factory WorkflowRuntime.from_registry(WorkflowModuleRegistry registry) {
+    final lifecycles = registry.lifecycles;
+    final slice_keys = registry.slice_keys;
+    final outcome_transitions = registry.outcome_transitions;
+    final slice_reducers = registry.slice_reducers;
+
+    final supported_outcomes = <Type>{};
+
+    for (final transition in outcome_transitions) {
+      final source_id = transition.source_lifecycle_id;
+      final destination_id = transition.destination_lifecycle_id;
+
+      // A source lifecycle is optional only for initial
+      // establishment. Established terminal workflows cannot
+      // transition to another lifecycle.
+      if (source_id != null) {
+        final source = lifecycles[source_id];
+
+        if (source == null) {
+          throw StateError('Unknown source workflow lifecycle: $source_id');
+        }
+
+        if (source.is_terminal) {
+          throw StateError(
+            'Terminal workflow lifecycle cannot be a '
+            'transition source: $source_id',
+          );
+        }
+      }
+
+      if (!lifecycles.containsKey(destination_id)) {
+        throw StateError(
+          'Unknown destination workflow lifecycle: $destination_id',
+        );
+      }
+
+      supported_outcomes.add(transition.event_type);
+    }
+
+    for (final reducer in slice_reducers) {
+      final registered_key = slice_keys[reducer.key.id];
+
+      if (registered_key == null ||
+          registered_key.slice_type != reducer.key.slice_type) {
+        throw StateError(
+          'Unregistered workflow reducer slice: ${reducer.key.id}',
+        );
+      }
+
+      // A reducer cannot define an independently replayable
+      // event type. Every event it handles must have a registered
+      // lifecycle transition in the same runtime.
+      if (!supported_outcomes.contains(reducer.event_type)) {
+        throw StateError(
+          'No workflow outcome transition registered for '
+          'slice reducer event: ${reducer.event_type}',
+        );
+      }
+    }
+
     return WorkflowRuntime._(
       flow: WorkflowFlow(transitions: registry.transitions),
       codec: WorkflowEventCodec.from_registry(registry),
       command_behaviors: registry.command_behaviors,
-      lifecycles: registry.lifecycles,
-      slice_keys: registry.slice_keys,
+      lifecycles: lifecycles,
+      slice_keys: slice_keys,
+      outcome_transitions: outcome_transitions,
+      slice_reducers: slice_reducers,
     );
   }
 
@@ -61,16 +138,33 @@ final class WorkflowRuntime {
     return WorkflowRuntime.from_registry(registry);
   }
 
-  /// Stores validated, immutable runtime components.
+  /// Captures validated workflow configuration as immutable collections.
+  ///
+  /// [flow] contains the existing transition graph.
+  /// [codec] serializes and restores registered event types.
+  /// [command_behaviors] contains the exact-type command handlers.
+  /// [lifecycles] and [slice_keys] define registered domain ownership.
+  /// [outcome_transitions] contains the registered lifecycle rules.
+  /// [slice_reducers] contains the feature-owned projection functions.
+  ///
+  /// Every supplied collection is defensively copied. Subsequent
+  /// registrations cannot modify an already constructed runtime.
+  ///
+  /// Configuration validation occurs in [WorkflowRuntime.from_registry]
+  /// before this constructor is called.
   WorkflowRuntime._({
     required this.flow,
     required this.codec,
     required Map<Type, WorkflowCommandBehavior<dynamic>> command_behaviors,
     required Map<String, WorkflowLifecycle> lifecycles,
     required Map<String, WorkflowSliceKey<WorkflowSlice>> slice_keys,
+    required List<WorkflowOutcomeTransitionDefinition> outcome_transitions,
+    required List<WorkflowSliceReducerDefinition> slice_reducers,
   }) : command_behaviors = Map.unmodifiable(command_behaviors),
        lifecycles = Map.unmodifiable(lifecycles),
-       slice_keys = Map.unmodifiable(slice_keys);
+       slice_keys = Map.unmodifiable(slice_keys),
+       outcome_transitions = List.unmodifiable(outcome_transitions),
+       slice_reducers = List.unmodifiable(slice_reducers);
 
   /// Immutable state-transition graph.
   final WorkflowFlow flow;
@@ -80,4 +174,22 @@ final class WorkflowRuntime {
 
   /// Command handlers indexed by their concrete Dart event types.
   final Map<Type, WorkflowCommandBehavior<dynamic>> command_behaviors;
+
+  /// Validated lifecycle transitions driven by committed outcomes.
+  ///
+  /// Each definition describes an exact source-lifecycle and
+  /// outcome-event combination. The collection is immutable.
+  ///
+  /// These rules become authoritative when the composite
+  /// workflow state machine replaces the existing state hierarchy.
+  final List<WorkflowOutcomeTransitionDefinition> outcome_transitions;
+
+  /// Registered feature-owned reducers of workflow domain slices.
+  ///
+  /// Reducers are evaluated against one common previous snapshot
+  /// when an outcome is applied. Their results are combined into
+  /// one immutable workflow state.
+  ///
+  /// The collection is immutable and retains registration order.
+  final List<WorkflowSliceReducerDefinition> slice_reducers;
 }
