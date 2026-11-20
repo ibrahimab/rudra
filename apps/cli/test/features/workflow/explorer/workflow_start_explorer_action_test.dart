@@ -99,14 +99,18 @@ ExplorerModel _explorer(String path) {
 }
 
 /// Creates a committed workflow-state fixture.
-WorkflowActiveState _active() {
-  return WorkflowActiveState(
+WorkflowSnapshot _active() {
+  return WorkflowSnapshot(
     identity: WorkflowIdentity(
       workflow_id: 'fixture-workflow',
       os_user_id: 'fixture-user',
       target_id: 'fixture-target',
       root: TargetPath('/workspace'),
     ),
-    version: 2,
+    version: 1,
+    lifecycle: WorkflowLifecycle(
+      id: 'rudra.workflow.active',
+      is_terminal: false,
+    ),
   );
 }

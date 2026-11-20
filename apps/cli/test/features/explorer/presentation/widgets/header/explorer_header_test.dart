@@ -44,14 +44,18 @@ void main() {
     });
 
     test('renders the confirmed active workflow', () {
-      final active = WorkflowActiveState(
+      final active = WorkflowSnapshot(
         identity: WorkflowIdentity(
           workflow_id: 'workflow-1',
           os_user_id: 'fixture-user',
           target_id: 'fixture-target',
           root: TargetPath('/workspace'),
         ),
-        version: 2,
+        version: 1,
+        lifecycle: WorkflowLifecycle(
+          id: 'rudra.workflow.active',
+          is_terminal: false,
+        ),
       );
 
       final header = ExplorerHeader(
@@ -65,7 +69,7 @@ void main() {
 
       expect(lines[2].text, contains('Workflow: ACTIVE'));
       expect(lines[2].text, contains('ID: workflow-1'));
-      expect(lines[2].text, contains('Version: 2'));
+      expect(lines[2].text, contains('Version: 1'));
       expect(lines[2].text, contains('Target: fixture-target'));
       expect(lines[2].role, TerminalRole.heading);
     });

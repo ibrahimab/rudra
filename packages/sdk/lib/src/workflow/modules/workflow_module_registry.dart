@@ -5,7 +5,6 @@ import '../serialization/workflow_event_serializer.dart';
 import '../states/workflow_lifecycle.dart';
 import '../states/workflow_slice.dart';
 
-import '../transitions/workflow_transition.dart';
 import '../transitions/workflow_outcome_transition.dart';
 import '../transitions/workflow_slice_reducer.dart';
 
@@ -13,16 +12,15 @@ import 'workflow_module.dart';
 
 /// Collects and validates workflow capabilities contributed by SDK modules.
 ///
-/// Each [WorkflowModule] contributes state transitions, command behaviors,
+/// Each [WorkflowModule] contributes command behaviors, outcome transitions,
 /// serializers, lifecycle definitions, and typed domain-slice identities.
 ///
 /// Module registration is staged before validation. A failed registration
 /// leaves previously accepted capabilities unchanged and does not reserve
 /// the rejected module's identifier.
 ///
-/// Identifiers and types are checked for conflicting ownership. Duplicate
-/// state/event transition pairs are additionally validated when the
-/// [WorkflowFlow] is constructed.
+/// Identifiers and types are checked for conflicting ownership.
+/// Outcome/lifecycle pairs must be unique.
 ///
 /// Public collection getters return immutable snapshots. A previously
 /// obtained collection is unaffected by subsequent registrations.
@@ -47,12 +45,6 @@ final class WorkflowModuleRegistry {
   /// A module identifier is reserved only after all its
   /// contributions have passed registration validation.
   final Set<String> _module_ids = {};
-
-  /// State transitions contributed by accepted modules.
-  ///
-  /// Transition graph construction subsequently validates
-  /// duplicate source-state and event-type combinations.
-  final List<WorkflowTransitionDefinition> _transitions = [];
 
   /// Command behaviors indexed by their exact Dart command type.
   ///
@@ -121,9 +113,8 @@ final class WorkflowModuleRegistry {
   /// Throws [StateError] for duplicate module identifiers, command
   /// handlers, lifecycle identifiers, slice identifiers or slice types,
   /// conflicting serializer identities, duplicate outcome-transition
-  /// pairs, duplicate slice-reducer pairs, reducers referencing slices
-  /// not owned by the contributing module, and invalid
-  /// command/transition associations.
+  /// pairs, duplicate slice-reducer pairs and reducers referencing slices
+  /// not owned by the contributing module.
   ///
   /// Exceptions raised by the module during registration propagate
   /// without modifying previously accepted registrations.
@@ -284,8 +275,6 @@ final class WorkflowModuleRegistry {
 
     // Every validation has passed. Publish the staged contributions
     // together so registration failures cannot leave partial ownership.
-    _transitions.addAll(staging.transitions);
-
     for (final behavior in staging.command_behaviors) {
       _command_behaviors[behavior.command_type] = behavior;
     }
@@ -305,15 +294,6 @@ final class WorkflowModuleRegistry {
 
     _module_ids.add(module_id);
   }
-
-  /// Returns an immutable snapshot of registered transition definitions.
-  ///
-  /// The definitions retain their registration order, but transition
-  /// selection is performed by the workflow flow's exact-type lookup.
-  ///
-  /// Subsequent module registrations do not modify the returned list.
-  List<WorkflowTransitionDefinition> get transitions =>
-      List.unmodifiable(_transitions);
 
   /// Returns an immutable snapshot of registered command behaviors.
   ///
@@ -400,18 +380,9 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   /// The enclosing registry owns its lifetime and validation.
   _ModuleRegistration();
 
-  /// State transitions contributed by this module.
-  ///
-  /// Transition definitions are collected from [add] calls.
-  /// Duplicate transition pairs are validated when constructing
-  /// the workflow flow.
-  final List<WorkflowTransitionDefinition> transitions = [];
-
   /// Command behaviors contributed by this module.
   ///
-  /// Only behaviors implementing [WorkflowCommandBehavior] appear
-  /// in this collection. Their exact command types are validated
-  /// for uniqueness by the enclosing registry.
+  /// Exact command type ownership is validated by the enclosing registry.
   final List<WorkflowCommandBehavior<dynamic>> command_behaviors = [];
 
   /// Event serializers awaiting identity and schema validation.
@@ -445,33 +416,13 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   /// this same module. Ownership is validated before publication.
   final List<WorkflowSliceReducerDefinition> slice_reducers = [];
 
-  /// Stages [behavior] and its associated state transition.
+  /// Stages one typed command behavior.
   ///
-  /// Every behavior contributes one transition definition.
-  /// Command-capable behaviors additionally contribute a command handler.
-  ///
-  /// Throws [StateError] when a command behavior's declared command
-  /// type differs from the event type triggering its transition.
-  ///
-  /// Duplicate command ownership is checked later by the enclosing
-  /// registry, before the registration becomes visible.
+  /// Duplicate ownership is validated by the enclosing registry
+  /// before the module's contributions become visible.
   @override
-  void add(WorkflowBehavior behavior) {
-    final transition = behavior.transition;
-
-    if (behavior is WorkflowCommandBehavior<dynamic>) {
-      if (transition.trigger_event_type != behavior.command_type) {
-        throw StateError(
-          'Command behavior and transition event types differ: '
-          '${behavior.command_type} / '
-          '${transition.trigger_event_type}',
-        );
-      }
-
-      command_behaviors.add(behavior);
-    }
-
-    transitions.add(transition);
+  void add(WorkflowCommandBehavior<dynamic> behavior) {
+    command_behaviors.add(behavior);
   }
 
   /// Stages [serializer] for the module's event serialization contract.

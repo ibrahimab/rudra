@@ -55,10 +55,13 @@ void main() {
 
     expect((restored[3] as WorkflowEndedEvent).workflow_id, 'workflow-1');
 
-    final state = WorkflowStateMachine().replay(restored);
+    final state = WorkflowStateMachine().replay([
+      restored[1] as WorkflowOutcomeEvent,
+      restored[3] as WorkflowOutcomeEvent,
+    ]);
 
-    expect(state, isA<WorkflowEndedState>());
-    expect(state.version, 4);
+    expect(state, isA<WorkflowSnapshot>());
+    expect(state!.version, 2);
     expect(state.is_terminal, isTrue);
   });
 

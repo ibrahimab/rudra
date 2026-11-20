@@ -1,122 +1,95 @@
 import '../events/workflow_event.dart';
-
-import '../states/workflow_active_state.dart';
-import '../states/workflow_ended_state.dart';
-import '../states/workflow_state.dart';
-
+import '../states/workflow_snapshot.dart';
 import '../workflow_runtime.dart';
 import '../workflow_state_machine.dart';
 import '../workflow_transition_exception.dart';
-
 import 'workflow_history_store.dart';
 
-/// Stable categories of workflow restoration failures.
+/// Stable categories of rejected workflow restoration evidence.
 ///
-/// A failed restoration must not be interpreted as the
-/// absence of an unfinished workflow.
+/// A failed restoration cannot be interpreted as an absent workflow.
 enum WorkflowStateReadErrorCode {
-  /// The returned projection belongs to another OS user.
+  /// Projected or committed identity belongs to another OS user.
   ownership_mismatch,
 
-  /// Persisted journal ordering or metadata is invalid.
+  /// Journal sequence, version or metadata is inconsistent.
   invalid_journal,
 
-  /// A committed event cannot be decoded.
+  /// A committed outcome could not be decoded correctly.
   invalid_event,
 
-  /// Committed events violate domain transition rules.
+  /// Replayed domain outcomes violate state-machine invariants.
   invalid_history,
 
-  /// Replayed state disagrees with the unfinished projection.
+  /// Unfinished ownership projection disagrees with the journal.
   projection_mismatch,
 
-  /// Active workflow history is missing its expected ownership projection.
+  /// A nonterminal history has no matching owner projection.
   orphaned_workflow,
 }
 
-/// Validated active workflow and its authoritative event history.
+/// One validated unfinished workflow and its committed outcome history.
 ///
-/// Both values originate from the same consistent persistence
-/// snapshot and have passed SDK restoration validation.
-///
-/// The event collection is immutable. Reading it does not
-/// reserve the workflow or authorize state changes.
-final class WorkflowActiveHistory {
-  /// Creates an immutable validated workflow history.
-  WorkflowActiveHistory({
+/// The snapshot and outcomes originate from consistent persistence evidence.
+/// Reading or constructing the result never authorizes a workflow mutation.
+final class WorkflowUnfinishedHistory {
+  /// Freezes an authoritative snapshot and ordered domain outcomes.
+  WorkflowUnfinishedHistory({
     required this.state,
-    required Iterable<WorkflowEvent> events,
-  }) : events = List<WorkflowEvent>.unmodifiable(events);
+    required Iterable<WorkflowOutcomeEvent> events,
+  }) : events = List<WorkflowOutcomeEvent>.unmodifiable(events) {
+    if (state.is_terminal) {
+      throw ArgumentError.value(
+        state,
+        'state',
+        'A current unfinished workflow cannot be terminal.',
+      );
+    }
+  }
 
-  /// Restored active workflow state.
-  final WorkflowActiveState state;
+  /// Last committed nonterminal workflow snapshot.
+  final WorkflowSnapshot state;
 
-  /// Committed events in workflow-version order.
-  final List<WorkflowEvent> events;
+  /// Committed domain outcomes in workflow-version order.
+  final List<WorkflowOutcomeEvent> events;
 }
 
-/// Indicates that persisted workflow state is inconsistent.
+/// Typed failure to restore authoritative workflow state.
 ///
-/// These failures are read-only diagnostics. They never
-/// initiate recovery, rollback, or automatic repair.
+/// Restoration failures are read-only and never trigger automatic repair.
 final class WorkflowStateReadException implements Exception {
-  /// Creates a typed restoration failure.
+  /// Creates an integrity failure, optionally referencing a journal event.
   const WorkflowStateReadException({
     required this.code,
     required this.message,
     this.event_index,
   });
 
-  /// Machine-readable failure category.
+  /// Machine-readable restoration error classification.
   final WorkflowStateReadErrorCode code;
 
-  /// Human-readable diagnostic without serialized payloads.
+  /// Diagnostic text without serialized payloads.
   final String message;
 
-  /// Zero-based journal position, when applicable.
+  /// Zero-based journal position if the error concerns an outcome.
   final int? event_index;
 
   @override
-  String toString() {
-    return 'WorkflowStateReadException('
-        '${code.name}, event_index: $event_index): $message';
-  }
+  String toString() =>
+      'WorkflowStateReadException(${code.name}, '
+      'event_index: $event_index): $message';
 }
 
-/// Reconstructs authoritative workflow state from persisted history.
+/// Validates owner-scoped persistence evidence using one workflow runtime.
 ///
-/// The reader retrieves a consistent history snapshot through
-/// [WorkflowHistoryStore], decodes the committed events, and
-/// replays them using [WorkflowRuntime.flow].
-///
-/// Journal metadata, ownership, version continuity, and the
-/// unfinished-workflow projection are validated before state
-/// is returned.
-///
-/// This initial implementation supports the established active
-/// lifecycle. Additional nonterminal states will be supported
-/// as their lifecycle transitions are implemented.
-///
-/// No commands, event submissions, filesystem operations,
-/// or persistence writes are performed.
-///
-/// Example:
-/// ```dart
-/// final workflow = await reader.current();
-///
-/// print(workflow?.state.identity.workflow_id);
-/// print(workflow?.events.length);
-/// ```
+/// Committed outcomes reconstruct immutable [WorkflowSnapshot] values.
+/// Corrupt, foreign, stale and orphaned histories fail closed.
+/// The reader performs no writes or command processing.
 final class WorkflowStateReader {
-  /// Creates a reader bound to one trusted OS-user identity.
+  /// Creates a reader for an authenticated OS-user identity.
   ///
-  /// The caller is responsible for providing an authenticated
-  /// OS-user identity, not a frontend-supplied identifier.
-  ///
-  /// The runtime must match the configuration used to process
-  /// and persist the workflow's events.
-  ///
-  /// Construction performs no I/O.
+  /// [runtime] must match the processor and persistence committer.
+  /// [history_store] supplies a consistent owner-scoped journal snapshot.
   WorkflowStateReader({
     required WorkflowRuntime runtime,
     required WorkflowHistoryStore history_store,
@@ -124,93 +97,67 @@ final class WorkflowStateReader {
   }) : _runtime = runtime,
        _history_store = history_store,
        _os_user_id = _require_os_user_id(os_user_id),
-       _machine = WorkflowStateMachine(flow: runtime.flow);
+       _machine = WorkflowStateMachine(runtime: runtime);
 
+  /// Runtime providing the codec and registered domain transition rules.
   final WorkflowRuntime _runtime;
+
+  /// Read-only owner-scoped history evidence boundary.
   final WorkflowHistoryStore _history_store;
+
+  /// Trusted operating-system user identifying the current owner.
   final String _os_user_id;
+
+  /// Single authoritative outcome-only replay engine.
   final WorkflowStateMachine _machine;
 
-  /// Restores the active workflow and its validated event history.
+  /// Restores a verified unfinished workflow or verified absence.
   ///
-  /// Both originate from one consistent persistence snapshot.
-  /// Committed events are decoded and replayed through the SDK
-  /// state machine before the result is returned.
-  ///
-  /// Returns null when no unfinished workflow exists.
-  ///
-  /// Invalid journals, ownership mismatches, and persistence
-  /// failures propagate without modifying stored data.
-  ///
-  /// This operation does not submit commands or mutate state.
-  Future<WorkflowActiveHistory?> current() async {
+  /// Returns null only when no incomplete workflow exists and all
+  /// discoverable owner histories have passed integrity validation.
+  /// Missing projections, invalid events and foreign ownership throw.
+  Future<WorkflowUnfinishedHistory?> current() async {
     final evidence = await _history_store.load_restoration_evidence(
       os_user_id: _os_user_id,
     );
-
     final projected = evidence.projected;
 
-    // Check other histories even when a current projection exists.
-    // Otherwise a duplicated active workflow could remain hidden.
-    final seen_workflows = <String>{
+    // Check every owner-indexed journal, including when no projection exists.
+    // Otherwise a deleted projection could silently hide active ownership.
+    final seen_ids = <String>{
       if (projected != null) projected.projected_identity.workflow_id,
     };
 
     for (final history in evidence.other_histories) {
-      if (!seen_workflows.add(history.workflow_id)) {
+      if (!seen_ids.add(history.workflow_id)) {
         throw const WorkflowStateReadException(
           code: WorkflowStateReadErrorCode.invalid_journal,
           message: 'Duplicate workflow history in restoration evidence.',
         );
       }
-
       final state = _replay_history(history).state;
 
-      if (state is WorkflowActiveState) {
-        if (state.identity.os_user_id != _os_user_id) {
-          throw const WorkflowStateReadException(
-            code: WorkflowStateReadErrorCode.ownership_mismatch,
-            message: 'Indexed workflow owner disagrees with committed history.',
-          );
-        }
-
+      if (state.identity.os_user_id != _os_user_id) {
         throw const WorkflowStateReadException(
-          code: WorkflowStateReadErrorCode.orphaned_workflow,
-          message:
-              'An active workflow exists without its expected '
-              'OS-user ownership projection.',
+          code: WorkflowStateReadErrorCode.ownership_mismatch,
+          message: 'Owner index disagrees with committed workflow identity.',
         );
       }
-
-      if (state is WorkflowEndedState) {
-        if (state.identity.os_user_id != _os_user_id) {
-          throw const WorkflowStateReadException(
-            code: WorkflowStateReadErrorCode.ownership_mismatch,
-            message: 'Indexed workflow owner disagrees with terminal history.',
-          );
-        }
-
-        continue;
+      if (!state.is_terminal) {
+        throw const WorkflowStateReadException(
+          code: WorkflowStateReadErrorCode.orphaned_workflow,
+          message: 'Unfinished history has no ownership projection.',
+        );
       }
-
-      // The current committer never persists a standalone
-      // start-request state. Such history is inconsistent.
-      throw const WorkflowStateReadException(
-        code: WorkflowStateReadErrorCode.invalid_history,
-        message: 'Committed history contains an unestablished workflow.',
-      );
     }
 
-    if (projected == null) {
-      return null;
-    }
-
+    if (projected == null) return null;
     final identity = projected.projected_identity;
 
     if (identity.os_user_id != _os_user_id) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.ownership_mismatch,
-        message: 'Workflow projection belongs to another OS user.',
+        message: 'The current workflow projection belongs to another user.',
       );
     }
 
@@ -220,63 +167,55 @@ final class WorkflowStateReader {
         journal: projected.journal,
       ),
     );
+    final snapshot = restored.state;
 
-    final replayed = restored.state;
-
-    if (replayed is! WorkflowActiveState) {
+    if (snapshot.is_terminal) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.projection_mismatch,
-        message: 'The projected unfinished workflow is not active.',
+        message: 'A terminal history still owns an unfinished projection.',
       );
     }
 
-    final restored_identity = replayed.identity;
-
-    if (restored_identity.os_user_id != _os_user_id) {
+    if (snapshot.identity.os_user_id != _os_user_id) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.ownership_mismatch,
         message: 'Replayed workflow belongs to another OS user.',
       );
     }
 
-    if (replayed.version != projected.projected_version ||
-        restored_identity.workflow_id != identity.workflow_id ||
-        restored_identity.target_id != identity.target_id ||
-        restored_identity.root.value != identity.root.value) {
+    if (snapshot.version != projected.projected_version ||
+        snapshot.identity.workflow_id != identity.workflow_id ||
+        snapshot.identity.target_id != identity.target_id ||
+        snapshot.identity.root.value != identity.root.value) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.projection_mismatch,
-        message: 'Unfinished projection disagrees with history.',
+        message: 'Unfinished projection disagrees with committed history.',
       );
     }
 
-    return WorkflowActiveHistory(state: replayed, events: restored.events);
+    return WorkflowUnfinishedHistory(state: snapshot, events: restored.events);
   }
 
-  /// Validates and replays one complete committed journal.
+  /// Decodes and validates a single complete outcome-only journal.
   ///
-  /// This method is shared by projected and unprojected histories.
-  /// Consequently, neither path can bypass ordering, decoding,
-  /// or domain-transition validation.
-  ///
-  /// The journal is never modified.
-  ({WorkflowState state, List<WorkflowEvent> events}) _replay_history(
+  /// Both projected and owner-indexed histories take this same route.
+  /// Every event's sequence, local version and workflow ownership is checked.
+  ({WorkflowSnapshot state, List<WorkflowOutcomeEvent> events}) _replay_history(
     WorkflowHistoryJournal history,
   ) {
     if (history.workflow_id.trim().isEmpty || history.journal.isEmpty) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.invalid_journal,
-        message: 'Missing workflow identifier or committed history.',
+        message: 'Missing workflow identifier or committed outcomes.',
       );
     }
 
-    final events = <WorkflowEvent>[];
+    final outcomes = <WorkflowOutcomeEvent>[];
     final event_ids = <String>{};
-
     var previous_sequence = 0;
 
     for (var index = 0; index < history.journal.length; index++) {
       final entry = history.journal[index];
-
       if (entry.sequence <= previous_sequence ||
           entry.version != index + 1 ||
           entry.workflow_id != history.workflow_id ||
@@ -289,66 +228,64 @@ final class WorkflowStateReader {
         );
       }
 
-      final WorkflowEvent event;
-
+      final WorkflowEvent decoded;
       try {
-        event = _runtime.codec.decode(
+        decoded = _runtime.codec.decode(
           event_type: entry.event_type,
           payload_json: entry.payload_json,
         );
       } on FormatException {
         throw WorkflowStateReadException(
           code: WorkflowStateReadErrorCode.invalid_event,
-          message: 'A committed event cannot be decoded.',
+          message: 'Committed event cannot be decoded.',
           event_index: index,
         );
       }
 
-      events.add(event);
+      // Commands are inbox records, never journal events.
+      if (decoded is! WorkflowOutcomeEvent) {
+        throw WorkflowStateReadException(
+          code: WorkflowStateReadErrorCode.invalid_event,
+          message: 'A command event was found in the committed journal.',
+          event_index: index,
+        );
+      }
+
+      outcomes.add(decoded);
       previous_sequence = entry.sequence;
     }
 
-    final WorkflowState replayed;
-
+    final WorkflowSnapshot? replayed;
     try {
-      replayed = _machine.replay(events);
+      replayed = _machine.replay(outcomes);
     } on WorkflowReplayException catch (error) {
       throw WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.invalid_history,
-        message: 'Committed history violates workflow transitions.',
+        message: 'Committed history violates domain transition rules.',
         event_index: error.event_index,
       );
     }
 
-    // Journal metadata must agree with the identity established
-    // by domain events, even without an ownership projection.
-    final replayed_workflow_id = switch (replayed) {
-      WorkflowActiveState state => state.identity.workflow_id,
-      WorkflowEndedState state => state.identity.workflow_id,
-      _ => null,
-    };
-
-    if (replayed_workflow_id != null &&
-        replayed_workflow_id != history.workflow_id) {
+    if (replayed == null ||
+        replayed.identity.workflow_id != history.workflow_id ||
+        replayed.version != outcomes.length) {
       throw const WorkflowStateReadException(
         code: WorkflowStateReadErrorCode.invalid_history,
-        message: 'Replayed workflow identity disagrees with journal.',
+        message: 'Replayed snapshot disagrees with committed journal.',
       );
     }
 
-    return (state: replayed, events: List<WorkflowEvent>.unmodifiable(events));
+    return (
+      state: replayed,
+      events: List<WorkflowOutcomeEvent>.unmodifiable(outcomes),
+    );
   }
 
-  /// Validates a trusted OS-user identifier without normalizing it.
-  static String _require_os_user_id(String value) {
-    if (value.trim().isEmpty) {
-      throw ArgumentError.value(
-        value,
-        'os_user_id',
-        'OS-user identity must not be blank.',
-      );
+  /// Validates a trusted owner without normalizing the original ID.
+  static String _require_os_user_id(String id) {
+    if (id.trim().isEmpty) {
+      throw ArgumentError.value(id, 'os_user_id');
     }
-
-    return value;
+    return id;
   }
 }

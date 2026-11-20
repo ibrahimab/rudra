@@ -107,11 +107,6 @@ void main() {
       root: TargetPath('/workspace'),
     );
 
-    final start = WorkflowStartEvent(
-      target_id: identity.target_id,
-      root: identity.root,
-    );
-
     final started = WorkflowStartedEvent(identity: identity);
 
     // Establish a valid journal and its ownership projection.
@@ -121,26 +116,12 @@ void main() {
           .into(database.workflowEvents)
           .insert(
             WorkflowEventsCompanion.insert(
-              event_id: 'committed-start',
-              workflow_id: identity.workflow_id,
-              version: 1,
-              correlation_id: 'original-correlation',
-              event_type: start.event_type,
-              payload_json: runtime.codec.encode(start),
-              recorded_at_unix_ms: 1,
-            ),
-          );
-
-      await database
-          .into(database.workflowEvents)
-          .insert(
-            WorkflowEventsCompanion.insert(
               event_id: 'committed-started',
               workflow_id: identity.workflow_id,
               os_user_id: const Value(os_user_id),
-              version: 2,
+              version: 1,
               correlation_id: 'original-correlation',
-              causation_id: const Value('committed-start'),
+              causation_id: const Value('accepted-command'),
               event_type: started.event_type,
               payload_json: runtime.codec.encode(started),
               recorded_at_unix_ms: 2,
@@ -155,7 +136,7 @@ void main() {
               workflow_id: identity.workflow_id,
               target_id: identity.target_id,
               root_path: identity.root.value,
-              version: 2,
+              version: 1,
             ),
           );
     });
@@ -178,23 +159,23 @@ void main() {
     expect(pending!.receipt.event_id, receipt.event_id);
     expect(pending.command, isA<WorkflowStopEvent>());
 
-    expect(pending.committed_events, hasLength(2));
-    expect(pending.committed_events[0], isA<WorkflowStartEvent>());
-    expect(pending.committed_events[1], isA<WorkflowStartedEvent>());
+    expect(pending.committed_events, hasLength(1));
+    expect(pending.committed_events[0], isA<WorkflowStartedEvent>());
+    expect(pending.committed_events.single, isA<WorkflowStartedEvent>());
 
-    final restored = WorkflowStateMachine(flow: runtime.flow)
+    final restored = WorkflowStateMachine(runtime: runtime)
         .replay(pending.committed_events);
 
-    expect(restored, isA<WorkflowActiveState>());
-    expect(restored.version, 2);
+    expect(restored, isA<WorkflowSnapshot>());
+    expect(restored!.version, 1);
 
-    final active = restored as WorkflowActiveState;
+    final active = restored as WorkflowSnapshot;
 
     expect(active.identity.workflow_id, identity.workflow_id);
     expect(active.identity.os_user_id, os_user_id);
 
     // Inbox reads must not process or mutate a stop request.
-    expect(await database.select(database.workflowEvents).get(), hasLength(2));
+    expect(await database.select(database.workflowEvents).get(), hasLength(1));
 
     expect(
       await database.select(database.unfinishedWorkflows).get(),

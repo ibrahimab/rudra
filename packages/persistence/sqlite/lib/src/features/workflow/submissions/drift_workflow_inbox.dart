@@ -130,21 +130,11 @@ final class DriftWorkflowInbox implements WorkflowInbox {
       );
     }
 
-    // Only stop commands need an established workflow history.
-    //
-    // The reader selects by trusted OS-user ownership, never by
-    // the workflow identifier supplied in the command.
-    //
-    // The committer must revalidate this snapshot transactionally
-    // because another processor may commit after this read.
-    final List<WorkflowEvent> committed_events;
-
-    if (event is WorkflowStopEvent) {
-      final active = await _state_reader.current();
-      committed_events = active?.events ?? const <WorkflowEvent>[];
-    } else {
-      committed_events = const <WorkflowEvent>[];
-    }
+    // Load verified authoritative history for every command type.
+    // Both Start and Stop must see currently reserved ownership.
+    // The committer repeats all relevant checks transactionally.
+    final current = await _state_reader.current();
+    final committed_events = current?.events ?? const <WorkflowOutcomeEvent>[];
 
     return PendingWorkflowCommand(
       receipt: receipt,

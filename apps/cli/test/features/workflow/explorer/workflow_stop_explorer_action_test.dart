@@ -118,15 +118,19 @@ void main() {
 /// Creates a committed active workflow with the requested identifier.
 ///
 /// [workflow_id] is the exact identity supplied to the Stop action.
-WorkflowActiveState _active(String workflow_id) {
-  return WorkflowActiveState(
+WorkflowSnapshot _active(String workflow_id) {
+  return WorkflowSnapshot(
     identity: WorkflowIdentity(
       workflow_id: workflow_id,
       os_user_id: 'fixture-user',
       target_id: 'fixture-target',
       root: TargetPath('/workspace'),
     ),
-    version: 2,
+    version: 1,
+    lifecycle: WorkflowLifecycle(
+      id: 'rudra.workflow.active',
+      is_terminal: false,
+    ),
   );
 }
 

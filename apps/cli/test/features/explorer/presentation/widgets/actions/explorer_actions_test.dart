@@ -37,14 +37,18 @@ void main() {
     });
 
     test('offers Stop when a workflow is loaded', () {
-      final active = WorkflowActiveState(
+      final active = WorkflowSnapshot(
         identity: WorkflowIdentity(
           workflow_id: 'workflow-1',
           os_user_id: 'fixture-user',
           target_id: 'fixture-target',
           root: TargetPath('/workspace'),
         ),
-        version: 2,
+        version: 1,
+        lifecycle: WorkflowLifecycle(
+          id: 'rudra.workflow.active',
+          is_terminal: false,
+        ),
       );
 
       final actions = _actions(

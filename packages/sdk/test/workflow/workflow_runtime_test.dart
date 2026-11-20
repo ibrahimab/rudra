@@ -1,41 +1,33 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-/// Verifies immutable configuration of workflow capabilities.
-///
-/// A WorkflowRuntime is the application-level snapshot of
-/// module registrations. Consumers share its flow, codec,
-/// and command behaviors without rebuilding them independently.
+/// Tests the immutable, single-engine workflow runtime configuration.
 void main() {
-  test('builds consistent standard workflow capabilities', () {
+  test('registers exact command handlers and committed outcome rules', () {
     final runtime = WorkflowRuntime.standard();
-
-    // The state machine recognizes both events involved
-    // in successful workflow establishment.
-    expect(runtime.flow.supports_event_type(WorkflowStartEvent), isTrue);
-
-    expect(runtime.flow.supports_event_type(WorkflowStartedEvent), isTrue);
-
-    // The same configuration supplies the command handler.
     expect(runtime.command_behaviors[WorkflowStartEvent], isNotNull);
+    expect(runtime.command_behaviors[WorkflowStopEvent], isNotNull);
+    expect(runtime.outcome_transitions, hasLength(2));
+    expect(runtime.outcome_transitions.map((rule) => rule.event_type).toSet(), {
+      WorkflowStartedEvent,
+      WorkflowEndedEvent,
+    });
+    expect(runtime.lifecycles['rudra.workflow.active']!.is_terminal, isFalse);
+    expect(runtime.lifecycles['rudra.workflow.ended']!.is_terminal, isTrue);
+  });
 
-    // The codec understands the command registered by
-    // the lifecycle module.
-    final request = WorkflowStartEvent(
+  test('serializes durable commands through the shared runtime codec', () {
+    final runtime = WorkflowRuntime.standard();
+    final command = WorkflowStartEvent(
       target_id: 'local-macos',
       root: TargetPath('/workspace'),
     );
-
-    final payload = runtime.codec.encode(request);
-
     final decoded = runtime.codec.decode(
-      event_type: request.event_type,
-      payload_json: payload,
+      event_type: command.event_type,
+      payload_json: runtime.codec.encode(command),
     );
-
     expect(decoded, isA<WorkflowStartEvent>());
-
-    // Callers cannot mutate the runtime handler mapping.
     expect(() => runtime.command_behaviors.clear(), throwsUnsupportedError);
+    expect(() => runtime.outcome_transitions.clear(), throwsUnsupportedError);
   });
 }

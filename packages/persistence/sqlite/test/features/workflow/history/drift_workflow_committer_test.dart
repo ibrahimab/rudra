@@ -105,74 +105,54 @@ void main() {
     );
   }
 
-  test('atomically establishes a workflow', () async {
-    final receipt = await submit('/workspace');
+  test(
+    'atomically establishes a workflow using one committed outcome',
+    () async {
+      final receipt = await submit('/workspace');
+      final result = await processor('workflow-1').process_next();
+      expect(result, isA<WorkflowProcessingCommitted>());
+      final plan = (result as WorkflowProcessingCommitted).plan;
+      expect(plan.previous_state, isNull);
+      expect(plan.resulting_state.version, 1);
+      expect(plan.resulting_state.lifecycle.id, 'rudra.workflow.active');
+      expect(plan.events_to_append, hasLength(1));
+      expect(plan.events_to_append.single, isA<WorkflowStartedEvent>());
 
-    final result = await processor('workflow-1').process_next();
+      final submissions = await database
+          .select(database.workflowSubmissions)
+          .get();
+      final history = await database.select(database.workflowEvents).get();
+      final unfinished = await database
+          .select(database.unfinishedWorkflows)
+          .get();
 
-    expect(result, isA<WorkflowProcessingCommitted>());
+      expect(submissions, hasLength(1));
+      expect(submissions.single.processing_state, 'completed');
+      expect(history, hasLength(1));
+      expect(history.single.version, 1);
+      expect(history.single.os_user_id, os_user_id);
+      expect(history.single.event_type, WorkflowStartedEvent.type_id);
+      expect(history.single.event_id, isNot(receipt.event_id));
+      expect(history.single.correlation_id, receipt.correlation_id);
+      expect(history.single.causation_id, receipt.event_id);
 
-    final plan = (result as WorkflowProcessingCommitted).plan;
+      expect(unfinished, hasLength(1));
+      expect(unfinished.single.workflow_id, 'workflow-1');
+      expect(unfinished.single.version, 1);
 
-    expect(plan.resulting_state, isA<WorkflowActiveState>());
+      final restored = WorkflowStateMachine(runtime: runtime).replay([
+        codec.decode(
+          event_type: history.single.event_type,
+          payload_json: history.single.payload_json,
+        ) as WorkflowOutcomeEvent,
+      ]);
+      expect(restored!.version, 1);
+      expect(restored.is_terminal, isFalse);
+    },
+  );
 
-    final submissions = await database
-        .select(database.workflowSubmissions)
-        .get();
-
-    final history = await database.select(database.workflowEvents).get();
-
-    final unfinished = await database
-        .select(database.unfinishedWorkflows)
-        .get();
-
-    expect(submissions, hasLength(1));
-    expect(submissions.single.processing_state, 'completed');
-
-    expect(history, hasLength(2));
-
-    // Query results are sorted by workflow version for replay.
-    history.sort((first, second) => first.version.compareTo(second.version));
-
-    expect(history[0].os_user_id, isNull);
-    expect(history[1].os_user_id, os_user_id);
-
-    expect(history[0].version, 1);
-    expect(history[1].version, 2);
-
-    expect(history[0].event_id, receipt.event_id);
-    expect(history[0].event_type, WorkflowStartEvent.type_id);
-    expect(history[1].event_type, WorkflowStartedEvent.type_id);
-    expect(history[1].causation_id, receipt.event_id);
-
-    expect(
-      history.every((event) => event.correlation_id == receipt.correlation_id),
-      isTrue,
-    );
-
-    expect(unfinished, hasLength(1));
-    expect(unfinished.single.os_user_id, os_user_id);
-    expect(unfinished.single.workflow_id, 'workflow-1');
-    expect(unfinished.single.root_path, '/workspace');
-    expect(unfinished.single.version, 2);
-
-    // Replay the actual persisted event representations.
-    final events = history.map(
-      (event) => codec.decode(
-        event_type: event.event_type,
-        payload_json: event.payload_json,
-      ),
-    );
-
-    final restored = WorkflowStateMachine(flow: runtime.flow).replay(events);
-
-    expect(restored, isA<WorkflowActiveState>());
-    expect(restored.version, 2);
-  });
-
-  test('atomically ends a workflow and releases ownership', () async {
+  test('atomically ends a workflow with one terminal outcome', () async {
     final start_receipt = await submit('/workspace');
-
     expect(
       await processor('workflow-1').process_next(),
       isA<WorkflowProcessingCommitted>(),
@@ -181,84 +161,50 @@ void main() {
     final stop_receipt = await manager.trigger(
       WorkflowStopEvent(workflow_id: 'workflow-1'),
     );
-
     final result = await processor('unused').process_next();
-
     expect(result, isA<WorkflowProcessingCommitted>());
-
     final plan = (result as WorkflowProcessingCommitted).plan;
-
-    expect(plan.previous_state, isA<WorkflowActiveState>());
-    expect(plan.previous_state.version, 2);
-    expect(plan.resulting_state, isA<WorkflowEndedState>());
-    expect(plan.resulting_state.version, 4);
+    expect(plan.previous_state!.version, 1);
+    expect(plan.resulting_state.version, 2);
+    expect(plan.resulting_state.is_terminal, isTrue);
+    expect(plan.events_to_append, hasLength(1));
+    expect(plan.events_to_append.single, isA<WorkflowEndedEvent>());
 
     final history = await database.select(database.workflowEvents).get()
       ..sort((a, b) => a.version.compareTo(b.version));
-
-    expect(history, hasLength(4));
-
-    expect(history.map((event) => event.version), orderedEquals([1, 2, 3, 4]));
-
+    expect(history, hasLength(2));
+    expect(history.map((event) => event.version), orderedEquals([1, 2]));
     expect(
       history.map((event) => event.event_type),
-      orderedEquals([
-        WorkflowStartEvent.type_id,
-        WorkflowStartedEvent.type_id,
-        WorkflowStopEvent.type_id,
-        WorkflowEndedEvent.type_id,
-      ]),
+      orderedEquals([WorkflowStartedEvent.type_id, WorkflowEndedEvent.type_id]),
     );
+    expect(history[0].os_user_id, os_user_id);
+    expect(history[1].os_user_id, isNull);
+    expect(history[0].causation_id, start_receipt.event_id);
+    expect(history[1].causation_id, stop_receipt.event_id);
+    expect(history[1].correlation_id, stop_receipt.correlation_id);
 
-    // Both original events retain their identities.
-    expect(history[0].event_id, start_receipt.event_id);
-    expect(history[1].causation_id, start_receipt.event_id);
+    final replayed = WorkflowStateMachine(runtime: runtime).replay([
+      for (final row in history)
+        codec.decode(event_type: row.event_type, payload_json: row.payload_json)
+            as WorkflowOutcomeEvent,
+    ]);
+    expect(replayed!.is_terminal, isTrue);
+    expect(replayed!.version, 2);
 
-    // The accepted stop command becomes journal version 3.
-    expect(history[2].event_id, stop_receipt.event_id);
-    expect(history[2].correlation_id, stop_receipt.correlation_id);
-
-    // The terminal outcome is caused by the accepted stop.
-    expect(history[3].causation_id, stop_receipt.event_id);
-    expect(history[3].correlation_id, stop_receipt.correlation_id);
-
-    // Only the Started outcome carries the indexed owner.
-    expect(history[0].os_user_id, isNull);
-    expect(history[1].os_user_id, os_user_id);
-    expect(history[2].os_user_id, isNull);
-    expect(history[3].os_user_id, isNull);
-
-    final replayed = WorkflowStateMachine(flow: runtime.flow).replay(
-      history.map(
-        (event) => codec.decode(
-          event_type: event.event_type,
-          payload_json: event.payload_json,
-        ),
-      ),
-    );
-
-    expect(replayed, isA<WorkflowEndedState>());
-    expect(replayed.version, 4);
-
-    // Terminal commitment releases the unfinished projection.
     expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
-
-    final state = await WorkflowStateReader(
+    final current = await WorkflowStateReader(
       runtime: runtime,
       history_store: DriftWorkflowHistoryStore(database: database),
       os_user_id: os_user_id,
     ).current();
-
-    expect(state, isNull);
+    expect(current, isNull);
 
     final status = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
     ).status_for(stop_receipt);
-
-    expect(status, isNotNull);
     expect(status!.state, WorkflowSubmissionState.completed);
-
     expect(await inbox.next_pending(), isNull);
   });
 
@@ -278,19 +224,14 @@ void main() {
 
     expect(pending, isNotNull);
 
-    final machine = WorkflowStateMachine(flow: runtime.flow);
-    final command = pending!.command;
+    final machine = WorkflowStateMachine(runtime: runtime);
     final outcome = WorkflowEndedEvent(workflow_id: 'workflow-1');
 
     final plan = WorkflowProcessingPlan(
-      submission: pending,
+      submission: pending!,
       previous_state: machine.replay(pending.committed_events),
-      resulting_state: machine.replay([
-        ...pending.committed_events,
-        command,
-        outcome,
-      ]),
-      events_to_append: [command, outcome],
+      resulting_state: machine.replay([...pending.committed_events, outcome])!,
+      events_to_append: [outcome],
     );
 
     // Retain all historical serializers but deliberately omit
@@ -317,8 +258,8 @@ void main() {
     // The original active history is unchanged.
     final history = await database.select(database.workflowEvents).get();
 
-    expect(history, hasLength(2));
-    expect(history.map((event) => event.version), orderedEquals([1, 2]));
+    expect(history, hasLength(1));
+    expect(history.map((event) => event.version), orderedEquals([1]));
 
     // Ownership is still reserved.
     final unfinished = await database
@@ -327,7 +268,7 @@ void main() {
 
     expect(unfinished, hasLength(1));
     expect(unfinished.single.workflow_id, 'workflow-1');
-    expect(unfinished.single.version, 2);
+    expect(unfinished.single.version, 1);
 
     // A failed stop cannot be reported as completed.
     final status = await DriftWorkflowStatusReader(
@@ -384,9 +325,9 @@ void main() {
     final stale_plan = WorkflowProcessingPlan(
       submission: pending,
       previous_state: snapshot.state,
-      resulting_state: WorkflowStateMachine(flow: runtime.flow)
-          .replay([...snapshot.events, command, outcome]),
-      events_to_append: [command, outcome],
+      resulting_state: WorkflowStateMachine(runtime: runtime)
+          .replay([...snapshot.events, outcome])!,
+      events_to_append: [outcome],
     );
 
     // First processor commits the terminal transition.
@@ -441,7 +382,7 @@ void main() {
     expect(after!.state, WorkflowSubmissionState.rejected);
     expect(after.rejection_code, WorkflowRejectionCode.workflow_not_active);
 
-    expect(await database.select(database.workflowEvents).get(), hasLength(4));
+    expect(await database.select(database.workflowEvents).get(), hasLength(2));
     expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
     expect(await inbox.next_pending(), isNull);
   });
@@ -466,7 +407,7 @@ void main() {
       ),
     );
 
-    expect(await database.select(database.workflowEvents).get(), hasLength(2));
+    expect(await database.select(database.workflowEvents).get(), hasLength(1));
 
     expect(
       await database.select(database.unfinishedWorkflows).get(),
@@ -579,8 +520,8 @@ void main() {
 
     expect(restored, isNotNull);
     expect(restored!.state.identity.workflow_id, 'workflow-1');
-    expect(restored.state.version, 2);
-    expect(restored.events, hasLength(2));
+    expect(restored.state.version, 1);
+    expect(restored.events, hasLength(1));
 
     expect(await inbox.next_pending(), isNull);
   });
@@ -622,7 +563,7 @@ void main() {
     expect(second_status.rejected_at_unix_ms, isNotNull);
 
     // Only the first workflow has authoritative history.
-    expect(await database.select(database.workflowEvents).get(), hasLength(2));
+    expect(await database.select(database.workflowEvents).get(), hasLength(1));
 
     final reservations = await database
         .select(database.unfinishedWorkflows)
@@ -729,7 +670,7 @@ void main() {
     expect(stored.rejection_code, isNull);
 
     // The original successful journal must remain intact.
-    expect(await database.select(database.workflowEvents).get(), hasLength(2));
+    expect(await database.select(database.workflowEvents).get(), hasLength(1));
   });
 
   test('recovers committed workflow state after restart', () async {
@@ -751,14 +692,14 @@ void main() {
         (event) => codec.decode(
           event_type: event.event_type,
           payload_json: event.payload_json,
-        ),
+        ) as WorkflowOutcomeEvent,
       ),
     );
 
-    expect(restored, isA<WorkflowActiveState>());
-    expect(restored.version, 2);
+    expect(restored, isA<WorkflowSnapshot>());
+    expect(restored!.version, 1);
 
-    final active = restored as WorkflowActiveState;
+    final active = restored as WorkflowSnapshot;
 
     expect(active.identity.workflow_id, 'workflow-1');
     expect(active.identity.os_user_id, os_user_id);
@@ -796,9 +737,9 @@ void main() {
 
     final plan = WorkflowProcessingPlan(
       submission: pending,
-      previous_state: const WorkflowInitialState(),
-      resulting_state: WorkflowStateMachine().replay([command, outcome]),
-      events_to_append: [command, outcome],
+      previous_state: null,
+      resulting_state: WorkflowStateMachine().replay([outcome])!,
+      events_to_append: [outcome],
     );
 
     // Intentionally configure a codec that can serialize
@@ -867,7 +808,7 @@ void main() {
       // No second workflow was committed.
       final history = await database.select(database.workflowEvents).get();
 
-      expect(history, hasLength(2));
+      expect(history, hasLength(1));
       expect(history.map((event) => event.workflow_id).toSet(), {'workflow-1'});
 
       // The failed commit must not recreate a projection.
@@ -931,25 +872,20 @@ void main() {
 
     final history = await database.select(database.workflowEvents).get();
 
-    expect(history, hasLength(6));
+    expect(history, hasLength(3));
 
     expect(
       history
           .where((event) => event.workflow_id == 'workflow-1')
           .map((event) => event.event_type),
-      orderedEquals([
-        WorkflowStartEvent.type_id,
-        WorkflowStartedEvent.type_id,
-        WorkflowStopEvent.type_id,
-        WorkflowEndedEvent.type_id,
-      ]),
+      orderedEquals([WorkflowStartedEvent.type_id, WorkflowEndedEvent.type_id]),
     );
 
     expect(
       history
           .where((event) => event.workflow_id == 'workflow-2')
           .map((event) => event.event_type),
-      orderedEquals([WorkflowStartEvent.type_id, WorkflowStartedEvent.type_id]),
+      orderedEquals([WorkflowStartedEvent.type_id]),
     );
 
     final reservations = await database
@@ -981,10 +917,10 @@ void main() {
 
     final plan = WorkflowProcessingPlan(
       submission: pending,
-      previous_state: const WorkflowInitialState(),
-      resulting_state: WorkflowStateMachine(flow: runtime.flow)
-          .replay([command, outcome]),
-      events_to_append: [command, outcome],
+      previous_state: null,
+      resulting_state: WorkflowStateMachine(runtime: runtime)
+          .replay([outcome])!,
+      events_to_append: [outcome],
     );
 
     await expectLater(

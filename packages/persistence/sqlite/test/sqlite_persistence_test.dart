@@ -97,7 +97,7 @@ void main() {
 
         expect(current_workflow, isNotNull);
 
-        expect(current_workflow!.state.version, 2);
+        expect(current_workflow!.state.version, 1);
         expect(
           current_workflow.state.identity.workflow_id,
           'frontend-workflow-1',
@@ -150,7 +150,7 @@ void main() {
 
         expect(restored_workflow, isNotNull);
 
-        expect(restored_workflow!.state.version, 2);
+        expect(restored_workflow!.state.version, 1);
         expect(
           restored_workflow.state.identity.workflow_id,
           'frontend-workflow-1',

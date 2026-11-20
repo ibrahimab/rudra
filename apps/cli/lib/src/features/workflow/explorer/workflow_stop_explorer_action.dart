@@ -1,4 +1,4 @@
-import 'package:rudra_sdk/rudra_sdk.dart' show WorkflowActiveState;
+import 'package:rudra_sdk/rudra_sdk.dart' show WorkflowSnapshot;
 
 import '../../explorer/application/explorer_action_registry.dart';
 import '../../explorer/application/explorer_model.dart';
@@ -42,12 +42,12 @@ final class WorkflowStopExplorerAction implements ExplorerAction {
 
   /// Supplies the workflow currently displayed by Explorer.
   ///
-  /// Returns the current [WorkflowActiveState] or null when
+  /// Returns the current [WorkflowSnapshot] or null when
   /// no workflow is represented by the view.
   ///
   /// The returned workflow identity is used as the expected
   /// identifier for the termination request.
-  final WorkflowActiveState? Function() displayed_workflow;
+  final WorkflowSnapshot? Function() displayed_workflow;
 
   /// Application operation used to terminate a workflow.
   ///

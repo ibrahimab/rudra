@@ -1,7 +1,6 @@
 import '../behaviors/workflow_behavior.dart';
 import '../behaviors/workflow_command_validation_exception.dart';
 
-import '../events/workflow_event.dart';
 import '../events/workflow_stop_event.dart';
 
 import '../states/workflow_snapshot.dart';
@@ -203,31 +202,17 @@ final class WorkflowProcessor {
     }
 
     // The behavior proposes domain outcomes but cannot commit them.
-    final proposed_events = behavior.propose_outcomes(
+    // The typed behavior contract prevents commands and non-outcomes
+    // from entering authoritative domain replay.
+    final outcomes = behavior.propose_outcomes(
       pending.command,
       identity: identity,
     );
 
-    if (proposed_events.isEmpty) {
+    if (outcomes.isEmpty) {
       throw StateError(
         'A workflow command must propose at least one domain outcome.',
       );
-    }
-
-    // Validate the outcome-only journal contract before replay.
-    // A command handler cannot append submitted command events
-    // or arbitrary non-outcome event implementations.
-    final outcomes = <WorkflowOutcomeEvent>[];
-
-    for (final proposed in proposed_events) {
-      if (proposed is! WorkflowOutcomeEvent) {
-        throw StateError(
-          'A workflow command behavior produced a '
-          'non-outcome event: ${proposed.runtimeType}.',
-        );
-      }
-
-      outcomes.add(proposed);
     }
 
     // Every outcome is validated against the immutable result

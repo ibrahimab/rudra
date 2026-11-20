@@ -168,31 +168,28 @@ void main() {
       )).projected;
 
       expect(snapshot, isNotNull);
-      expect(snapshot!.projected_version, 2);
-      expect(snapshot.journal, hasLength(2));
+      expect(snapshot!.projected_version, 1);
+      expect(snapshot.journal, hasLength(1));
 
       expect(
         snapshot.journal.map((entry) => entry.version),
-        orderedEquals([1, 2]),
+        orderedEquals([1]),
       );
 
       expect(
         snapshot.journal.map((entry) => entry.event_type),
-        orderedEquals([
-          WorkflowStartEvent.type_id,
-          WorkflowStartedEvent.type_id,
-        ]),
+        orderedEquals([WorkflowStartedEvent.type_id]),
       );
 
       final restored = await state_reader().current();
 
       expect(restored, isNotNull);
-      expect(restored!.state.version, 2);
+      expect(restored!.state.version, 1);
       expect(restored.state.identity.workflow_id, workflow_id);
       expect(restored.state.identity.os_user_id, os_user_id);
       expect(restored.state.identity.target_id, 'local-macos');
       expect(restored.state.identity.root.value, '/workspace');
-      expect(restored.events, hasLength(2));
+      expect(restored.events, hasLength(1));
     });
 
     test('does not expose another OS user workflow', () async {
@@ -219,12 +216,12 @@ void main() {
 
       final restored = await state_reader().current();
 
-      expect(restored, isA<WorkflowActiveHistory>());
-      expect(restored!.state, isA<WorkflowActiveState>());
-      expect(restored.state.version, 2);
+      expect(restored, isA<WorkflowUnfinishedHistory>());
+      expect(restored!.state, isA<WorkflowSnapshot>());
+      expect(restored.state.version, 1);
       expect(restored.state.identity.workflow_id, workflow_id);
       expect(restored.state.identity.root.value, '/workspace');
-      expect(restored.events, hasLength(2));
+      expect(restored.events, hasLength(1));
 
       final submissions = await database
           .select(database.workflowSubmissions)
@@ -272,7 +269,7 @@ void main() {
 
       await database
           .update(database.unfinishedWorkflows)
-          .write(const UnfinishedWorkflowsCompanion(version: Value(1)));
+          .write(const UnfinishedWorkflowsCompanion(version: Value(2)));
 
       await expect_restoration_failure(
         WorkflowStateReadErrorCode.projection_mismatch,
@@ -325,7 +322,7 @@ void main() {
       await establish_workflow();
 
       await (database.update(database.workflowEvents)
-            ..where((row) => row.version.equals(2)))
+            ..where((row) => row.version.equals(1)))
           .write(const WorkflowEventsCompanion(version: Value(3)));
 
       await expect_restoration_failure(
@@ -338,7 +335,7 @@ void main() {
 
       await (database.update(
         database.workflowEvents,
-      )..where((row) => row.version.equals(2))).write(
+      )..where((row) => row.version.equals(1))).write(
         const WorkflowEventsCompanion(payload_json: Value('invalid-json')),
       );
 
@@ -361,7 +358,7 @@ void main() {
 
       await (database.update(
         database.workflowEvents,
-      )..where((row) => row.version.equals(2))).write(
+      )..where((row) => row.version.equals(1))).write(
         WorkflowEventsCompanion(
           payload_json: Value(runtime.codec.encode(foreign_event)),
         ),
@@ -404,7 +401,7 @@ void main() {
 
       expect(
         await database.select(database.workflowEvents).get(),
-        hasLength(2),
+        hasLength(1),
       );
     });
 
@@ -452,8 +449,7 @@ void main() {
       // Simulate a future valid terminal commitment.
       // Production terminal processing is not implemented yet.
       await database.transaction(() async {
-        final events = <WorkflowEvent>[
-          WorkflowStopEvent(workflow_id: workflow_id),
+        final events = <WorkflowOutcomeEvent>[
           WorkflowEndedEvent(workflow_id: workflow_id),
         ];
 
@@ -464,7 +460,7 @@ void main() {
                 WorkflowEventsCompanion.insert(
                   event_id: 'terminal-event-${index + 1}',
                   workflow_id: workflow_id,
-                  version: index + 3,
+                  version: index + 2,
                   correlation_id: correlation_id,
                   event_type: event.event_type,
                   payload_json: runtime.codec.encode(event),
@@ -482,7 +478,7 @@ void main() {
 
       final journal = await database.select(database.workflowEvents).get();
 
-      expect(journal, hasLength(4));
+      expect(journal, hasLength(2));
     });
 
     test('does not replay unrelated malformed user history', () async {
@@ -490,33 +486,8 @@ void main() {
 
       const foreign_workflow_id = 'foreign-workflow';
 
-      final foreign_identity = WorkflowIdentity(
-        workflow_id: foreign_workflow_id,
-        os_user_id: 'foreign-os-user',
-        target_id: 'local-macos',
-        root: TargetPath('/foreign-root'),
-      );
-
-      // This first event is deliberately malformed.
-      //
-      // Its metadata is valid, but its payload cannot be
-      // decoded by the SDK.
-      await database
-          .into(database.workflowEvents)
-          .insert(
-            WorkflowEventsCompanion.insert(
-              event_id: 'foreign-start-event',
-              workflow_id: foreign_workflow_id,
-              version: 1,
-              correlation_id: 'foreign-correlation',
-              event_type: WorkflowStartEvent.type_id,
-              payload_json: 'invalid-json',
-              recorded_at_unix_ms: 1,
-            ),
-          );
-
-      // The authoritative ownership outcome remains valid.
-      // SQLite automatically indexes this user's identity.
+      // A malformed owner-indexed establishment outcome must not affect
+      // unrelated users, but the indexed owner must fail closed.
       await database
           .into(database.workflowEvents)
           .insert(
@@ -524,13 +495,11 @@ void main() {
               event_id: 'foreign-started-event',
               workflow_id: foreign_workflow_id,
               os_user_id: const Value('foreign-os-user'),
-              version: 2,
+              version: 1,
               correlation_id: 'foreign-correlation',
               event_type: WorkflowStartedEvent.type_id,
-              payload_json: runtime.codec.encode(
-                WorkflowStartedEvent(identity: foreign_identity),
-              ),
-              recorded_at_unix_ms: 2,
+              payload_json: 'invalid-json',
+              recorded_at_unix_ms: 1,
             ),
           );
 
@@ -579,7 +548,7 @@ void main() {
 
       await (database.update(
         database.workflowEvents,
-      )..where((row) => row.version.equals(2))).write(
+      )..where((row) => row.version.equals(1))).write(
         const WorkflowEventsCompanion(payload_json: Value('invalid-json')),
       );
 
@@ -606,7 +575,7 @@ void main() {
 
       await (database.update(
         database.workflowEvents,
-      )..where((row) => row.version.equals(2))).write(
+      )..where((row) => row.version.equals(1))).write(
         WorkflowEventsCompanion(
           payload_json: Value(runtime.codec.encode(altered_event)),
         ),

@@ -17,7 +17,6 @@ export 'events/workflow_start_event.dart';
 export 'events/workflow_started_event.dart';
 export 'events/workflow_ended_event.dart';
 export 'events/workflow_stop_event.dart';
-export 'states/workflow_stop_requested_state.dart';
 
 /// Submission contracts.
 export 'event_manager.dart';
@@ -25,22 +24,14 @@ export 'event_submission_store.dart';
 export 'event_submission_receipt.dart';
 export 'event_submission_exception.dart';
 
-/// Workflow states.
-export 'states/workflow_state.dart';
-export 'states/workflow_initial_state.dart';
-export 'states/workflow_start_requested_state.dart';
-export 'states/workflow_active_state.dart';
-export 'states/workflow_ended_state.dart';
+/// Single immutable workflow snapshot and lifecycle engine.
 
 /// Workflow state machine.
-export 'workflow_flow.dart';
-export 'workflow_flow_exception.dart';
 export 'workflow_state_machine.dart';
 export 'workflow_transition_exception.dart';
 export 'workflow_runtime.dart';
 
 /// Extension contracts and module registration.
-export 'transitions/workflow_transition.dart';
 export 'transitions/workflow_outcome_transition.dart';
 export 'transitions/workflow_slice_reducer.dart';
 

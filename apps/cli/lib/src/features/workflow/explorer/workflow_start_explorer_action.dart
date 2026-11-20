@@ -1,4 +1,4 @@
-import 'package:rudra_sdk/rudra_sdk.dart' show TargetPath, WorkflowActiveState;
+import 'package:rudra_sdk/rudra_sdk.dart' show TargetPath, WorkflowSnapshot;
 
 import '../../explorer/application/explorer_action_registry.dart';
 import '../../explorer/application/explorer_model.dart';
@@ -9,7 +9,7 @@ import '../../explorer/application/explorer_model.dart';
 /// displayed in Explorer as its requested filesystem root.
 ///
 /// Workflow creation is performed by the supplied application
-/// operation, which returns a confirmed [WorkflowActiveState].
+/// operation, which returns a confirmed [WorkflowSnapshot].
 ///
 /// Example:
 /// ```dart
@@ -32,7 +32,7 @@ final class WorkflowStartExplorerAction implements ExplorerAction {
   /// creating a workflow at the requested filesystem root.
   ///
   /// The operation must return an authoritatively committed
-  /// [WorkflowActiveState]. Submission acceptance alone is
+  /// [WorkflowSnapshot]. Submission acceptance alone is
   /// insufficient.
   ///
   /// Construction does not invoke the supplied operation.
@@ -41,11 +41,11 @@ final class WorkflowStartExplorerAction implements ExplorerAction {
   /// Application operation used to create a workflow.
   ///
   /// Receives a [TargetPath] identifying the requested root
-  /// and returns the resulting committed [WorkflowActiveState].
+  /// and returns the resulting committed [WorkflowSnapshot].
   ///
   /// Validation, persistence, and processing exceptions propagate
   /// through the returned future.
-  final Future<WorkflowActiveState> Function(TargetPath) start_workflow;
+  final Future<WorkflowSnapshot> Function(TargetPath) start_workflow;
 
   /// Stable identifier for workflow creation.
   @override

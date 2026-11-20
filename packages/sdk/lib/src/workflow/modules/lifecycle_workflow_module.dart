@@ -1,6 +1,4 @@
-import '../behaviors/workflow_ended_behavior.dart';
 import '../behaviors/workflow_start_behavior.dart';
-import '../behaviors/workflow_started_behavior.dart';
 import '../behaviors/workflow_stop_behavior.dart';
 
 import '../events/workflow_ended_event.dart';
@@ -24,10 +22,6 @@ import 'workflow_module.dart';
 ///
 /// A committed [WorkflowStartedEvent] establishes the active lifecycle.
 /// A committed [WorkflowEndedEvent] completes the active workflow.
-///
-/// The current subclass-based transition definitions remain
-/// registered until the coordinated state-machine cutover.
-/// They are not used by the new outcome-transition contracts.
 ///
 /// Runtime assembly validates lifecycle references and rejects
 /// conflicting registrations before processing begins.
@@ -68,11 +62,9 @@ final class LifecycleWorkflowModule implements WorkflowModule {
       ..add_lifecycle(
         WorkflowLifecycle(id: 'rudra.workflow.ended', is_terminal: true),
       )
-      // Existing definitions remain until the engine cutover.
+      // Commands propose outcomes but cannot change authoritative state.
       ..add(const WorkflowStartBehavior())
-      ..add(const WorkflowStartedBehavior())
       ..add(const WorkflowStopBehavior())
-      ..add(const WorkflowEndedBehavior())
       // Only committed outcomes determine domain lifecycle state.
       ..add_outcome_transition(
         WorkflowOutcomeTransition<WorkflowStartedEvent>(

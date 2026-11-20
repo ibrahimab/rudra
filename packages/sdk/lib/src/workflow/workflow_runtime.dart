@@ -11,12 +11,10 @@ import 'states/workflow_slice.dart';
 import 'transitions/workflow_outcome_transition.dart';
 import 'transitions/workflow_slice_reducer.dart';
 
-import 'workflow_flow.dart';
-
 /// Immutable configuration for a Rudra workflow runtime.
 ///
 /// Captures a consistent snapshot of registered command behaviors,
-/// state transitions, and event serializers.
+/// outcome transitions, and event serializers.
 ///
 /// The same instance should be supplied to workflow processing
 /// and persistence composition. This prevents those components
@@ -31,7 +29,7 @@ import 'workflow_flow.dart';
 /// ```dart
 /// final runtime = WorkflowRuntime.standard();
 ///
-/// final machine = WorkflowStateMachine(flow: runtime.flow);
+/// final machine = WorkflowStateMachine(runtime: runtime);
 /// ```
 final class WorkflowRuntime {
   /// Builds a runtime from a completed module registry.
@@ -108,7 +106,6 @@ final class WorkflowRuntime {
     }
 
     return WorkflowRuntime._(
-      flow: WorkflowFlow(transitions: registry.transitions),
       codec: WorkflowEventCodec.from_registry(registry),
       command_behaviors: registry.command_behaviors,
       lifecycles: lifecycles,
@@ -140,7 +137,6 @@ final class WorkflowRuntime {
 
   /// Captures validated workflow configuration as immutable collections.
   ///
-  /// [flow] contains the existing transition graph.
   /// [codec] serializes and restores registered event types.
   /// [command_behaviors] contains the exact-type command handlers.
   /// [lifecycles] and [slice_keys] define registered domain ownership.
@@ -153,7 +149,6 @@ final class WorkflowRuntime {
   /// Configuration validation occurs in [WorkflowRuntime.from_registry]
   /// before this constructor is called.
   WorkflowRuntime._({
-    required this.flow,
     required this.codec,
     required Map<Type, WorkflowCommandBehavior<dynamic>> command_behaviors,
     required Map<String, WorkflowLifecycle> lifecycles,
@@ -165,9 +160,6 @@ final class WorkflowRuntime {
        slice_keys = Map.unmodifiable(slice_keys),
        outcome_transitions = List.unmodifiable(outcome_transitions),
        slice_reducers = List.unmodifiable(slice_reducers);
-
-  /// Immutable state-transition graph.
-  final WorkflowFlow flow;
 
   /// Registry-driven codec for durable workflow events.
   final WorkflowEventCodec codec;

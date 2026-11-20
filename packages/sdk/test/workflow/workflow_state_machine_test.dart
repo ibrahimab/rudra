@@ -1,525 +1,276 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-/// Verifies the deterministic, side-effect-free workflow state machine.
-///
-/// All tests operate entirely on in-memory domain objects.
-///
-/// No filesystem adapter, event store, database, or application
-/// frontend is constructed.
+/// Pure unit tests for the single authoritative outcome-driven state machine.
 void main() {
-  final machine = WorkflowStateMachine();
+  final machine = WorkflowStateMachine(runtime: WorkflowRuntime.standard());
 
-  group('WorkflowStateMachine.transition', () {
-    test('transitions from initial to start requested', () {
-      const initial = WorkflowInitialState();
-      final event = _start_event();
-
-      final result = machine.transition(state: initial, event: event);
-
-      expect(result, isA<WorkflowStartRequestedState>());
-
-      final requested = result as WorkflowStartRequestedState;
-
-      expect(requested.version, 1);
-      expect(requested.target_id, event.target_id);
-      expect(requested.root, same(event.root));
-
-      // Applying an event cannot modify the previous state.
-      expect(initial.version, 0);
+  group('WorkflowStateMachine', () {
+    test('establishes version one from the first committed outcome', () {
+      final started = WorkflowStartedEvent(identity: _identity());
+      final active = machine.transition(state: null, event: started);
+      expect(active.version, 1);
+      expect(active.lifecycle.id, 'rudra.workflow.active');
+      expect(active.identity.workflow_id, 'workflow-1');
+      expect(active.is_terminal, isFalse);
     });
 
-    test('a start request does not activate a workflow', () {
-      final result = machine.transition(
-        state: const WorkflowInitialState(),
-        event: _start_event(),
+    test('ends a workflow at version two without a command event', () {
+      final active = machine.transition(
+        state: null,
+        event: WorkflowStartedEvent(identity: _identity()),
       );
-
-      expect(result, isA<WorkflowStartRequestedState>());
-      expect(result, isNot(isA<WorkflowActiveState>()));
-    });
-
-    test('transitions from requested to active', () {
-      final requested = _requested_state();
-      final identity = _create_identity();
-
-      final result = machine.transition(
-        state: requested,
-        event: WorkflowStartedEvent(identity: identity),
-      );
-
-      expect(result, isA<WorkflowActiveState>());
-
-      final active = result as WorkflowActiveState;
-
-      expect(active.version, 2);
-      expect(active.identity, same(identity));
-
-      // Existing state snapshots remain unchanged.
-      expect(requested.version, 1);
-      expect(requested.target_id, 'local-macos');
-    });
-
-    test('accepts separately constructed equivalent root paths', () {
-      final requested = _requested_state();
-
-      final identity = _create_identity(root: '/Users/example/Downloads');
-
-      // The identity has a different TargetPath instance
-      // containing the same target-native path.
-      expect(identity.root, isNot(same(requested.root)));
-
-      final result = machine.transition(
-        state: requested,
-        event: WorkflowStartedEvent(identity: identity),
-      );
-
-      expect(result, isA<WorkflowActiveState>());
-      expect(result.version, 2);
-    });
-
-    test('transitions from active through stop requested to ended', () {
-      final identity = _create_identity();
-      final active = _active_state(identity: identity);
-
-      final requested = machine.transition(
-        state: active,
-        event: WorkflowStopEvent(workflow_id: identity.workflow_id),
-      );
-
-      expect(requested, isA<WorkflowStopRequestedState>());
-      expect(requested.version, 3);
-      expect(
-        (requested as WorkflowStopRequestedState).identity,
-        same(identity),
-      );
-
       final ended = machine.transition(
-        state: requested,
-        event: WorkflowEndedEvent(workflow_id: identity.workflow_id),
+        state: active,
+        event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
       );
-
-      expect(ended, isA<WorkflowEndedState>());
-      expect(ended.version, 4);
-      expect((ended as WorkflowEndedState).identity, same(identity));
-      expect(active.version, 2);
+      expect(ended.version, 2);
+      expect(ended.is_terminal, isTrue);
+      expect(ended.identity, same(active.identity));
+      expect(active.version, 1);
+      expect(active.is_terminal, isFalse);
     });
 
-    test('rejects a different target at workflow start', () {
-      final requested = _requested_state();
-
-      final event = WorkflowStartedEvent(
-        identity: _create_identity(target_id: 'local-windows'),
+    test('rejects a terminal outcome before establishment', () {
+      expect(
+        () => machine.transition(
+          state: null,
+          event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
+        ),
+        _transition_error(WorkflowTransitionErrorCode.invalid_transition),
       );
-
-      _expect_transition_error(
-        machine,
-        requested,
-        event,
-        WorkflowTransitionErrorCode.target_mismatch,
-      );
-
-      expect(requested.version, 1);
     });
 
-    test('rejects changes to the original root', () {
-      final requested = _requested_state();
-
-      final event = WorkflowStartedEvent(
-        identity: _create_identity(root: '/Users/example/Documents'),
+    test('rejects establishment of an existing workflow', () {
+      final active = machine.transition(
+        state: null,
+        event: WorkflowStartedEvent(identity: _identity()),
       );
-
-      _expect_transition_error(
-        machine,
-        requested,
-        event,
-        WorkflowTransitionErrorCode.root_mismatch,
+      expect(
+        () => machine.transition(
+          state: active,
+          event: WorkflowStartedEvent(identity: _identity()),
+        ),
+        _transition_error(WorkflowTransitionErrorCode.invalid_transition),
       );
-
-      expect(requested.root.value, '/Users/example/Downloads');
-      expect(requested.version, 1);
     });
 
-    test('preserves target-native path spelling', () {
-      final requested = WorkflowStartRequestedState(
-        target_id: 'local-windows',
-        root: TargetPath(r'C:\Users\example\Downloads'),
+    test('rejects a terminal event for an unrelated workflow', () {
+      final active = machine.transition(
+        state: null,
+        event: WorkflowStartedEvent(identity: _identity()),
+      );
+      expect(
+        () => machine.transition(
+          state: active,
+          event: WorkflowEndedEvent(workflow_id: 'another-workflow'),
+        ),
+        _transition_error(WorkflowTransitionErrorCode.guard_rejected),
+      );
+      expect(active.is_terminal, isFalse);
+      expect(active.version, 1);
+    });
+
+    test('never reopens a terminal workflow', () {
+      final terminal = machine.replay([
+        WorkflowStartedEvent(identity: _identity()),
+        WorkflowEndedEvent(workflow_id: 'workflow-1'),
+      ])!;
+      expect(
+        () => machine.transition(
+          state: terminal,
+          event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
+        ),
+        _transition_error(WorkflowTransitionErrorCode.invalid_transition),
+      );
+    });
+
+    test('returns null for an empty committed history', () {
+      expect(machine.replay(const <WorkflowOutcomeEvent>[]), isNull);
+    });
+
+    test('replays only outcomes and advances once for each', () {
+      final replayed = machine.replay([
+        WorkflowStartedEvent(identity: _identity()),
+        WorkflowEndedEvent(workflow_id: 'workflow-1'),
+      ])!;
+      expect(replayed.version, 2);
+      expect(replayed.lifecycle.id, 'rudra.workflow.ended');
+    });
+
+    test('reports the index of an invalid committed event', () {
+      expect(
+        () => machine.replay([
+          WorkflowStartedEvent(identity: _identity()),
+          WorkflowEndedEvent(workflow_id: 'wrong-id'),
+        ]),
+        throwsA(
+          isA<WorkflowReplayException>().having(
+            (failure) => failure.event_index,
+            'event_index',
+            1,
+          ),
+        ),
+      );
+    });
+
+    test('rejects an unregistered previous lifecycle', () {
+      final forged = WorkflowSnapshot(
+        identity: _identity(),
         version: 1,
+        lifecycle: WorkflowLifecycle(
+          id: 'unregistered.lifecycle',
+          is_terminal: false,
+        ),
       );
-
-      final identity = _create_identity(
-        target_id: 'local-windows',
-        root: r'C:\Users\example\Downloads',
+      expect(
+        () => machine.transition(
+          state: forged,
+          event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
+        ),
+        _transition_error(WorkflowTransitionErrorCode.invalid_snapshot),
       );
-
-      final result = machine.transition(
-        state: requested,
-        event: WorkflowStartedEvent(identity: identity),
-      );
-
-      expect(result, isA<WorkflowActiveState>());
-
-      final active = result as WorkflowActiveState;
-
-      expect(active.identity.root.value, r'C:\Users\example\Downloads');
-    });
-
-    test('rejects stopping another workflow', () {
-      final active = _active_state();
-
-      _expect_transition_error(
-        machine,
-        active,
-        WorkflowStopEvent(workflow_id: 'different-workflow'),
-        WorkflowTransitionErrorCode.workflow_id_mismatch,
-      );
-
-      expect(active.version, 2);
-    });
-
-    test('rejects ending another stopped workflow', () {
-      final requested = WorkflowStopRequestedState(
-        identity: _create_identity(),
-        version: 3,
-      );
-
-      _expect_transition_error(
-        machine,
-        requested,
-        WorkflowEndedEvent(workflow_id: 'different-workflow'),
-        WorkflowTransitionErrorCode.workflow_id_mismatch,
-      );
-
-      expect(requested.version, 3);
-    });
-
-    test('rejects every unspecified lifecycle transition', () {
-      const initial = WorkflowInitialState();
-      final requested = _requested_state();
-      final active = _active_state();
-      final stop_requested = WorkflowStopRequestedState(
-        identity: _create_identity(),
-        version: 3,
-      );
-      final ended = _ended_state();
-
-      final invalid_cases = <(WorkflowState, WorkflowEvent)>[
-        (initial, WorkflowStartedEvent(identity: _create_identity())),
-        (initial, WorkflowStopEvent(workflow_id: 'workflow-1')),
-        (initial, WorkflowEndedEvent(workflow_id: 'workflow-1')),
-
-        (requested, _start_event()),
-        (requested, WorkflowStopEvent(workflow_id: 'workflow-1')),
-        (requested, WorkflowEndedEvent(workflow_id: 'workflow-1')),
-
-        (active, _start_event()),
-        (active, WorkflowStartedEvent(identity: _create_identity())),
-        (active, WorkflowEndedEvent(workflow_id: 'workflow-1')),
-
-        (stop_requested, _start_event()),
-        (stop_requested, WorkflowStartedEvent(identity: _create_identity())),
-        (stop_requested, WorkflowStopEvent(workflow_id: 'workflow-1')),
-
-        (ended, _start_event()),
-        (ended, WorkflowStartedEvent(identity: _create_identity())),
-        (ended, WorkflowStopEvent(workflow_id: 'workflow-1')),
-        (ended, WorkflowEndedEvent(workflow_id: 'workflow-1')),
-      ];
-
-      for (final (state, event) in invalid_cases) {
-        _expect_transition_error(
-          machine,
-          state,
-          event,
-          WorkflowTransitionErrorCode.invalid_transition,
-        );
-      }
-
-      expect(initial.version, 0);
-      expect(requested.version, 1);
-      expect(active.version, 2);
-      expect(stop_requested.version, 3);
-      expect(ended.version, 4);
-    });
-
-    test('rejects unsupported event implementations', () {
-      final states = <WorkflowState>[
-        const WorkflowInitialState(),
-        _requested_state(),
-        _active_state(),
-        _ended_state(),
-      ];
-
-      final event = _UnknownWorkflowEvent();
-
-      for (final state in states) {
-        _expect_transition_error(
-          machine,
-          state,
-          event,
-          WorkflowTransitionErrorCode.unsupported_event,
-        );
-      }
     });
   });
 
-  group('WorkflowStateMachine.replay', () {
-    test('empty history produces initial state', () {
-      final result = machine.replay(const <WorkflowEvent>[]);
+  group('Independent feature slice projection', () {
+    test('projects two slices from one shared previous snapshot', () {
+      final inspection_key = WorkflowSliceKey<_Inspection>('test.inspection');
+      final planning_key = WorkflowSliceKey<_Planning>('test.planning');
+      final registry = WorkflowModuleRegistry()
+        ..register(const LifecycleWorkflowModule())
+        ..register(
+          _FeatureModule('test.inspection', (registration) {
+            registration
+              ..add_slice(inspection_key)
+              ..add_slice_reducer(
+                WorkflowSliceReducer<_Inspection, WorkflowStartedEvent>(
+                  key: inspection_key,
+                  reduce: (previous, event, current) {
+                    expect(previous, isNull);
+                    expect(current, isNull);
+                    return const _Inspection();
+                  },
+                ),
+              );
+          }),
+        )
+        ..register(
+          _FeatureModule('test.planning', (registration) {
+            registration
+              ..add_slice(planning_key)
+              ..add_slice_reducer(
+                WorkflowSliceReducer<_Planning, WorkflowStartedEvent>(
+                  key: planning_key,
+                  reduce: (previous, event, current) {
+                    expect(previous, isNull);
+                    expect(current, isNull);
+                    return const _Planning();
+                  },
+                ),
+              );
+          }),
+        );
 
-      expect(result, isA<WorkflowInitialState>());
-      expect(result.version, 0);
-    });
-
-    test('replays a complete workflow history', () {
-      final result = machine.replay(_valid_history());
-
-      expect(result, isA<WorkflowEndedState>());
-      expect(result.version, 4);
-
-      final ended = result as WorkflowEndedState;
-
-      expect(ended.identity.workflow_id, 'workflow-1');
-      expect(ended.identity.os_user_id, 'user-1');
-      expect(ended.identity.target_id, 'local-macos');
-
-      expect(ended.identity.root.value, '/Users/example/Downloads');
-    });
-
-    test('replays incomplete workflow histories', () {
-      final events = _valid_history();
-
-      final requested = machine.replay(events.take(1));
-      final active = machine.replay(events.take(2));
-      final stop_requested = machine.replay(events.take(3));
-      final ended = machine.replay(events);
-
-      expect(requested, isA<WorkflowStartRequestedState>());
-      expect(active, isA<WorkflowActiveState>());
-      expect(stop_requested, isA<WorkflowStopRequestedState>());
-      expect(ended, isA<WorkflowEndedState>());
-
-      expect(requested.version, 1);
-      expect(active.version, 2);
-      expect(stop_requested.version, 3);
-      expect(ended.version, 4);
-    });
-
-    test('replay and individual transitions produce equivalent state', () {
-      final events = _valid_history();
-
-      WorkflowState state = const WorkflowInitialState();
-
-      for (final event in events) {
-        state = machine.transition(state: state, event: event);
-      }
-
-      final replayed = machine.replay(events);
-
-      expect(replayed.runtimeType, state.runtimeType);
-      expect(replayed.version, state.version);
-
-      final direct = state as WorkflowEndedState;
-      final reconstructed = replayed as WorkflowEndedState;
-
-      expect(reconstructed.identity.workflow_id, direct.identity.workflow_id);
-
-      expect(reconstructed.identity.os_user_id, direct.identity.os_user_id);
-
-      expect(reconstructed.identity.target_id, direct.identity.target_id);
-
-      expect(reconstructed.identity.root.value, direct.identity.root.value);
-    });
-
-    test('repeating replay is deterministic', () {
-      final events = _valid_history();
-
-      final first = machine.replay(events);
-      final second = machine.replay(events);
-
-      expect(first.runtimeType, second.runtimeType);
-      expect(first.version, second.version);
-
-      final first_ended = first as WorkflowEndedState;
-      final second_ended = second as WorkflowEndedState;
-
-      expect(
-        first_ended.identity.workflow_id,
-        second_ended.identity.workflow_id,
+      final extended = WorkflowStateMachine(
+        runtime: WorkflowRuntime.from_registry(registry),
       );
+      final active = extended.transition(
+        state: null,
+        event: WorkflowStartedEvent(identity: _identity()),
+      );
+      expect(active.slice(inspection_key), isA<_Inspection>());
+      expect(active.slice(planning_key), isA<_Planning>());
+      expect(active.slice_bindings.length, 2);
 
-      expect(first_ended.identity.root.value, second_ended.identity.root.value);
+      final ended = extended.transition(
+        state: active,
+        event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
+      );
+      expect(ended.slice(inspection_key), same(active.slice(inspection_key)));
+      expect(ended.slice(planning_key), same(active.slice(planning_key)));
     });
 
-    test('rejects contradictory history with event index', () {
-      final events = <WorkflowEvent>[
-        _start_event(),
-        WorkflowStartedEvent(
-          identity: _create_identity(root: '/different-root'),
-        ),
-      ];
-
-      expect(
-        () => machine.replay(events),
-        throwsA(
-          isA<WorkflowReplayException>()
-              .having((error) => error.event_index, 'event_index', 1)
-              .having(
-                (error) => error.cause.code,
-                'cause.code',
-                WorkflowTransitionErrorCode.root_mismatch,
-              )
-              .having(
-                (error) => error.cause.state.version,
-                'applied version',
-                1,
-              ),
-        ),
+    test('a failing reducer never mutates the prior snapshot', () {
+      final key = WorkflowSliceKey<_Inspection>('test.inspection');
+      final registry = WorkflowModuleRegistry()
+        ..register(const LifecycleWorkflowModule())
+        ..register(
+          _FeatureModule('test.inspection', (registration) {
+            registration
+              ..add_slice(key)
+              ..add_slice_reducer(
+                WorkflowSliceReducer<_Inspection, WorkflowEndedEvent>(
+                  key: key,
+                  reduce: (previous, event, current) =>
+                      throw StateError('Simulated reducer failure.'),
+                ),
+              );
+          }),
+        );
+      final extended = WorkflowStateMachine(
+        runtime: WorkflowRuntime.from_registry(registry),
       );
-    });
-
-    test('rejects an outcome without its preceding request', () {
-      final events = <WorkflowEvent>[
-        WorkflowStartedEvent(identity: _create_identity()),
-      ];
-
-      expect(
-        () => machine.replay(events),
-        throwsA(
-          isA<WorkflowReplayException>()
-              .having((error) => error.event_index, 'event_index', 0)
-              .having(
-                (error) => error.cause.code,
-                'cause.code',
-                WorkflowTransitionErrorCode.invalid_transition,
-              ),
-        ),
+      final active = extended.transition(
+        state: null,
+        event: WorkflowStartedEvent(identity: _identity()),
       );
-    });
-
-    test('rejects history containing events after termination', () {
-      final events = <WorkflowEvent>[..._valid_history(), _start_event()];
-
       expect(
-        () => machine.replay(events),
-        throwsA(
-          isA<WorkflowReplayException>()
-              .having((error) => error.event_index, 'event_index', 4)
-              .having(
-                (error) => error.cause.code,
-                'cause.code',
-                WorkflowTransitionErrorCode.invalid_transition,
-              ),
+        () => extended.transition(
+          state: active,
+          event: WorkflowEndedEvent(workflow_id: 'workflow-1'),
         ),
+        _transition_error(WorkflowTransitionErrorCode.reducer_failure),
       );
-    });
-
-    test('rejects unsupported events during replay', () {
-      final events = <WorkflowEvent>[_start_event(), _UnknownWorkflowEvent()];
-
-      expect(
-        () => machine.replay(events),
-        throwsA(
-          isA<WorkflowReplayException>()
-              .having((error) => error.event_index, 'event_index', 1)
-              .having(
-                (error) => error.cause.code,
-                'cause.code',
-                WorkflowTransitionErrorCode.unsupported_event,
-              ),
-        ),
-      );
+      expect(active.version, 1);
+      expect(active.is_terminal, isFalse);
     });
   });
 }
 
-/// Creates a valid workflow-start event.
-///
-/// Parameters allow tests to customize the requested bindings.
-WorkflowStartEvent _start_event({
-  String target_id = 'local-macos',
-  String root = '/Users/example/Downloads',
-}) {
-  return WorkflowStartEvent(target_id: target_id, root: TargetPath(root));
-}
+/// Matches a thrown typed transition failure, never the closure itself.
+Matcher _transition_error(WorkflowTransitionErrorCode code) => throwsA(
+  isA<WorkflowTransitionException>().having(
+    (failure) => failure.code,
+    'code',
+    code,
+  ),
+);
 
-/// Creates an established workflow identity for test fixtures.
-///
-/// The default bindings match [_start_event].
-WorkflowIdentity _create_identity({
-  String workflow_id = 'workflow-1',
-  String os_user_id = 'user-1',
-  String target_id = 'local-macos',
-  String root = '/Users/example/Downloads',
-}) {
-  return WorkflowIdentity(
-    workflow_id: workflow_id,
-    os_user_id: os_user_id,
-    target_id: target_id,
-    root: TargetPath(root),
-  );
-}
+/// Creates fixed immutable workflow identity bindings for replay tests.
+WorkflowIdentity _identity() => WorkflowIdentity(
+  workflow_id: 'workflow-1',
+  os_user_id: 'user-1',
+  target_id: 'local-macos',
+  root: TargetPath('/workspace'),
+);
 
-/// Creates a valid pending workflow state.
-WorkflowStartRequestedState _requested_state() {
-  return WorkflowStartRequestedState(
-    target_id: 'local-macos',
-    root: TargetPath('/Users/example/Downloads'),
-    version: 1,
-  );
-}
+/// Synthetic owner module, independent of the standard lifecycle behavior.
+final class _FeatureModule implements WorkflowModule {
+  /// Creates one synthetic feature contribution.
+  const _FeatureModule(this.module_id, this.contribute);
 
-/// Creates a valid active workflow state.
-WorkflowActiveState _active_state({WorkflowIdentity? identity}) {
-  return WorkflowActiveState(
-    identity: identity ?? _create_identity(),
-    version: 2,
-  );
-}
-
-/// Creates a valid terminal workflow state.
-WorkflowEndedState _ended_state() {
-  return WorkflowEndedState(identity: _create_identity(), version: 4);
-}
-
-/// Creates a complete, valid workflow event history.
-///
-/// The list represents four committed events in order.
-List<WorkflowEvent> _valid_history() {
-  return [
-    _start_event(),
-    WorkflowStartedEvent(identity: _create_identity()),
-    WorkflowStopEvent(workflow_id: 'workflow-1'),
-    WorkflowEndedEvent(workflow_id: 'workflow-1'),
-  ];
-}
-
-/// Verifies that a transition is rejected with the expected type.
-///
-/// Both the original state and event must remain available through
-/// the exception for diagnostics.
-void _expect_transition_error(
-  WorkflowStateMachine machine,
-  WorkflowState state,
-  WorkflowEvent event,
-  WorkflowTransitionErrorCode code,
-) {
-  expect(
-    () => machine.transition(state: state, event: event),
-    throwsA(
-      isA<WorkflowTransitionException>()
-          .having((error) => error.code, 'code', code)
-          .having((error) => error.state, 'state', same(state))
-          .having((error) => error.event, 'event', same(event)),
-    ),
-  );
-}
-
-/// A deliberately unsupported workflow event.
-///
-/// Its existence verifies that unrelated implementations cannot
-/// bypass typed event dispatch.
-final class _UnknownWorkflowEvent implements WorkflowEvent {
+  /// Stable module identifier for registration tests.
   @override
-  String get event_type => 'workflow.unknown';
+  final String module_id;
+
+  /// Pure registration callback owned by this test module.
+  final void Function(WorkflowModuleRegistration) contribute;
+
+  /// Registers only this feature's owned slice and reducer contracts.
+  @override
+  void register(WorkflowModuleRegistration registration) =>
+      contribute(registration);
+}
+
+/// Immutable synthetic inspection domain slice.
+final class _Inspection extends WorkflowSlice {
+  /// Creates an inspection value for isolated reducer tests.
+  const _Inspection();
+}
+
+/// Immutable synthetic planning domain slice.
+final class _Planning extends WorkflowSlice {
+  /// Creates a planning value for isolated reducer tests.
+  const _Planning();
 }

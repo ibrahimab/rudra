@@ -1,4 +1,4 @@
-import 'package:rudra_sdk/rudra_sdk.dart' show WorkflowActiveState;
+import 'package:rudra_sdk/rudra_sdk.dart' show WorkflowSnapshot;
 
 /// Immutable workflow presentation state for Explorer.
 ///
@@ -29,7 +29,7 @@ final class WorkflowExplorerViewModel {
   ///
   /// This snapshot is read-only. A subsequent observation creates
   /// a new view model rather than modifying this instance.
-  final WorkflowActiveState? current_workflow;
+  final WorkflowSnapshot? current_workflow;
 
   /// Whether Explorer should display its Start instruction.
   bool get show_start => current_workflow == null;

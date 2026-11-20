@@ -87,7 +87,7 @@ final class ProductWorkflowComposition {
   ///
   /// Invalid persisted state propagates as an SDK integrity
   /// failure rather than being silently repaired.
-  Future<WorkflowActiveState?> current() async {
+  Future<WorkflowSnapshot?> current() async {
     if (!await database_file.exists()) {
       return null;
     }
@@ -130,7 +130,7 @@ final class ProductWorkflowComposition {
   ///
   /// Business rejections, quarantines, and infrastructure
   /// failures never produce a successful active result.
-  Future<WorkflowActiveState> start({
+  Future<WorkflowSnapshot> start({
     required String target_id,
     required TargetPath root,
   }) async {

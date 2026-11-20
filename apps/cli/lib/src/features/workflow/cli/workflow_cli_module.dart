@@ -27,7 +27,7 @@ final class WorkflowCliModule implements RudraCliModule {
   final TargetPath working_directory;
 
   /// SDK-backed explicit workflow-start operation.
-  final Future<WorkflowActiveState> Function(TargetPath) start_workflow;
+  final Future<WorkflowSnapshot> Function(TargetPath) start_workflow;
 
   /// SDK-backed explicit workflow-stop operation.
   final Future<String> Function() stop_workflow;
@@ -60,7 +60,7 @@ final class _WorkflowCommand extends Command<int> {
   /// Registers explicit start and stop actions.
   _WorkflowCommand({
     required TargetPath working_directory,
-    required Future<WorkflowActiveState> Function(TargetPath) start_workflow,
+    required Future<WorkflowSnapshot> Function(TargetPath) start_workflow,
     required Future<String> Function() stop_workflow,
     required StringSink output,
     required StringSink error_output,
@@ -167,7 +167,7 @@ final class _WorkflowStartCommand extends Command<int> {
   /// Creates a start action bound to one SDK target.
   _WorkflowStartCommand({
     required TargetPath working_directory,
-    required Future<WorkflowActiveState> Function(TargetPath) start_workflow,
+    required Future<WorkflowSnapshot> Function(TargetPath) start_workflow,
     required StringSink output,
     required StringSink error_output,
   }) : _working_directory = working_directory,
@@ -176,7 +176,7 @@ final class _WorkflowStartCommand extends Command<int> {
        _error_output = error_output;
 
   final TargetPath _working_directory;
-  final Future<WorkflowActiveState> Function(TargetPath) _start_workflow;
+  final Future<WorkflowSnapshot> Function(TargetPath) _start_workflow;
   final StringSink _output;
   final StringSink _error_output;
 
@@ -215,7 +215,7 @@ final class _WorkflowStartCommand extends Command<int> {
       throw UsageException('Expected an absolute directory.', usage);
     }
 
-    final WorkflowActiveState active;
+    final WorkflowSnapshot active;
 
     try {
       active = await _start_workflow(root);

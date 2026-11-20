@@ -33,20 +33,14 @@ void main() {
 
     expect(committer.committed, same(plan));
 
-    expect(plan.previous_state, isA<WorkflowInitialState>());
-    expect(plan.resulting_state, isA<WorkflowActiveState>());
+    expect(plan.previous_state, isNull);
+    expect(plan.resulting_state, isA<WorkflowSnapshot>());
+    expect(plan.resulting_state.version, 1);
+    expect(plan.resulting_state.lifecycle.id, 'rudra.workflow.active');
 
-    expect(plan.previous_state.version, 0);
-    expect(plan.resulting_state.version, 2);
-
-    expect(plan.events_to_append, hasLength(2));
-    expect(plan.events_to_append.first, isA<WorkflowStartEvent>());
-    expect(plan.events_to_append.last, isA<WorkflowStartedEvent>());
-
-    expect(
-      (plan.resulting_state as WorkflowActiveState).identity.workflow_id,
-      'workflow-1',
-    );
+    expect(plan.events_to_append, hasLength(1));
+    expect(plan.events_to_append.single, isA<WorkflowStartedEvent>());
+    expect(plan.resulting_state.identity.workflow_id, 'workflow-1');
 
     expect(() => plan.events_to_append.clear(), throwsUnsupportedError);
   });
@@ -66,10 +60,7 @@ void main() {
       ),
       scope_id: 'submission-scope-1',
       command: WorkflowStopEvent(workflow_id: identity.workflow_id),
-      committed_events: [
-        WorkflowStartEvent(target_id: identity.target_id, root: identity.root),
-        WorkflowStartedEvent(identity: identity),
-      ],
+      committed_events: [WorkflowStartedEvent(identity: identity)],
     );
 
     final identity_provider = _FakeWorkflowIdentityProvider();
@@ -93,20 +84,16 @@ void main() {
     expect(committer.committed, same(plan));
     expect(identity_provider.calls, 0);
 
-    expect(plan.previous_state, isA<WorkflowActiveState>());
-    expect(plan.previous_state.version, 2);
+    expect(plan.previous_state, isA<WorkflowSnapshot>());
+    expect(plan.previous_state!.version, 1);
 
-    expect(plan.resulting_state, isA<WorkflowEndedState>());
-    expect(plan.resulting_state.version, 4);
+    expect(plan.resulting_state, isA<WorkflowSnapshot>());
+    expect(plan.resulting_state.version, 2);
+    expect(plan.resulting_state.is_terminal, isTrue);
 
-    expect(plan.events_to_append, hasLength(2));
-    expect(plan.events_to_append[0], isA<WorkflowStopEvent>());
-    expect(plan.events_to_append[1], isA<WorkflowEndedEvent>());
-
-    expect(
-      (plan.resulting_state as WorkflowEndedState).identity,
-      same(identity),
-    );
+    expect(plan.events_to_append, hasLength(1));
+    expect(plan.events_to_append.single, isA<WorkflowEndedEvent>());
+    expect(plan.resulting_state.identity, same(identity));
   });
 
   test('durably rejects stop without an active workflow', () async {
@@ -269,10 +256,10 @@ void main() {
     await expectLater(
       processor.process_next(),
       throwsA(
-        isA<WorkflowTransitionException>().having(
+        isA<WorkflowCommandValidationException>().having(
           (error) => error.code,
           'code',
-          WorkflowTransitionErrorCode.root_mismatch,
+          WorkflowCommandValidationErrorCode.root_mismatch,
         ),
       ),
     );
@@ -480,14 +467,8 @@ PendingWorkflowCommand _stop_pending({
     scope_id: 'submission-scope-1',
     command: WorkflowStopEvent(workflow_id: requested_workflow_id),
     committed_events: established
-        ? <WorkflowEvent>[
-            WorkflowStartEvent(
-              target_id: identity.target_id,
-              root: identity.root,
-            ),
-            WorkflowStartedEvent(identity: identity),
-          ]
-        : const <WorkflowEvent>[],
+        ? <WorkflowOutcomeEvent>[WorkflowStartedEvent(identity: identity)]
+        : const <WorkflowOutcomeEvent>[],
   );
 }
 

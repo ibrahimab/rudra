@@ -27,8 +27,8 @@ abstract interface class WorkflowModule {
 /// Registrations become visible only after the complete module
 /// has passed validation. Duplicate ownership fails closed.
 abstract interface class WorkflowModuleRegistration {
-  /// Registers one workflow behavior.
-  void add(WorkflowBehavior behavior);
+  /// Registers one typed command behavior.
+  void add(WorkflowCommandBehavior<dynamic> behavior);
 
   /// Registers an event-specific serialization strategy.
   ///

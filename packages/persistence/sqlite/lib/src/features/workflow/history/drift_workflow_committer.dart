@@ -3,30 +3,20 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../database/rudra_database.dart';
-
 import 'drift_workflow_history_store.dart';
 
-/// Atomically establishes a new workflow in SQLite.
+/// Transactional persistence of validated outcome-only workflow changes.
 ///
-/// This first implementation supports an initial workflow
-/// transitioning to an active workflow at version 2.
+/// Every command remains in the durable submission inbox. Only committed
+/// outcomes occupy workflow-local journal positions. A successful Start
+/// creates version 1; a successful Stop creates version 2.
 ///
-/// It commits journal events, unfinished-workflow ownership,
-/// and submission completion in a single transaction.
-///
-/// It does not generate identities, process commands,
-/// or execute filesystem operations.
+/// Submission completion, journal appends and unfinished ownership changes
+/// share a single SQLite transaction. No filesystem operation occurs here.
 final class DriftWorkflowCommitter implements WorkflowCommitter {
-  /// Creates a committer with explicitly configured workflow rules.
+  /// Creates a committer with one shared immutable workflow runtime.
   ///
-  /// [codec] serializes committed events and reads historical
-  /// command representations.
-  ///
-  /// [flow] must be the same transition graph used by the
-  /// processor that creates workflow processing plans.
-  ///
-  /// Production composition supplies both from one
-  /// immutable WorkflowRuntime.
+  /// The OS-user identity and scope originate from trusted composition.
   DriftWorkflowCommitter({
     required RudraDatabase database,
     required String scope_id,
@@ -34,130 +24,88 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
     required WorkflowRuntime runtime,
     WorkflowEventCodec? codec,
   }) : _database = database,
-       _scope_id = _require_scope(scope_id),
-       _os_user_id = _require_os_user_id(os_user_id),
+       _scope_id = _require_nonblank(scope_id, 'scope_id'),
+       _os_user_id = _require_nonblank(os_user_id, 'os_user_id'),
        _runtime = runtime,
        _codec = codec ?? runtime.codec,
-       _machine = WorkflowStateMachine(flow: runtime.flow);
+       _machine = WorkflowStateMachine(runtime: runtime);
 
+  /// Identifier generator for committed outcome events.
   static final Uuid _uuid = Uuid();
 
+  /// Transaction owner supplying authoritative SQLite tables.
   final RudraDatabase _database;
+
+  /// Trusted durable command-submission scope.
   final String _scope_id;
 
-  /// Authenticated OS-user identity supplied by trusted composition.
+  /// Authenticated owner of all workflow operations through this instance.
   final String _os_user_id;
 
+  /// Shared event codec for submitted commands and persisted outcomes.
   final WorkflowEventCodec _codec;
-  final WorkflowStateMachine _machine;
 
-  /// Shared SDK runtime used for authoritative history validation.
+  /// Immutable workflow domain/command registration snapshot.
   final WorkflowRuntime _runtime;
 
-  /// Commits a validated lifecycle plan through its transactional path.
+  /// Side-effect-free outcome replay engine, never a command executor.
+  final WorkflowStateMachine _machine;
+
+  /// Commits a Start or Stop plan atomically or rejects it without writes.
   ///
-  /// Each supported command has its own persistence invariants.
-  /// Unsupported commands fail without modifying storage.
+  /// The accepted command is reloaded inside the transaction and compared
+  /// against the proposal. Current ownership and expected history are also
+  /// independently reloaded and validated before any journal mutation.
   @override
   Future<void> commit(WorkflowProcessingPlan plan) async {
     final command = plan.submission.command;
-
     if (command is WorkflowStartEvent) {
       await _commit_start(plan);
-      return;
-    }
-
-    if (command is WorkflowStopEvent) {
+    } else if (command is WorkflowStopEvent) {
       await _commit_stop(plan);
-      return;
-    }
-
-    throw const WorkflowCommitException(
-      code: WorkflowCommitErrorCode.invalid_plan,
-      message: 'Unsupported workflow command for commitment.',
-    );
-  }
-
-  /// Atomically establishes a new active workflow.
-  ///
-  /// Retains the existing start validation and persistence
-  /// transaction without changing its event representation.
-  Future<void> _commit_start(WorkflowProcessingPlan plan) async {
-    final state = plan.resulting_state;
-    final pending = plan.submission;
-    final receipt = pending.receipt;
-    final events = plan.events_to_append;
-
-    // The current persistence implementation establishes
-    // new workflows only. Do not silently treat later
-    // lifecycle transitions as workflow creation.
-    if (plan.previous_state is! WorkflowInitialState ||
-        pending.committed_events.isNotEmpty ||
-        state is! WorkflowActiveState ||
-        state.version != 2 ||
-        events.length != 2 ||
-        !identical(events.first, pending.command) ||
-        events.skip(1).any((event) => event is WorkflowCommandEvent)) {
+    } else {
       throw const WorkflowCommitException(
         code: WorkflowCommitErrorCode.invalid_plan,
-        message: 'Unsupported or invalid workflow establishment plan.',
+        message: 'No persistence operation supports this workflow command.',
+      );
+    }
+  }
+
+  /// Establishes a new owner-scoped workflow at journal version 1.
+  ///
+  /// No command event is copied into the journal. The original accepted
+  /// submission remains independently queryable through its durable status.
+  Future<void> _commit_start(WorkflowProcessingPlan plan) async {
+    final pending = plan.submission;
+    final command = pending.command;
+    final events = plan.events_to_append;
+    final result = plan.resulting_state;
+
+    if (command is! WorkflowStartEvent ||
+        plan.previous_state != null ||
+        pending.committed_events.isNotEmpty ||
+        events.length != 1 ||
+        events.single is! WorkflowStartedEvent ||
+        result.is_terminal ||
+        result.version != 1) {
+      throw const WorkflowCommitException(
+        code: WorkflowCommitErrorCode.invalid_plan,
+        message: 'Invalid workflow establishment proposal.',
       );
     }
 
     await _database.transaction(() async {
-      // Re-read the submission inside the transaction.
-      // The earlier inbox read was not a lock.
-      final stored =
-          await (_database.select(_database.workflowSubmissions)
-                ..where((row) => row.event_id.equals(receipt.event_id)))
-              .getSingleOrNull();
-
-      if (stored == null ||
-          stored.processing_state != 'pending' ||
-          stored.scope_id != _scope_id ||
-          stored.scope_id != pending.scope_id ||
-          stored.correlation_id != receipt.correlation_id ||
-          stored.event_type != pending.command.event_type) {
+      final accepted = await _accepted_command(pending);
+      if (accepted is! WorkflowStartEvent) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.stale_submission,
-          message: 'The accepted submission is no longer eligible.',
+          message: 'The accepted submission is not a Start request.',
         );
       }
 
-      // Reconstruct the actual persisted command. Comparing
-      // current canonical encodings avoids assuming old JSON
-      // envelopes always use the newest schema version.
-      final persisted_event = _codec.decode(
-        event_type: stored.event_type,
-        payload_json: stored.payload_json,
-      );
+      final outcome = events.single as WorkflowStartedEvent;
+      final identity = outcome.identity;
 
-      if (persisted_event is! WorkflowCommandEvent ||
-          _codec.encode(persisted_event) != _codec.encode(pending.command)) {
-        throw const WorkflowCommitException(
-          code: WorkflowCommitErrorCode.stale_submission,
-          message: 'The persisted command differs from the proposal.',
-        );
-      }
-
-      // Replay the real persisted command together with the
-      // proposed outcomes. The commit boundary must not rely
-      // only on a caller-supplied resulting state.
-      final replayed = _machine.replay([persisted_event, ...events.skip(1)]);
-
-      if (replayed is! WorkflowActiveState ||
-          replayed.version != state.version ||
-          !_same_identity(replayed.identity, state.identity)) {
-        throw const WorkflowCommitException(
-          code: WorkflowCommitErrorCode.invalid_plan,
-          message: 'Proposed events do not reproduce the supplied state.',
-        );
-      }
-
-      final identity = replayed.identity;
-
-      // A proposed identity cannot override the authenticated
-      // owner of this committer.
       if (identity.os_user_id != _os_user_id) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.invalid_plan,
@@ -165,64 +113,77 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
         );
       }
 
-      // Verify committed ownership within the same transaction
-      // that will reserve and establish the new workflow.
-      //
-      // The unfinished-workflow projection alone is insufficient:
-      // it could have been deleted or incorrectly reassigned.
-      //
-      // This SDK reader validates indexed journal histories through
-      // the configured workflow state machine.
-      //
-      // A missing projection for an active workflow throws a typed
-      // integrity failure. Do not convert that failure into a
-      // business rejection or silently repair the database.
-      final existing_workflow = await WorkflowStateReader(
-        runtime: _runtime,
-        history_store: DriftWorkflowHistoryStore(database: _database),
-        os_user_id: identity.os_user_id,
-      ).current();
-
-      if (existing_workflow != null) {
+      final current = await _reader().current();
+      if (current != null) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.ownership_conflict,
-          message: 'The OS user already has an active workflow.',
+          message: 'The OS user already owns an unfinished workflow.',
         );
       }
 
-      // Enforce one unfinished workflow per OS user.
-      // The SQLite primary key independently enforces this
-      // invariant against concurrent writers.
-      final existing_owner =
+      final behavior = _runtime.command_behaviors[accepted.runtimeType];
+      if (behavior == null) {
+        throw const WorkflowCommitException(
+          code: WorkflowCommitErrorCode.invalid_plan,
+          message: 'Start command has no registered SDK behavior.',
+        );
+      }
+
+      try {
+        behavior.validate_submission(
+          accepted,
+          previous: null,
+          identity: identity,
+        );
+      } on WorkflowCommandValidationException {
+        throw const WorkflowCommitException(
+          code: WorkflowCommitErrorCode.invalid_plan,
+          message: 'Start command identity does not match accepted request.',
+        );
+      }
+
+      final replayed = _machine.replay(events);
+      if (replayed == null ||
+          replayed.is_terminal ||
+          !_same_snapshot_identity(replayed, result)) {
+        throw const WorkflowCommitException(
+          code: WorkflowCommitErrorCode.invalid_plan,
+          message: 'Start outcomes do not reproduce the proposed snapshot.',
+        );
+      }
+
+      // The owner index and unfinished projection provide complementary
+      // defenses against duplicate or reused workflow identities.
+      final owner =
           await (_database.select(_database.unfinishedWorkflows)
                 ..where((row) => row.os_user_id.equals(identity.os_user_id)))
               .getSingleOrNull();
-
-      if (existing_owner != null) {
+      if (owner != null) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.ownership_conflict,
-          message: 'The OS user already has an unfinished workflow.',
+          message: 'The OS user already has unfinished ownership.',
         );
       }
 
-      // A workflow identifier must never be reused, including
-      // after a previous workflow has ended and its unfinished
-      // reservation has been removed.
-      final existing_history =
+      final reused_id =
           await (_database.select(_database.workflowEvents)
                 ..where((row) => row.workflow_id.equals(identity.workflow_id))
                 ..limit(1))
               .getSingleOrNull();
-
-      if (existing_history != null) {
+      if (reused_id != null) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.invalid_plan,
-          message: 'The workflow identifier already exists.',
+          message: 'The proposed workflow identifier was previously used.',
         );
       }
 
-      // Reserve ownership in the same transaction as the
-      // authoritative journal append and inbox completion.
+      await _append_outcomes(
+        pending: pending,
+        identity: identity,
+        events: events,
+        previous_version: 0,
+      );
+
       await _database
           .into(_database.unfinishedWorkflows)
           .insert(
@@ -234,329 +195,268 @@ final class DriftWorkflowCommitter implements WorkflowCommitter {
               version: replayed.version,
             ),
           );
-
-      final recorded_at_unix_ms = DateTime.now().toUtc().millisecondsSinceEpoch;
-
-      for (var index = 0; index < events.length; index++) {
-        final event = events[index];
-
-        // Preserve the original accepted command bytes.
-        // Only newly generated outcomes receive new event IDs.
-        final event_id = index == 0 ? receipt.event_id : _uuid.v4();
-
-        final payload_json = index == 0
-            ? stored.payload_json
-            : _codec.encode(event);
-
-        await _database
-            .into(_database.workflowEvents)
-            .insert(
-              WorkflowEventsCompanion.insert(
-                event_id: event_id,
-                workflow_id: identity.workflow_id,
-                os_user_id: event is WorkflowStartedEvent
-                    ? Value(identity.os_user_id)
-                    : const Value.absent(),
-                version: plan.previous_state.version + index + 1,
-                correlation_id: receipt.correlation_id,
-                causation_id: Value(index == 0 ? null : receipt.event_id),
-                event_type: event.event_type,
-                payload_json: payload_json,
-                recorded_at_unix_ms: recorded_at_unix_ms,
-              ),
-            );
-      }
-
-      // Compare-and-set completion. Even if another processor
-      // observed the same pending command earlier, it cannot
-      // complete an already processed submission.
-      final updated =
-          await (_database.update(_database.workflowSubmissions)..where(
-                (row) =>
-                    row.event_id.equals(receipt.event_id) &
-                    row.scope_id.equals(_scope_id) &
-                    row.processing_state.equals('pending'),
-              ))
-              .write(
-                const WorkflowSubmissionsCompanion(
-                  processing_state: Value('completed'),
-                ),
-              );
-
-      if (updated != 1) {
-        throw const WorkflowCommitException(
-          code: WorkflowCommitErrorCode.stale_submission,
-          message: 'Submission completion lost its pending status.',
-        );
-      }
+      await _complete_submission(pending);
     });
   }
 
-  /// Atomically commits a stop request and its terminal outcome.
+  /// Commits the terminal outcome and releases the previous owner.
   ///
-  /// Validates the proposed state against committed history
-  /// under the authenticated OS-user identity.
-  ///
-  /// The terminal journal append, ownership release, and
-  /// submission completion are one SQLite transaction.
-  ///
-  /// A failed transaction leaves the journal, projection,
-  /// and submission resolution unchanged.
+  /// Replay and business checks use the journal restored inside this
+  /// transaction rather than trusting a snapshot supplied by the caller.
   Future<void> _commit_stop(WorkflowProcessingPlan plan) async {
     final pending = plan.submission;
-    final receipt = pending.receipt;
     final command = pending.command;
     final previous = plan.previous_state;
     final result = plan.resulting_state;
     final events = plan.events_to_append;
 
-    final outcome = events.length == 2 ? events.last : null;
-
-    // Reject malformed processing plans before database writes.
     if (command is! WorkflowStopEvent ||
-        previous is! WorkflowActiveState ||
-        result is! WorkflowEndedState ||
-        outcome is! WorkflowEndedEvent ||
-        events.length != 2 ||
-        !identical(events.first, command) ||
+        previous == null ||
+        previous.is_terminal ||
         previous.identity.os_user_id != _os_user_id ||
         command.workflow_id != previous.identity.workflow_id ||
-        outcome.workflow_id != previous.identity.workflow_id ||
-        !_same_identity(previous.identity, result.identity) ||
-        result.version != previous.version + 2 ||
-        pending.committed_events.length != previous.version) {
+        events.length != 1 ||
+        events.single is! WorkflowEndedEvent ||
+        !result.is_terminal ||
+        result.version != previous.version + 1 ||
+        pending.committed_events.length != previous.version ||
+        !_same_identity(previous.identity, result.identity)) {
       throw const WorkflowCommitException(
         code: WorkflowCommitErrorCode.invalid_plan,
-        message: 'Unsupported or invalid workflow stop plan.',
-      );
-    }
-
-    // The plan must reproduce its own proposed previous state
-    // and terminal outcome through the registered state machine.
-    final proposed_previous = _machine.replay(pending.committed_events);
-
-    final proposed_result = _machine.replay([
-      ...pending.committed_events,
-      ...events,
-    ]);
-
-    if (proposed_previous is! WorkflowActiveState ||
-        proposed_previous.version != previous.version ||
-        !_same_identity(proposed_previous.identity, previous.identity) ||
-        proposed_result is! WorkflowEndedState ||
-        proposed_result.version != result.version ||
-        !_same_identity(proposed_result.identity, result.identity)) {
-      throw const WorkflowCommitException(
-        code: WorkflowCommitErrorCode.invalid_plan,
-        message: 'Stop plan disagrees with its proposed event history.',
+        message: 'Invalid workflow termination proposal.',
       );
     }
 
     await _database.transaction(() async {
-      // Check that this exact accepted submission is still pending.
-      final stored =
-          await (_database.select(_database.workflowSubmissions)
-                ..where((row) => row.event_id.equals(receipt.event_id)))
-              .getSingleOrNull();
-
-      if (stored == null ||
-          stored.processing_state != 'pending' ||
-          stored.scope_id != _scope_id ||
-          stored.scope_id != pending.scope_id ||
-          stored.correlation_id != receipt.correlation_id ||
-          stored.event_type != command.event_type) {
+      final accepted = await _accepted_command(pending);
+      if (accepted is! WorkflowStopEvent) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.stale_submission,
-          message: 'Stop submission is no longer eligible.',
+          message: 'The accepted submission is not a Stop request.',
         );
       }
 
-      // Compare against the actual accepted command, not the
-      // event instance supplied in the processing plan.
-      final persisted_event = _codec.decode(
-        event_type: stored.event_type,
-        payload_json: stored.payload_json,
-      );
-
-      if (persisted_event is! WorkflowStopEvent ||
-          _codec.encode(persisted_event) != _codec.encode(command)) {
-        throw const WorkflowCommitException(
-          code: WorkflowCommitErrorCode.stale_submission,
-          message: 'Persisted stop command differs from the proposal.',
-        );
-      }
-
-      // Re-read the authoritative owner-scoped journal inside
-      // the transaction. A previous inbox read is never a lock.
-      //
-      // This also detects missing or corrupt projections and
-      // unrelated inconsistent histories belonging to this user.
-      final current = await WorkflowStateReader(
-        runtime: _runtime,
-        history_store: DriftWorkflowHistoryStore(database: _database),
-        os_user_id: _os_user_id,
-      ).current();
-
+      final current = await _reader().current();
       if (current == null) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.workflow_not_active,
-          message: 'The workflow is no longer active.',
+          message: 'No unfinished workflow remains to be stopped.',
         );
       }
 
-      final actual_state = current.state;
-      final identity = actual_state.identity;
-
-      if (identity.workflow_id != command.workflow_id) {
+      final actual = current.state;
+      if (actual.identity.workflow_id != accepted.workflow_id) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.workflow_id_mismatch,
-          message: 'Another workflow is now active.',
+          message: 'The accepted Stop targets a different workflow.',
         );
       }
 
-      // Reject stale or fabricated historical snapshots.
-      if (actual_state.version != previous.version ||
-          !_same_identity(identity, previous.identity) ||
+      if (actual.version != previous.version ||
+          !_same_identity(actual.identity, previous.identity) ||
           current.events.length != pending.committed_events.length) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.invalid_plan,
-          message: 'Stop plan no longer matches committed workflow state.',
+          message: 'Stop proposal disagrees with the current journal.',
         );
       }
 
-      // Compare each event using its canonical SDK representation.
-      // Historical JSON envelope versions may differ from the
-      // currently preferred serializer representation.
+      // Canonical encoding compares decoded values rather than assuming
+      // an event's object identity represents persisted equivalence.
       for (var index = 0; index < current.events.length; index++) {
         if (_codec.encode(current.events[index]) !=
             _codec.encode(pending.committed_events[index])) {
           throw const WorkflowCommitException(
             code: WorkflowCommitErrorCode.invalid_plan,
-            message: 'Stop plan differs from authoritative event history.',
+            message: 'The proposed previous history is not authoritative.',
           );
         }
       }
 
-      // Recompute the terminal state from authoritative history
-      // and the accepted command before performing any mutation.
-      final committed_result = _machine.replay([
-        ...current.events,
-        persisted_event,
-        outcome,
-      ]);
-
-      if (committed_result is! WorkflowEndedState ||
-          committed_result.version != result.version ||
-          !_same_identity(committed_result.identity, identity)) {
+      final behavior = _runtime.command_behaviors[accepted.runtimeType];
+      if (behavior == null) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.invalid_plan,
-          message: 'Stop events do not produce the expected terminal state.',
+          message: 'Stop command has no registered SDK behavior.',
+        );
+      }
+      try {
+        behavior.validate_submission(
+          accepted,
+          previous: actual,
+          identity: actual.identity,
+        );
+      } on WorkflowCommandValidationException {
+        throw const WorkflowCommitException(
+          code: WorkflowCommitErrorCode.invalid_plan,
+          message: 'Accepted Stop failed trusted command validation.',
         );
       }
 
-      final recorded_at_unix_ms = DateTime.now().toUtc().millisecondsSinceEpoch;
-
-      // Both events are appended to the existing journal.
-      // The original accepted stop payload and event ID are
-      // preserved; the outcome receives a new event ID.
-      for (var index = 0; index < events.length; index++) {
-        final event = index == 0 ? persisted_event : outcome;
-
-        await _database
-            .into(_database.workflowEvents)
-            .insert(
-              WorkflowEventsCompanion.insert(
-                event_id: index == 0 ? receipt.event_id : _uuid.v4(),
-                workflow_id: identity.workflow_id,
-                version: actual_state.version + index + 1,
-                correlation_id: receipt.correlation_id,
-                causation_id: Value(index == 0 ? null : receipt.event_id),
-                event_type: event.event_type,
-                payload_json: index == 0
-                    ? stored.payload_json
-                    : _codec.encode(event),
-                recorded_at_unix_ms: recorded_at_unix_ms,
-              ),
-            );
+      final result_from_history = _machine.replay([
+        ...current.events,
+        ...events,
+      ]);
+      if (result_from_history == null ||
+          !result_from_history.is_terminal ||
+          !_same_snapshot_identity(result_from_history, result)) {
+        throw const WorkflowCommitException(
+          code: WorkflowCommitErrorCode.invalid_plan,
+          message: 'Proposed Stop outcome does not reproduce terminal state.',
+        );
       }
 
-      // Release ownership only after appending the terminal
-      // outcome, still inside the same transaction.
-      //
-      // Compare-and-set guards the exact projected identity,
-      // bindings, and last committed active version.
+      await _append_outcomes(
+        pending: pending,
+        identity: actual.identity,
+        events: events,
+        previous_version: actual.version,
+      );
+
+      // The compare-and-delete checks every originally committed binding.
       final removed =
           await (_database.delete(_database.unfinishedWorkflows)..where(
                 (row) =>
                     row.os_user_id.equals(_os_user_id) &
-                    row.workflow_id.equals(identity.workflow_id) &
-                    row.target_id.equals(identity.target_id) &
-                    row.root_path.equals(identity.root.value) &
-                    row.version.equals(actual_state.version),
+                    row.workflow_id.equals(actual.identity.workflow_id) &
+                    row.target_id.equals(actual.identity.target_id) &
+                    row.root_path.equals(actual.identity.root.value) &
+                    row.version.equals(actual.version),
               ))
               .go();
-
       if (removed != 1) {
         throw const WorkflowCommitException(
           code: WorkflowCommitErrorCode.invalid_plan,
-          message: 'Unfinished-workflow ownership changed during stop.',
+          message: 'Unfinished workflow ownership changed during Stop.',
         );
       }
 
-      // A failed inbox completion rolls back both journal
-      // appends and the ownership release.
-      final updated =
-          await (_database.update(_database.workflowSubmissions)..where(
-                (row) =>
-                    row.event_id.equals(receipt.event_id) &
-                    row.scope_id.equals(_scope_id) &
-                    row.processing_state.equals('pending'),
-              ))
-              .write(
-                const WorkflowSubmissionsCompanion(
-                  processing_state: Value('completed'),
-                ),
-              );
-
-      if (updated != 1) {
-        throw const WorkflowCommitException(
-          code: WorkflowCommitErrorCode.stale_submission,
-          message: 'Stop submission completion lost its pending status.',
-        );
-      }
+      await _complete_submission(pending);
     });
   }
 
-  /// Compares established domain identities by value.
+  /// Re-reads and checks the exact eligible inbox command.
   ///
-  /// WorkflowIdentity is immutable but currently does not
-  /// implement value equality.
-  static bool _same_identity(WorkflowIdentity first, WorkflowIdentity second) {
-    return first.workflow_id == second.workflow_id &&
-        first.os_user_id == second.os_user_id &&
-        first.target_id == second.target_id &&
-        first.root.value == second.root.value;
-  }
+  /// This function runs inside the caller's SQLite transaction.
+  Future<WorkflowCommandEvent> _accepted_command(
+    PendingWorkflowCommand pending,
+  ) async {
+    final receipt = pending.receipt;
+    final stored = await (_database.select(
+      _database.workflowSubmissions,
+    )..where((row) => row.event_id.equals(receipt.event_id))).getSingleOrNull();
 
-  /// Validates independently trusted OS-user identity.
-  static String _require_os_user_id(String os_user_id) {
-    if (os_user_id.trim().isEmpty) {
-      throw ArgumentError.value(
-        os_user_id,
-        'os_user_id',
-        'Trusted OS-user identity must not be blank.',
+    if (stored == null ||
+        stored.processing_state != 'pending' ||
+        stored.scope_id != _scope_id ||
+        stored.scope_id != pending.scope_id ||
+        stored.correlation_id != receipt.correlation_id ||
+        stored.event_type != pending.command.event_type) {
+      throw const WorkflowCommitException(
+        code: WorkflowCommitErrorCode.stale_submission,
+        message: 'The accepted command is no longer eligible.',
       );
     }
 
-    return os_user_id;
+    final decoded = _codec.decode(
+      event_type: stored.event_type,
+      payload_json: stored.payload_json,
+    );
+    if (decoded is! WorkflowCommandEvent ||
+        decoded.runtimeType != pending.command.runtimeType ||
+        _codec.encode(decoded) != _codec.encode(pending.command)) {
+      throw const WorkflowCommitException(
+        code: WorkflowCommitErrorCode.stale_submission,
+        message: 'The persisted command differs from the submitted proposal.',
+      );
+    }
+    return decoded;
   }
 
-  /// Validates the configured trusted submission scope.
-  static String _require_scope(String scope_id) {
-    if (scope_id.trim().isEmpty) {
-      throw ArgumentError.value(scope_id, 'scope_id');
+  /// Persists only domain outcomes with fresh journal event identities.
+  ///
+  /// The first establishment outcome records independent trusted owner
+  /// metadata so restoration does not depend on a derived projection.
+  Future<void> _append_outcomes({
+    required PendingWorkflowCommand pending,
+    required WorkflowIdentity identity,
+    required List<WorkflowOutcomeEvent> events,
+    required int previous_version,
+  }) async {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    for (var index = 0; index < events.length; index++) {
+      final event = events[index];
+      await _database
+          .into(_database.workflowEvents)
+          .insert(
+            WorkflowEventsCompanion.insert(
+              event_id: _uuid.v4(),
+              workflow_id: identity.workflow_id,
+              os_user_id: event is WorkflowEstablishmentOutcomeEvent
+                  ? Value(identity.os_user_id)
+                  : const Value.absent(),
+              version: previous_version + index + 1,
+              correlation_id: pending.receipt.correlation_id,
+              causation_id: Value(pending.receipt.event_id),
+              event_type: event.event_type,
+              payload_json: _codec.encode(event),
+              recorded_at_unix_ms: now,
+            ),
+          );
     }
+  }
 
-    return scope_id;
+  /// Completes an accepted submission with compare-and-set semantics.
+  ///
+  /// Failure rolls back all outcome appends and ownership changes.
+  Future<void> _complete_submission(PendingWorkflowCommand pending) async {
+    final updated =
+        await (_database.update(_database.workflowSubmissions)..where(
+              (row) =>
+                  row.event_id.equals(pending.receipt.event_id) &
+                  row.scope_id.equals(_scope_id) &
+                  row.processing_state.equals('pending'),
+            ))
+            .write(
+              const WorkflowSubmissionsCompanion(
+                processing_state: Value('completed'),
+              ),
+            );
+    if (updated != 1) {
+      throw const WorkflowCommitException(
+        code: WorkflowCommitErrorCode.stale_submission,
+        message: 'Submission completion lost its pending status.',
+      );
+    }
+  }
+
+  /// Constructs the authoritative owner-scoped reader for this transaction.
+  WorkflowStateReader _reader() => WorkflowStateReader(
+    runtime: _runtime,
+    history_store: DriftWorkflowHistoryStore(database: _database),
+    os_user_id: _os_user_id,
+  );
+
+  /// Checks identity, lifecycle and version against a proposed snapshot.
+  static bool _same_snapshot_identity(
+    WorkflowSnapshot actual,
+    WorkflowSnapshot expected,
+  ) =>
+      actual.version == expected.version &&
+      actual.lifecycle.id == expected.lifecycle.id &&
+      actual.is_terminal == expected.is_terminal &&
+      _same_identity(actual.identity, expected.identity);
+
+  /// Compares all immutable original workflow identity bindings by value.
+  static bool _same_identity(WorkflowIdentity a, WorkflowIdentity b) =>
+      a.workflow_id == b.workflow_id &&
+      a.os_user_id == b.os_user_id &&
+      a.target_id == b.target_id &&
+      a.root.value == b.root.value;
+
+  /// Validates configured trusted identifiers without rewriting them.
+  static String _require_nonblank(String value, String name) {
+    if (value.trim().isEmpty) throw ArgumentError.value(value, name);
+    return value;
   }
 }

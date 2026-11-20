@@ -163,7 +163,7 @@ void main() {
 
       expect(registry.lifecycles, isEmpty);
       expect(registry.slice_keys, isEmpty);
-      expect(registry.transitions, isEmpty);
+      expect(registry.outcome_transitions, isEmpty);
 
       // The rejected module identifier is not reserved.
       registry.register(_TestModule('invalid', (_) {}));
