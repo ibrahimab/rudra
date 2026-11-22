@@ -76,6 +76,7 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   ///
   /// The SDK application will consume this through its persistence contract.
   /// The caller must keep this persistence context alive while observing.
+  @override
   WorkflowCommitSubscriber get workflow_commit_subscriber => _commit_channel;
 
   /// Durable submission contract consumed by the SDK.

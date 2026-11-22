@@ -5,6 +5,8 @@ import '../processing/workflow_quarantine.dart';
 import '../processing/workflow_submission_resolution.dart';
 import '../reading/workflow_history_store.dart';
 
+import '../observation/workflow_commit_channel.dart';
+
 /// Groups the durable workflow contracts needed by one SDK application.
 ///
 /// Trusted host composition supplies a persistence implementation and retains
@@ -37,6 +39,12 @@ abstract interface class WorkflowApplicationPersistence {
 
   /// Store that supplies consistent committed history evidence.
   WorkflowHistoryStore get workflow_history_store;
+
+  /// Committed-change notifications for SDK state observation.
+  ///
+  /// Shares its notification context with the committers supplied by
+  /// this persistence owner. Watching never modifies durable state.
+  WorkflowCommitSubscriber get workflow_commit_subscriber;
 
   /// Reader for durable acceptance, completion and failure statuses.
   WorkflowSubmissionStatusReader get workflow_status_reader;

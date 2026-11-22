@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
 import '../../state/rudra_state.dart';
@@ -16,6 +18,9 @@ import '../reading/workflow_state_reader.dart';
 import '../states/workflow_snapshot.dart';
 import '../states/workflows_state.dart';
 import '../workflow_runtime.dart';
+import '../observation/workflow_commit_channel.dart';
+import '../observation/workflow_state_observer.dart';
+
 import 'workflow_application_persistence.dart';
 
 /// Expected conflict when a trusted owner already has an unfinished workflow.
@@ -108,6 +113,8 @@ final class WorkflowApplication {
         quarantiner: persistence.workflow_quarantiner,
       ),
       statuses: persistence.workflow_status_reader,
+      commits: persistence.workflow_commit_subscriber,
+      os_user_id: trusted_os_user_id,
     );
   }
 
@@ -116,15 +123,19 @@ final class WorkflowApplication {
   /// [events] accepts commands, [reader] restores committed state,
   /// [processor] advances pending submissions and [statuses] queries their
   /// durable resolutions. The caller retains persistence ownership.
-  const WorkflowApplication._({
+  WorkflowApplication._({
     required EventManager events,
     required WorkflowStateReader reader,
     required WorkflowProcessor processor,
     required WorkflowSubmissionStatusReader statuses,
+    required WorkflowCommitSubscriber commits,
+    required String os_user_id,
   }) : _events = events,
        _reader = reader,
        _processor = processor,
-       _statuses = statuses;
+       _statuses = statuses,
+       _commits = commits,
+       _os_user_id = os_user_id;
 
   /// Durable explicit command submission service.
   final EventManager _events;
@@ -137,6 +148,28 @@ final class WorkflowApplication {
 
   /// Durable submission-resolution lookup service.
   final WorkflowSubmissionStatusReader _statuses;
+
+  /// Persistence-owned committed-change notification source.
+  final WorkflowCommitSubscriber _commits;
+
+  /// Authenticated workflow owner established by trusted composition.
+  final String _os_user_id;
+
+  /// SDK coordinator for authoritative state subscriptions.
+  late final WorkflowStateObserver _observer = WorkflowStateObserver(
+    read_state: read_state,
+    commits: _commits,
+    os_user_id: _os_user_id,
+  );
+
+  /// Observes initial verified application state and committed changes.
+  ///
+  /// Returns a stream of immutable [RudraState] snapshots.
+  /// Reading and observing never submit or process commands.
+  ///
+  /// Persistence and integrity failures propagate as stream errors.
+  /// The caller must cancel the subscription before closing persistence.
+  Stream<RudraState> observe_state() => _observer.observe();
 
   /// Reads the latest verified, coherent SDK application state.
   ///

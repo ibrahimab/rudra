@@ -278,6 +278,12 @@ final class _FakePersistence implements WorkflowApplicationPersistence {
   /// Supplies controlled submission processing statuses.
   final _StatusReader statuses = _StatusReader();
 
+  /// Local committed-change notifications for application boundary tests.
+  final LocalWorkflowCommitChannel commits = LocalWorkflowCommitChannel();
+
+  @override
+  WorkflowCommitSubscriber get workflow_commit_subscriber => commits;
+
   /// Supplies committed journal evidence for the SDK state reader.
   @override
   WorkflowHistoryStore get workflow_history_store => _HistoryStore(this);
