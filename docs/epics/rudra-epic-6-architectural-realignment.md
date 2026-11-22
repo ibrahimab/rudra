@@ -1,6 +1,6 @@
 # Rudra — Epic 6: Architectural Realignment
 
-**Status:** In progress. 6A and 6B implemented; 6C.1 implemented; 6C.2–6C.3 and 6D–6F remain open. 6C.1 verification was reported successful by the developer; this document update does not independently execute tests.  
+**Status:** In progress. 6A and 6B implemented; 6C.1 implemented; 6C.2–6C.3 and 6D–6F remain open. The 6C.2 `publish()` / `watch()` architecture was agreed on 23 November 2026 (Europe/Amsterdam); **no 6C.2 implementation is claimed**. 6C.1 verification was reported successful by the developer; this document update does not independently execute tests.  
 **Original title:** Feature Isolation, Extensibility & Test Architecture  
 **Canonical repository:** https://github.com/ibrahimab/rudra  
 **Original audit baseline:** `ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513` (20 November 2026)  
@@ -26,7 +26,7 @@ This epic is the implementation plan and architecture baseline for **6A–6F**. 
 5. **Distinct submission state.** Durable acceptance, pending processing, completion, rejection and quarantine are separate from committed workflow lifecycle state. Do not display accepted Start as established Active.
 6. **Pure transitions.** `WorkflowStateMachine` applies registered outcome transitions and reducers without I/O or subscriber management. It may produce a proposal later rejected by persistence.
 7. **Atomic commitment.** `WorkflowCommitter` revalidates trusted owner, identity, expected version, reservation and journal inside a transaction. Only a successful commit establishes an authoritative domain change.
-8. **Committed-state observation.** SDK subscribers consume coherent, validated `RudraState` snapshots. Persistence adapters supply change signals; notification delivery is not authority. The immediate 6C scope and deferred cross-process live delivery are distinguished in §8 and the companion design.
+8. **Committed-state observation through SDK ports.** The SDK defines a workflow commit **publisher** with `publish()` and a matching **subscriber** with `watch()`. A persistence adapter calls `publish()` only after its authoritative transaction succeeds; SDK observation consumes `watch()`, restores validated state using the existing state machine and exposes immutable `RudraState` to frontends. Notifications are change hints, never authority. The immediate 6C scope and deferred cross-process delivery are distinguished in §8 and the companion design.
 9. **No implicit writes.** Explore, navigate, restore, subscribe, render and Quit do not submit/process commands, create an absent persistence database or modify the target filesystem. Explicit authorized operations are separate.
 10. **Trusted host boundary.** OS-user identity, database location, permissions and adapter creation are provided by trusted composition, not untrusted frontend parameters. A future network-facing host must authenticate and authorize clients.
 11. **Frontend view state, not frontend domain state.** Small, focused view models consume SDK models plus local interaction state; stateless widgets render them. UI visibility is not authorization.
@@ -78,7 +78,7 @@ Explicit frontend action
   → WorkflowProcessingCommitted(plan), only after successful commit
 ```
 
-`WorkflowProcessingCommitted` is a **returned value**, not a broadcast to subscribed SDK clients. `WorkflowApplication.read_state()` reconstructs one validated current `RudraState`; there is not yet a live SDK subscription. No architectural change to transition or replay is needed to add observation.
+`WorkflowProcessingCommitted` is a **returned value**, not a broadcast to subscribed SDK clients. `WorkflowApplication.read_state()` reconstructs one validated current `RudraState`; there is not yet a live SDK subscription. No architectural change to transition or replay is needed to add observation. **6C.2 adds a separate post-commit notification path**, from persistence-owned `publish()` to SDK-owned `watch()` consumption and validated state observation.
 
 `WorkflowApplication` currently exposes `read_state`, `submit_command`, `status_for`, `process_next`, `start` and `stop`. `start`/`stop` coordinate confirmed outcomes by processing eligible submissions when necessary; a future host may take over background processing, but it is not present in 6C.
 
@@ -88,21 +88,25 @@ Explicit frontend action
 
 **Agreed staged delivery:** 6C.2 implements **in-process, persistence-backed, committed-state observation** and local reconciliation. 6C.3 integrates it into Explorer. Live cross-process fan-out, multi-client reconnection and remote subscriptions are **not claimed complete in 6C**; they are planned for a later trusted-host milestone. Fresh restoration from the existing journal remains authoritative across processes today. This is a scoped intermediate deliverable, **not a revision or repeal of ADR 0006**. See the companion document §§3–7.
 
-### 3.5 Observation ownership
+### 3.5 Observation ownership and the agreed `publish()` / `watch()` ports
 
 | Boundary | Agreed responsibility |
 |---|---|
-| `WorkflowStateMachine` | Pure outcome transitions and slice projection; unchanged by observation |
-| `WorkflowProcessor` | Coordinates commands and returns durable processing results; no new parallel event bus |
-| `WorkflowCommitter` | Atomic commit authority; successful completion identifies the durable publication boundary |
-| **Persistence change source** | Emits signals after successful commits; adapter owns notification mechanism and reconciliation capabilities |
-| `WorkflowStateReader` | Revalidates committed evidence and reconstructs state |
-| **SDK observation coordinator / `WorkflowApplication`** | Registers local consumers, publishes validated immutable `RudraState` snapshots and manages subscription lifecycle |
-| Frontends | Consume state and render; handle UI lifetime, loading and errors; never replay outcome histories |
+| `WorkflowStateMachine` | **Unchanged:** pure outcome transitions, typed reducers and deterministic replay, without I/O or subscriptions |
+| `WorkflowProcessor` | Proposes and validates outcomes; returns durable processing results, not a broadcast |
+| `WorkflowCommitter` | Revalidates against persistence and atomically commits journal, reservation and submission outcome |
+| **SDK-defined `WorkflowCommitPublisher`** | Persistence-facing port with **`publish()`**; the adapter invokes it **after** successful commitment, once per coherent transaction |
+| **SDK-defined `WorkflowCommitSubscriber`** | Observation-facing port with **`watch()`**; SDK application observation consumes committed-change hints from the same shared notification context |
+| **Trusted composition / concrete notification implementation** | Wires the publisher and subscriber sides to one local channel for the configured persistence/application lifetime; adapters may choose the underlying mechanism |
+| `WorkflowStateReader` | Restores and validates durable evidence through `WorkflowStateMachine.replay()` |
+| **SDK observation coordinator / `WorkflowApplication`** | Registers local consumers, reconciles changes, and exposes immutable validated `RudraState` snapshots |
+| Frontends | Consume state and render; own UI lifetime and errors; never replay domain histories or authorize transitions |
 
-A transaction may commit multiple outcomes. Publish a **coherent post-transaction snapshot**, not uncommitted intermediate transition results. Subscriber failures must not reverse or misreport a committed transaction. Subscription startup and read must account for a commit occurring between listener registration and snapshot retrieval.
+The two **contract responsibilities and method names are agreed**. They are not two independent notification services: the same composition-owned implementation may satisfy both interfaces. Neither the publisher nor persistence carries `WorkflowSnapshot` or `RudraState` as authority. After a signal, the SDK obtains a validated application snapshot using its existing reader and state machine. In particular, committed Stop yields a terminal `WorkflowSnapshot` but `WorkflowsState.current_workflow == null`.
 
-**Design not yet finalized:** exact `Stream` signatures, owner-scoped persistence notification interface, cursor/revision strategy, shared fan-out, cancellation and error semantics. `Stream<RudraState> observe_state()` is a candidate, not an approved exact signature. No generic SDK polling loop; persistence owns how change notification is implemented. Refer to companion design before editing code.
+A transaction may commit multiple outcomes. Notify once after the transaction and publish a **coherent post-transaction application snapshot**, not intermediate proposals. Normal notification delivery/subscriber failures must not turn an already committed transaction into an apparent failure. Subscribe/read must detect or reconcile a commit occurring between listener registration and the initial state read. Trusted `os_user_id` scope is established by composition, never by an untrusted frontend.
+
+**Still to design in 6C.2:** exact Dart parameter/return types for `publish()` and `watch()`, public `observe_state()` signature, registration/read race protocol, local fan-out, cancellation, failure behavior and any revision/cursor metadata. `Stream<void>` for `watch()` and `Stream<RudraState>` for application observation remain illustrative until their semantics are checked. No generic SDK polling loop, IPC or host is introduced in 6C.2. See the companion document §4.
 
 ## 4. Frontend composition and interaction
 
@@ -186,7 +190,7 @@ Original source review baseline: [Runner](https://github.com/ibrahimab/rudra/blo
 | **6A — Explorer realignment** | **Implemented** | `62d7c9551` marked 6A complete; physical input, action registry, compositional UI and isolated tests |
 | **6B — Composite SDK state** | **Implemented** | `e8338e130` through `be5275e1f`; snapshot, typed slices/reducers, immutable `RudraState`, outcome-only replay and tests |
 | **6C.1 — Portable operations** | **Implemented; developer-reported verification green** | `c0cd06543`, docs fixes `dcf86f8e2`; `WorkflowApplication`, SQLite durable status, CLI delegation |
-| **6C.2 — Observation contracts and local publication** | **Not implemented** | Design agreed; exact API and adapter implementation pending |
+| **6C.2 — SDK `publish()` / `watch()` commit observation** | **Not implemented** | Publisher/subscriber ports and post-commit reconciliation direction agreed; precise signatures and implementation pending |
 | **6C.3 — Explorer observation integration** | **Not implemented** | Explorer still performs read-only refresh around actions |
 | **6D — Safe generic continuation/persistence** | **Pending** | Current SQLite committer still dispatches concrete Start/Stop categories |
 | **6E — Nested CLI feature contributions** | **Pending** | Architectural target accepted; not marked implemented |
@@ -239,7 +243,7 @@ apps/cli/test/
 
 ### 7.2 6C test ownership and scope
 
-6C.2 must verify: initial validated state, registration/read race, multiple local subscribers, post-commit visibility, multi-outcome transaction coherence, no premature acceptance update, failed/rolled-back transaction silence, trusted owner isolation, cancellation, corrupt evidence, and no write-on-read. Use fake persistence to test the portable contract and real Drift integration to validate transaction behavior. When feasible, exercise changes across workflow A → none → workflow B **within the supported local observation scope**.
+6C.2 must verify: initial validated state, registration/read race, multiple local subscribers, post-commit `publish()` / `watch()` delivery, multi-outcome transaction coherence, no premature acceptance update, failed/rolled-back transaction silence, trusted owner isolation, cancellation, corrupt evidence, and no write-on-read. Use synthetic publisher/subscriber implementations and fake persistence for portable SDK contract tests; use real Drift/SQLite transactions for adapter-level safety tests. Demonstrate that SDK observation has no SQLite dependency and that another adapter could consume the same ports without SDK edits. When feasible, exercise workflow A → none → workflow B **within the supported local observation scope**.
 
 6C.3 must verify: initial absent/active Explorer presentation, locally committed Start/Stop, stale UI action handling, safe rendering/input coordination, subscription cancellation and terminal restoration. Do not count cross-process live behavior as passing on the strength of in-process tests.
 
@@ -261,22 +265,23 @@ Immutable `RudraState`/`WorkflowsState`/`WorkflowSnapshot`; typed slices and red
 
 SDK read/current, confirmed Start/Stop, durable acceptance/processing status and CLI delegation. Implemented in `c0cd06543`; documentation cleanup in `dcf86f8e2`. Tests reported green by developer; retain latest-commit verification discipline.
 
-### 6C.2 — Persistence-backed SDK observability — NEXT
+### 6C.2 — SDK commit publisher/subscriber and application-state observation — NEXT
 
-**Responsibility:** Introduce an SDK-defined observation contract whose change source is implemented by the persistence adapter and triggered **after** a successful atomic workflow commit. The SDK uses existing `WorkflowStateReader` and composite state to publish validated, immutable snapshots to local consumers.
+**Responsibility:** Connect the existing SDK state machine and durable persistence authority to a local observable application state **through SDK-defined persistence notification ports**. A SQLite/MySQL/other adapter calls `WorkflowCommitPublisher.publish()` only once the corresponding transaction has durably committed. The SDK application consumes the paired `WorkflowCommitSubscriber.watch()` notifications, reconstructs through `WorkflowStateReader` and emits validated immutable `RudraState` values. A different persistence adapter must not require changes to SDK domain/observation logic.
 
 **Implementation constraints:**
 
-- Leave `WorkflowStateMachine`, reducers, command behaviors, and existing durable submission semantics intact.
-- Do not publish a proposal before commitment; do not report acceptance as a domain transition.
-- Do not make observer failures turn a committed operation into an apparent commit failure.
-- Design a gap-aware initial subscribe/read protocol and safe concurrent notifications; handle cancellation and failed restoration explicitly.
+- **Lock in the responsibilities and names:** persistence calls **`publish()`**; SDK observation consumes **`watch()`**. Confirm precise Dart types and owner-scope semantics before coding; the companion §4 provides illustrative interfaces, not preapproved signatures.
+- Supply both ports through **one shared, explicitly owned notification context** at trusted composition. Do not accidentally give committers and observers unrelated stream controllers.
+- Leave `WorkflowStateMachine`, feature reducers, command behaviors and durable submission semantics unchanged. Its `transition()` proposes state; its `replay()` also powers verified restoration.
+- Publish only after atomic transaction success. A returned `WorkflowProcessingCommitted(plan)` is not the notification mechanism; `plan.resulting_state` is not blindly published as `RudraState`.
+- Failed/rolled-back transactions, accepted-but-pending submissions and rejected/quarantined commands do not cause a committed-domain-state notification.
+- Notification delivery/subscriber failures must not misreport committed transactions as failed. Define explicit observation errors and cancellation/disposal semantics.
+- Implement gap-aware initial watch/read and serialized reconciliation; handle rapid commits and changes between distinct current workflows without treating workflow-local version as an application revision.
 - Preserve trusted owner scoping, no implicit writes and no database creation merely because a frontend subscribes.
-- Persistence adapters own notification machinery; **do not embed a generic polling loop or IPC transport in the SDK**.
-- Deliver and test **local in-process** observation in this slice. Arbitrary distinct-process live notification is deferred, not declared implemented.
-- An API such as `Stream<RudraState> observe_state()` is **illustrative**, not preapproved. Agree on the exact contract before editing code.
+- Deliver and test **local in-process** observation. No generic SDK polling loop, IPC, cross-process live push or background host in this slice.
 
-**Done when:** A local consumer receives a validated initial state and committed post-transaction changes through the SDK, without reproducing domain logic, and the documented race/error/cancellation/rollback/no-implicit-write tests pass. Scope limitations remain explicit.
+**Done when:** A local consumer receives a validated initial `RudraState` and committed post-transaction updates through the portable SDK; real SQLite transaction tests and synthetic contract tests prove the publisher/subscriber separation, replay, race/error/cancellation/rollback and no-implicit-write guarantees. Scope limitations remain explicit.
 
 ### 6C.3 — Explorer observation adoption — PLANNED
 
@@ -308,7 +313,7 @@ Remove stale compatibility/dead presentation layers, reconcile `docs/ARCHITECTUR
 
 ## 9. Future trusted host — direction only, outside Epic 6
 
-The future host is **another SDK-consuming application in the Rudra monorepo** (conceptually `apps/host`), not a separate SDK, alternate state machine or separate repository. It will run a long-lived trusted application runtime, coordinate processing, authenticate clients, and forward validated SDK snapshots and application operations through transport adapters.
+The future host is **another SDK-consuming application in the Rudra monorepo** (conceptually `apps/host`), not a separate SDK, alternate state machine or separate repository. It will run a long-lived trusted application runtime, coordinate processing, authenticate clients, and forward validated SDK snapshots and application operations through transport adapters. It reuses SDK `publish()` / `watch()` notification wiring and SDK application-state observation rather than introducing a host-specific workflow state machine. A future MySQL or other persistence adapter consumes the same SDK ports; any external-writer detection or network delivery mechanism remains adapter/host-specific.
 
 Two Explorer terminal processes, a Flutter desktop frontend, web clients and eventually authenticated mobile clients should observe the same host-owned authoritative state. The host will preserve trust and safety; a remote subscription never implies filesystem execution authority.
 
@@ -331,7 +336,7 @@ These are **future architectural directions**, not existing code or settled depl
 - [ ] Trusted owner and one-unfinished-workflow reservation remain enforced transactionally.
 - [ ] Stale expected workflow identity/version cannot change a replacement workflow.
 - [ ] Journal, ownership projection and durable submission completion remain atomic.
-- [ ] Failed/rolled-back transactions never notify success; subscriber failures never undo committed success.
+- [ ] `publish()` is invoked only after a successful atomic commit; `watch()` is wired to the same scoped notification context. Failed/rolled-back transactions never notify success; subscriber failures never undo or misreport committed success.
 - [ ] Terminal input/modes/screen restore on normal exit and catchable errors, without claiming SIGKILL/power-loss guarantees.
 - [ ] Cleanup approval, reservation, gatekeeper, outbox, quarantine and recovery invariants from ADR 0006 remain separate from observation.
 - [ ] Feature additions modify intended feature/UI surfaces and tests, not unrelated generic infrastructure.
@@ -348,6 +353,8 @@ This is a **verification checklist**, not a claim that all items are presently t
 - **Universal UI action-descriptor registry or universal plugin/service locator:** rejected; explicit, typed, layer-specific contribution only.
 - **Giant concrete lifecycle-state subclass tree or `Map<String, dynamic>` slices:** rejected; immutable typed composite state is implemented.
 - **Publishing from a pure transition:** rejected; a proposed outcome is not a committed outcome.
+- **Directly publishing `WorkflowProcessingPlan.resulting_state` as authoritative:** deferred/rejected for 6C.2; a transaction may fail and current persistence verification does not establish equality of every feature slice. Restore through the SDK reader instead.
+- **A SQLite-owned `WorkflowChangeSource` as the portable SDK abstraction:** rejected in favor of SDK-owned, paired `WorkflowCommitPublisher.publish()` / `WorkflowCommitSubscriber.watch()` ports consumed by interchangeable adapters and SDK observation.
 - **Treating notification as source of truth:** rejected; validated persisted journal remains authoritative.
 - **SDK-owned polling/OS daemon spawning:** rejected as an SDK responsibility; adapters own signals and host lifecycle remains platform-specific.
 - **Implementing an entire host service to finish 6C:** deferred deliberately; multi-client live delivery remains a future ADR requirement.
@@ -376,7 +383,7 @@ Inspect failing output and the list of changed files; do not assert tests were e
 
 ### Next-session baseline
 
-> Continue Rudra Epic 6 at **6C.2 — Persistence-backed SDK observability**. Read `docs/epics/rudra-epic-6-architectural-realignment.md` and its 6C companion, then inspect latest `main`. 6A, 6B and 6C.1 are implemented. The SDK already has immutable `RudraState`/`WorkflowsState`/`WorkflowSnapshot`, registered reducers, deterministic replay, `WorkflowApplication.read_state()` and a confirmed `WorkflowCommitter` boundary. Define an SDK observation API and a persistence-owned committed-change source; publish validated local state after atomic commit. Do not put subscriber hooks in the pure state machine, introduce SDK polling, or build the future host during 6C. Different OS processes being live-synchronized is deferred and must not be claimed implemented. Discuss and agree on the exact contract before manual edits; use feature-isolated tests and verify each completed slice.
+> Continue Rudra Epic 6 at **6C.2 — SDK commit publication and observable application state**. Read `docs/epics/rudra-epic-6-architectural-realignment.md` and the 6C companion, then inspect latest `main`. 6A, 6B and 6C.1 are implemented. The SDK already has immutable `RudraState`/`WorkflowsState`/`WorkflowSnapshot`, registered reducers, deterministic replay, `WorkflowApplication.read_state()` and a confirmed `WorkflowCommitter` boundary. The architecture is agreed: SDK-defined `WorkflowCommitPublisher.publish()` is called by SQLite (and future persistence adapters) **after** successful transaction commitment; SDK-defined `WorkflowCommitSubscriber.watch()` is consumed by SDK observation from the **same shared notification context**; the SDK restores authoritative state through its existing state machine and exposes `RudraState` snapshots. `publish` and `watch` are the agreed method names; precise types/race/failure semantics need review before coding. Do not put subscribers in the pure state machine, trust proposed `resulting_state` as committed state, introduce SDK polling, or build the host in 6C. Cross-process live sync is deferred. Work collaboratively in coherent slices, with feature-isolated tests and verification.
 
 ## 13. References and provenance
 
@@ -390,4 +397,4 @@ Inspect failing output and the list of changed files; do not assert tests were e
 - [SQLite committer](../../packages/persistence/sqlite/lib/src/features/workflow/history/drift_workflow_committer.dart)
 - [Explorer action registry](../../apps/cli/lib/src/features/explorer/application/explorer_action_registry.dart), [Explorer runner](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart)
 
-**Provenance:** Original architecture agreed on 20 November 2026; 6C observability/host staging agreed on 22 November 2026. Current implementation ledger grounded in inspected GitHub history through `dcf86f8e2`. Earlier 6A-only status, illustrative state designs and obsolete 6B resume prompts are superseded; ADR 0006's cross-process product requirement remains open until separately implemented and verified.
+**Provenance:** Original architecture agreed on 20 November 2026; 6C observability/host staging agreed on 22 November 2026; SDK `publish()` / `watch()` contract direction confirmed on 23 November 2026 (Europe/Amsterdam). Current implementation ledger grounded in inspected GitHub history through `dcf86f8e2`. Earlier 6A-only status, illustrative state designs and obsolete 6B resume prompts are superseded; ADR 0006's cross-process product requirement remains open until separately implemented and verified.
