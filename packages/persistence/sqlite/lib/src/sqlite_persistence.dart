@@ -13,6 +13,8 @@ import 'features/workflow/submissions/drift_workflow_rejection_store.dart';
 import 'features/workflow/submissions/drift_workflow_status_reader.dart';
 import 'features/workflow/submissions/drift_workflow_quarantine_store.dart';
 
+import 'features/workflow/observation/publishing_workflow_committer.dart';
+
 /// Owns SQLite persistence resources for one Rudra application.
 ///
 /// Exposes SDK-defined contracts while keeping database
@@ -66,6 +68,16 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   /// Database connection owned for this persistence lifetime.
   final RudraDatabase _database;
 
+  /// Shared local notification channel for this persistence context.
+  final LocalWorkflowCommitChannel _commit_channel =
+      LocalWorkflowCommitChannel();
+
+  /// Observes durable commits performed through this persistence context.
+  ///
+  /// The SDK application will consume this through its persistence contract.
+  /// The caller must keep this persistence context alive while observing.
+  WorkflowCommitSubscriber get workflow_commit_subscriber => _commit_channel;
+
   /// Durable submission contract consumed by the SDK.
   late final EventSubmissionStore event_submission_store =
       DriftEventSubmissionStore(
@@ -96,18 +108,21 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
     );
   }
 
-  /// Constructs a committer for an authenticated OS user.
+  /// Creates a transactional committer with post-commit notifications.
   ///
-  /// The trusted identity is supplied independently of the
-  /// submission scope and the proposed workflow state.
-  ///
-  /// Start and Stop share the same runtime and database.
+  /// [os_user_id] is supplied by trusted application composition.
+  /// The committer publishes only when its delegate commits successfully.
+  @override
   WorkflowCommitter workflow_committer_for({required String os_user_id}) {
-    return DriftWorkflowCommitter(
-      database: _database,
-      scope_id: _scope_id,
+    return PublishingWorkflowCommitter(
+      delegate: DriftWorkflowCommitter(
+        database: _database,
+        scope_id: _scope_id,
+        os_user_id: os_user_id,
+        runtime: _runtime,
+      ),
+      publisher: _commit_channel,
       os_user_id: os_user_id,
-      runtime: _runtime,
     );
   }
 
@@ -156,7 +171,13 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   /// Releases the database connection and its resources.
   ///
   /// Consumers must finish outstanding operations before closing.
-  Future<void> close() => _database.close();
+  Future<void> close() async {
+    try {
+      await _database.close();
+    } finally {
+      await _commit_channel.close();
+    }
+  }
 
   /// Validates the trusted submission scope.
   static String _validate_scope(String scope_id) {
