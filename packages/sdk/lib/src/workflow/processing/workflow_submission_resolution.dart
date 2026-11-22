@@ -32,15 +32,63 @@ enum WorkflowRejectionCode {
   workflow_id_mismatch,
 }
 
+/// Identifies the last journal outcome committed by one submission.
+///
+/// The persistence adapter resolves this reference through the journal's
+/// causation identity, rather than inferring it from the current projection.
+/// [sequence] is database-global; [version] is workflow-local.
+final class WorkflowCommittedOutcome {
+  /// Creates a validated reference to a committed outcome.
+  ///
+  /// [workflow_id] identifies the affected workflow. [event_type] is its
+  /// registered outcome identifier. [version] and [sequence] must be positive.
+  /// Invalid values throw [ArgumentError].
+  WorkflowCommittedOutcome({
+    required this.workflow_id,
+    required this.event_type,
+    required this.version,
+    required this.sequence,
+  }) {
+    if (workflow_id.trim().isEmpty ||
+        event_type.trim().isEmpty ||
+        version <= 0 ||
+        sequence <= 0) {
+      throw ArgumentError('Invalid committed workflow outcome reference.');
+    }
+  }
+
+  /// Immutable identifier of the workflow affected by the submission.
+  final String workflow_id;
+
+  /// Registered identifier of its final committed domain outcome.
+  final String event_type;
+
+  /// Workflow-local version of the final outcome.
+  final int version;
+
+  /// Database-global journal sequence of the final outcome.
+  final int sequence;
+}
+
 /// Queryable resolution of a previously accepted submission.
 ///
 /// This represents submission processing, not the workflow's
-/// event-sourced lifecycle state.
+/// event-sourced lifecycle state. A completed resolution references the
+/// submission's own committed journal outcome; it never supplies a substitute
+/// current-workflow snapshot.
 final class WorkflowSubmissionResolution {
   /// Creates an immutable view of submission processing.
+  ///
+  /// [receipt] identifies the accepted request and [state] its durable
+  /// processing condition. [committed_outcome] identifies confirmed journal
+  /// evidence for a completed request. [rejection_code] and
+  /// [rejected_at_unix_ms] describe an expected business rejection.
+  /// [quarantine_code], [quarantine_diagnostic] and
+  /// [quarantined_at_unix_ms] describe a preserved unreadable submission.
   const WorkflowSubmissionResolution({
     required this.receipt,
     required this.state,
+    this.committed_outcome,
     this.rejection_code,
     this.rejected_at_unix_ms,
     this.quarantine_code,
@@ -53,6 +101,12 @@ final class WorkflowSubmissionResolution {
 
   /// Current durable processing state.
   final WorkflowSubmissionState state;
+
+  /// Journal outcome linked to a successfully completed submission.
+  ///
+  /// Must be supplied by a trustworthy persistence adapter for completion.
+  /// A missing value is an integrity failure for confirmed SDK operations.
+  final WorkflowCommittedOutcome? committed_outcome;
 
   /// Business rejection reason, if rejected.
   final WorkflowRejectionCode? rejection_code;
@@ -79,7 +133,10 @@ final class WorkflowSubmissionResolution {
 abstract interface class WorkflowSubmissionStatusReader {
   /// Finds a submission's resolution within the trusted scope.
   ///
-  /// Returns null when no matching submission is accessible.
+  /// [receipt] contains the original event and correlation identifiers.
+  /// Returns null when no matching submission is accessible. Completed
+  /// results must include a causally linked [WorkflowCommittedOutcome].
+  /// Read and journal-integrity failures propagate.
   Future<WorkflowSubmissionResolution?> status_for(
     EventSubmissionReceipt receipt,
   );
@@ -89,10 +146,12 @@ abstract interface class WorkflowSubmissionStatusReader {
 ///
 /// Implementations must atomically change an eligible pending
 /// submission into a rejected submission with its reason.
-///
 /// A stale or completed submission must never be overwritten.
 abstract interface class WorkflowSubmissionRejector {
-  /// Persists the confirmed rejection of a pending command.
+  /// Persists the confirmed rejection of a pending [submission].
+  ///
+  /// [code] classifies the business conflict. The operation completes only
+  /// after the rejection is durable; persistence failures propagate.
   Future<void> reject({
     required PendingWorkflowCommand submission,
     required WorkflowRejectionCode code,

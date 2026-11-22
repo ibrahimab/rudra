@@ -118,6 +118,16 @@ void main() {
             .status_for(second);
 
         expect(completed_status!.state, WorkflowSubmissionState.completed);
+        expect(
+          completed_status.committed_outcome?.workflow_id,
+          'frontend-workflow-1',
+        );
+        expect(completed_status.committed_outcome?.version, 1);
+        expect(
+          completed_status.committed_outcome?.event_type,
+          WorkflowStartedEvent.type_id,
+        );
+        expect(completed_status.committed_outcome?.sequence, greaterThan(0));
 
         expect(rejected_status!.state, WorkflowSubmissionState.rejected);
 
@@ -166,6 +176,14 @@ void main() {
         );
 
         expect(first_status!.state, WorkflowSubmissionState.completed);
+        expect(
+          first_status.committed_outcome?.workflow_id,
+          'frontend-workflow-1',
+        );
+        expect(
+          first_status.committed_outcome?.event_type,
+          WorkflowStartedEvent.type_id,
+        );
 
         expect(second_status!.state, WorkflowSubmissionState.rejected);
 

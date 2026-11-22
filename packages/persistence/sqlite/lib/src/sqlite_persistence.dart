@@ -37,7 +37,7 @@ import 'features/workflow/submissions/drift_workflow_quarantine_store.dart';
 ///   await persistence.close();
 /// }
 /// ```
-final class RudraSqlitePersistence {
+final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   /// Creates a SQLite persistence context.
   ///
   /// [runtime] supplies the exact workflow configuration

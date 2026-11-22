@@ -5,7 +5,6 @@ import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
 import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
-import 'package:rudra_cli/src/features/workflow/application/workflow_stop_exception.dart';
 
 /// Verifies explicit workflow lifecycle actions through the CLI.
 ///

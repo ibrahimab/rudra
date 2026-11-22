@@ -58,6 +58,10 @@ export 'processing/workflow_submission_resolution.dart';
 export 'processing/workflow_processing_result.dart';
 export 'processing/workflow_quarantine.dart';
 
+/// Owner-scoped portable workflow application and persistence contracts.
+export 'application/workflow_application.dart';
+export 'application/workflow_application_persistence.dart';
+
 /// Read-only workflow history and restoration.
 export 'reading/workflow_history_store.dart';
 export 'reading/workflow_state_reader.dart';

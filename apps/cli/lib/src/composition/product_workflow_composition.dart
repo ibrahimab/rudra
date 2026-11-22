@@ -4,41 +4,31 @@ import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:uuid/uuid.dart';
 
-import '../features/workflow/application/workflow_start_exception.dart';
-import '../features/workflow/application/workflow_stop_exception.dart';
-
-/// Composes persistent workflow services for the product CLI.
+/// Composes portable SDK workflow operations with trusted macOS services.
 ///
-/// One workflow operation owns one SQLite persistence instance.
-/// Connections are closed before the operation returns.
+/// Each operation opens one SQLite persistence owner and closes it before
+/// returning. Trusted identity, private storage location, permissions and
+/// workflow-ID generation belong to this host composition boundary.
 ///
-/// Workflow creation requires an explicit call to [start].
-/// [current] only restores committed workflow state.
-///
-/// The configured OS-user identity must originate from a
-/// trusted platform boundary. Submission scope remains a
-/// separate concept from authenticated workflow ownership.
+/// Construction and read-only checks never create workflow persistence.
+/// Only an explicit Start may initialize the storage directory.
 final class ProductWorkflowComposition {
-  /// Creates composition with injectable platform dependencies.
+  /// Creates composition with an injected [database_file] and identity source.
   ///
-  /// Tests may inject a disposable database and deterministic
-  /// OS-user identity without using native identity discovery.
-  ///
-  /// Construction performs no database or filesystem I/O.
+  /// [os_user_id_provider] must resolve a trusted platform identity. Tests
+  /// may supply a deterministic identity and disposable database location.
+  /// No persistence or filesystem I/O occurs during construction.
   ProductWorkflowComposition({
     required this.database_file,
     required Future<String> Function() os_user_id_provider,
   }) : _os_user_id_provider = os_user_id_provider;
 
-  /// Creates the production composition for local macOS.
+  /// Creates production workflow composition for the local macOS host.
   ///
-  /// The OS identity is obtained from the process's effective
-  /// host context using the absolute system id executable.
-  ///
-  /// HOME selects the storage location, never the OS identity.
-  /// It must be an absolute path.
-  ///
-  /// No database is opened or created by this factory.
+  /// The effective OS-user UID is obtained through `/usr/bin/id` and HOME
+  /// selects only storage location. Throws on unsupported hosts, missing
+  /// absolute HOME or unresolvable identity during a subsequent operation.
+  /// Construction does not open or create SQLite persistence.
   factory ProductWorkflowComposition.for_current_host() {
     if (!Platform.isMacOS) {
       throw UnsupportedError(
@@ -47,7 +37,6 @@ final class ProductWorkflowComposition {
     }
 
     final home = Platform.environment['HOME'];
-
     if (home == null || !home.startsWith('/')) {
       throw StateError('An absolute HOME directory is required.');
     }
@@ -58,78 +47,51 @@ final class ProductWorkflowComposition {
       ),
       os_user_id_provider: () async {
         final result = await Process.run('/usr/bin/id', ['-u']);
-
         if (result.exitCode != 0) {
           throw StateError('Unable to resolve the operating-system UID.');
         }
 
         final uid = int.tryParse((result.stdout as String).trim());
-
         if (uid == null || uid < 0) {
           throw StateError('Invalid operating-system UID.');
         }
-
         return 'macos-uid:$uid';
       },
     );
   }
 
-  /// Stable database location supplied by application composition.
+  /// Stable host-provided file containing durable workflow persistence.
   final File database_file;
 
-  /// Trusted platform identity provider.
+  /// Trusted host identity provider used for owner-scoped operations.
   final Future<String> Function() _os_user_id_provider;
 
-  /// Restores an established workflow without creating one.
+  /// Reads the verified unfinished workflow without creating storage.
   ///
-  /// If no database exists, returns null without creating a
-  /// database, directory, submission, or workflow event.
-  ///
-  /// Invalid persisted state propagates as an SDK integrity
-  /// failure rather than being silently repaired.
+  /// Returns null for established absence, including when the database file
+  /// has not yet been initialized. Journal and ownership integrity errors
+  /// propagate instead of being interpreted as absence.
   Future<WorkflowSnapshot?> current() async {
     if (!await database_file.exists()) {
       return null;
     }
 
     final os_user_id = await _trusted_os_user_id();
-    final runtime = WorkflowRuntime.standard();
-
-    final persistence = _open_persistence(
-      runtime: runtime,
+    return _with_application(
       os_user_id: os_user_id,
+      operation: (application) async {
+        final state = await application.read_state();
+        return state.workflows.current_workflow;
+      },
     );
-
-    try {
-      final history = await WorkflowStateReader(
-        runtime: runtime,
-        history_store: persistence.workflow_history_store,
-        os_user_id: os_user_id,
-      ).current();
-
-      return history?.state;
-    } finally {
-      await persistence.close();
-    }
   }
 
-  /// Explicitly submits and processes a workflow-start request.
+  /// Explicitly establishes a workflow at [target_id] and absolute [root].
   ///
-  /// The accepted request is durably stored through EventManager.
-  /// WorkflowProcessor then performs registered SDK behavior
-  /// and guarded commitment.
-  ///
-  /// Processing is performed only for this explicit CLI action.
-  /// Opening Explorer never invokes this method.
-  ///
-  /// Previously pending submissions in the same trusted scope
-  /// may be processed before the newly accepted request.
-  ///
-  /// Returns only after the requested submission is committed
-  /// and its resulting workflow is restored from the journal.
-  ///
-  /// Business rejections, quarantines, and infrastructure
-  /// failures never produce a successful active result.
+  /// MacOS path validation precedes persistence initialization. The storage
+  /// directory is created with owner-only permissions before opening SQLite.
+  /// Returns a committed SDK [WorkflowSnapshot]. SDK business conflicts and
+  /// persistence errors propagate without fabricating successful outcomes.
   Future<WorkflowSnapshot> start({
     required String target_id,
     required TargetPath root,
@@ -142,144 +104,32 @@ final class ProductWorkflowComposition {
       );
     }
 
+    // Resolve ownership before creating any persistence directory.
     final os_user_id = await _trusted_os_user_id();
 
-    // Only an explicit start action may initialize storage.
+    // Only explicit Start may initialize and secure the storage directory.
     await database_file.parent.create(recursive: true);
-
-    // Keep the database directory private before opening SQLite.
     final permissions = await Process.run('/bin/chmod', [
       '700',
       database_file.parent.path,
     ]);
-
     if (permissions.exitCode != 0) {
       throw StateError('Unable to secure Rudra persistence directory.');
     }
 
-    final runtime = WorkflowRuntime.standard();
-
-    final persistence = _open_persistence(
-      runtime: runtime,
+    return _with_application(
       os_user_id: os_user_id,
+      operation: (application) =>
+          application.start(target_id: target_id, root: root),
     );
-
-    try {
-      final reader = WorkflowStateReader(
-        runtime: runtime,
-        history_store: persistence.workflow_history_store,
-        os_user_id: os_user_id,
-      );
-
-      // Avoid submitting a redundant start request when the
-      // user already has an established unfinished workflow.
-      final existing = await reader.current();
-
-      if (existing != null) {
-        throw WorkflowAlreadyActiveException(
-          workflow_id: existing.state.identity.workflow_id,
-        );
-      }
-
-      final manager = EventManager(store: persistence.event_submission_store);
-
-      final receipt = await manager.trigger(
-        WorkflowStartEvent(target_id: target_id, root: root),
-      );
-
-      // All domain behavior remains in the SDK processor.
-      final processor = WorkflowProcessor(
-        runtime: runtime,
-        inbox: persistence.workflow_inbox_for(os_user_id: os_user_id),
-        identity_provider: _CliWorkflowIdentityProvider(os_user_id),
-        committer: persistence.workflow_committer_for(os_user_id: os_user_id),
-        rejector: persistence.workflow_rejector,
-        quarantiner: persistence.workflow_quarantiner,
-      );
-
-      // Observe the specific submission rather than assuming
-      // process_next() handles our request first.
-      while (true) {
-        final resolution = await persistence.workflow_status_reader.status_for(
-          receipt,
-        );
-
-        if (resolution == null) {
-          throw StateError('Accepted workflow submission is missing.');
-        }
-
-        switch (resolution.state) {
-          case WorkflowSubmissionState.completed:
-            final restored = await reader.current();
-            final active = restored?.state;
-
-            if (active == null ||
-                active.identity.target_id != target_id ||
-                active.identity.root.value != root.value) {
-              throw StateError(
-                'Committed workflow cannot be consistently restored.',
-              );
-            }
-
-            return active;
-
-          case WorkflowSubmissionState.rejected:
-            if (resolution.rejection_code ==
-                WorkflowRejectionCode.ownership_conflict) {
-              // Another process may have established a workflow
-              // after our initial ownership check.
-              final current_workflow = await reader.current();
-
-              throw WorkflowAlreadyActiveException(
-                workflow_id: current_workflow?.state.identity.workflow_id,
-              );
-            }
-
-            throw StateError(
-              'Workflow start rejected: '
-              '${resolution.rejection_code?.name ?? "unknown"}.',
-            );
-
-          case WorkflowSubmissionState.quarantined:
-            throw StateError(
-              'Workflow start quarantined: '
-              '${resolution.quarantine_code?.name ?? "unknown"}.',
-            );
-
-          case WorkflowSubmissionState.pending:
-            final processed = await processor.process_next();
-
-            if (processed is WorkflowProcessingIdle) {
-              // Another processor may have completed the request
-              // between our status read and inbox inspection.
-              final latest = await persistence.workflow_status_reader
-                  .status_for(receipt);
-
-              if (latest == null ||
-                  latest.state == WorkflowSubmissionState.pending) {
-                throw StateError(
-                  'Workflow submission remains pending without '
-                  'an available processor.',
-                );
-              }
-            }
-
-            continue;
-        }
-      }
-    } finally {
-      await persistence.close();
-    }
   }
 
-  /// [expected_workflow_id] optionally guards the identity
-  /// previously displayed by an interactive frontend.
+  /// Explicitly stops the owner's current unfinished workflow.
   ///
-  /// The authenticated OS-user owner is still resolved through
-  /// trusted composition. A supplied identifier never overrides
-  /// that ownership.
-  ///
-  /// If the active workflow has changed, no Stop event is submitted.
+  /// [expected_workflow_id] optionally guards the workflow previously shown
+  /// by a frontend. Empty identifiers throw [ArgumentError]. Missing storage
+  /// yields a typed conflict without creating a database. Returns the exact
+  /// workflow ID confirmed by committed terminal journal evidence.
   Future<String> stop({String? expected_workflow_id}) async {
     if (expected_workflow_id != null && expected_workflow_id.trim().isEmpty) {
       throw ArgumentError.value(
@@ -296,163 +146,75 @@ final class ProductWorkflowComposition {
     }
 
     final os_user_id = await _trusted_os_user_id();
-    final runtime = WorkflowRuntime.standard();
-
-    final persistence = _open_persistence(
-      runtime: runtime,
+    return _with_application(
       os_user_id: os_user_id,
+      operation: (application) =>
+          application.stop(expected_workflow_id: expected_workflow_id),
+    );
+  }
+
+  /// Runs one SDK [operation] using a trusted owner and persistence lifetime.
+  ///
+  /// [os_user_id] was resolved through the host's identity provider before
+  /// persistence access. Returns the awaited operation result and always
+  /// closes SQLite, including when SDK validation or processing throws.
+  Future<T> _with_application<T>({
+    required String os_user_id,
+    required Future<T> Function(WorkflowApplication) operation,
+  }) async {
+    final runtime = WorkflowRuntime.standard();
+    final persistence = RudraSqlitePersistence(
+      database_file: database_file,
+      scope_id: 'rudra-cli:$os_user_id',
+      runtime: runtime,
     );
 
     try {
-      final reader = WorkflowStateReader(
+      final application = WorkflowApplication(
         runtime: runtime,
-        history_store: persistence.workflow_history_store,
+        persistence: persistence,
+        identity_provider: _CliWorkflowIdentityProvider(os_user_id),
         os_user_id: os_user_id,
       );
-
-      final active = await reader.current();
-
-      if (active == null) {
-        throw const WorkflowStopRejectedException(
-          code: WorkflowRejectionCode.workflow_not_active,
-        );
-      }
-
-      final workflow_id = active.state.identity.workflow_id;
-
-      // An interactive frontend may supply the identity it displayed.
-      //
-      // The expected ID is a concurrency guard, not authorization
-      // to access or stop another workflow.
-      //
-      // A replacement workflow must never be stopped merely because
-      // it became active between rendering and the user's keypress.
-      if (expected_workflow_id != null && workflow_id != expected_workflow_id) {
-        throw const WorkflowStopRejectedException(
-          code: WorkflowRejectionCode.workflow_id_mismatch,
-        );
-      }
-
-      // Only this explicit application action submits Stop.
-      // Reading current state or opening Explorer never does.
-      final manager = EventManager(store: persistence.event_submission_store);
-
-      final receipt = await manager.trigger(
-        WorkflowStopEvent(workflow_id: workflow_id),
-      );
-
-      final processor = WorkflowProcessor(
-        runtime: runtime,
-        inbox: persistence.workflow_inbox_for(os_user_id: os_user_id),
-        identity_provider: _CliWorkflowIdentityProvider(os_user_id),
-        committer: persistence.workflow_committer_for(os_user_id: os_user_id),
-        rejector: persistence.workflow_rejector,
-        quarantiner: persistence.workflow_quarantiner,
-      );
-
-      // Observe our exact durable submission, even if other
-      // submissions must be processed before it.
-      while (true) {
-        final resolution = await persistence.workflow_status_reader.status_for(
-          receipt,
-        );
-
-        if (resolution == null) {
-          throw StateError('Accepted stop submission is missing.');
-        }
-
-        switch (resolution.state) {
-          case WorkflowSubmissionState.completed:
-            // Stop completion is transactionally coupled to
-            // the terminal outcome and ownership release.
-            return workflow_id;
-
-          case WorkflowSubmissionState.rejected:
-            final code = resolution.rejection_code;
-
-            if (code == WorkflowRejectionCode.workflow_not_active ||
-                code == WorkflowRejectionCode.workflow_id_mismatch) {
-              throw WorkflowStopRejectedException(code: code!);
-            }
-
-            throw StateError(
-              'Workflow stop rejected: '
-              '${code?.name ?? "unknown"}.',
-            );
-
-          case WorkflowSubmissionState.quarantined:
-            throw StateError(
-              'Workflow stop quarantined: '
-              '${resolution.quarantine_code?.name ?? "unknown"}.',
-            );
-
-          case WorkflowSubmissionState.pending:
-            final processed = await processor.process_next();
-
-            if (processed is WorkflowProcessingIdle) {
-              // Another processor could have resolved the
-              // submission between the two reads.
-              final latest = await persistence.workflow_status_reader
-                  .status_for(receipt);
-
-              if (latest == null ||
-                  latest.state == WorkflowSubmissionState.pending) {
-                throw StateError(
-                  'Workflow stop remains pending without '
-                  'an available processor.',
-                );
-              }
-            }
-
-            continue;
-        }
-      }
+      return await operation(application);
     } finally {
       await persistence.close();
     }
   }
 
-  /// Opens one persistence owner using a shared workflow runtime.
-  RudraSqlitePersistence _open_persistence({
-    required WorkflowRuntime runtime,
-    required String os_user_id,
-  }) {
-    return RudraSqlitePersistence(
-      database_file: database_file,
-      scope_id: 'rudra-cli:$os_user_id',
-      runtime: runtime,
-    );
-  }
-
-  /// Validates the identity provided by trusted composition.
+  /// Resolves and validates the host's authenticated OS-user identifier.
+  ///
+  /// Returns the original trusted identity. Blank values throw [StateError].
   Future<String> _trusted_os_user_id() async {
     final identity = await _os_user_id_provider();
-
     if (identity.trim().isEmpty) {
       throw StateError('Trusted OS-user identity must not be blank.');
     }
-
     return identity;
   }
 }
 
-/// Proposes identities for explicitly submitted workflow starts.
+/// Proposes trusted identities when the SDK establishes a new workflow.
 ///
-/// The OS-user owner is fixed by application composition.
-/// Commands cannot choose or override that identity.
+/// The owner is fixed by host composition; the accepted Start supplies only
+/// the target and root. Generating a candidate does not commit a workflow.
 final class _CliWorkflowIdentityProvider implements WorkflowIdentityProvider {
-  /// Creates a provider bound to the resolved OS user.
+  /// Creates a provider bound to the trusted [os_user_id].
   const _CliWorkflowIdentityProvider(this.os_user_id);
 
-  /// Trusted identity of the current OS user.
+  /// Trusted host owner assigned to each proposed workflow identity.
   final String os_user_id;
 
+  /// Proposes a fresh identity for a pending Start [submission].
+  ///
+  /// Returns a UUID-bound [WorkflowIdentity] preserving the accepted target
+  /// and root. Other command types throw [StateError]. The SDK committer must
+  /// revalidate owner and uniqueness before establishing the identity.
   @override
   Future<WorkflowIdentity> propose_identity(
     PendingWorkflowCommand submission,
   ) async {
     final command = submission.command;
-
     if (command is! WorkflowStartEvent) {
       throw StateError('Unsupported workflow identity request.');
     }
