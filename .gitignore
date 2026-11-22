@@ -1,4 +1,5 @@
 .dart_tool/
 build/
+tmp/
 coverage/
 .DS_Store
