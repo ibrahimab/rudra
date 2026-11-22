@@ -62,6 +62,9 @@ export 'processing/workflow_quarantine.dart';
 export 'application/workflow_application.dart';
 export 'application/workflow_application_persistence.dart';
 
+/// Committed-change publication and observation contracts.
+export 'observation/workflow_commit_channel.dart';
+
 /// Read-only workflow history and restoration.
 export 'reading/workflow_history_store.dart';
 export 'reading/workflow_state_reader.dart';
