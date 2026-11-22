@@ -38,6 +38,9 @@ final class AboutScreen implements TerminalWidget {
   @override
   int get height => _layout.height;
 
+  /// Composes the About screen using the supplied [constraints].
+  ///
+  /// Returns terminal lines from the screen's presentation widgets.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return _layout.build(constraints);

@@ -7,6 +7,7 @@ import '../lib/src/darwin_directory_reader.dart';
 
 const int _errno_not_found = 2;
 
+/// Verifies darwin directory reader behavior through this file's focused tests.
 void main() {
   group('DarwinDirectoryReader', () {
     late Directory fixture;

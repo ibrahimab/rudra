@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow establishment outcome behavior through this file's focused tests.
 void main() {
   group('Workflow establishment outcome', () {
     test('exposes complete identity through the shared contract', () {

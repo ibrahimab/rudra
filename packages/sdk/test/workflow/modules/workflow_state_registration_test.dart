@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow state registration behavior through this file's focused tests.
 void main() {
   group('Workflow state registration', () {
     test('standard runtime owns active and ended phases', () {
@@ -191,12 +192,16 @@ void main() {
   });
 }
 
+/// Test module contributing a stable workflow registration identity.
 final class _TestModule implements WorkflowModule {
+  /// Creates a module with stable [module_id] and registration [contribute] callback.
   const _TestModule(this.module_id, this.contribute);
 
+  /// Stable identity of the test-only workflow module.
   @override
   final String module_id;
 
+  /// Callback contributing module-owned domain registration to the registry.
   final void Function(WorkflowModuleRegistration) contribute;
 
   @override
@@ -205,10 +210,14 @@ final class _TestModule implements WorkflowModule {
   }
 }
 
+/// Test-only inspection state slice for reducer registration checks.
 final class _InspectionSlice extends WorkflowSlice {
+  /// Creates an immutable inspection slice for registration tests.
   const _InspectionSlice();
 }
 
+/// Test-only planning state slice for reducer registration checks.
 final class _PlanningSlice extends WorkflowSlice {
+  /// Creates an immutable planning slice for registration tests.
   const _PlanningSlice();
 }

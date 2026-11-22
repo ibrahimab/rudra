@@ -157,9 +157,11 @@ final class DarwinStatSnapshot {
 /// This type is used solely to preserve the native struct layout.
 /// Timestamp conversion is deferred to the metadata implementation.
 final class _DarwinTimespec extends Struct {
+  /// Whole seconds in the native timespec value.
   @Int64()
   external int tv_sec;
 
+  /// Fractional nanoseconds in the native timespec value.
   @Int64()
   external int tv_nsec;
 }
@@ -174,59 +176,85 @@ final class _DarwinTimespec extends Struct {
 ///
 /// Never use this structure for Linux or Windows.
 final class _DarwinStat extends Struct {
+  /// Device identifier owning the filesystem entry.
   @Int32()
   external int st_dev;
 
+  /// POSIX file-type and permission mode bits.
   @Uint16()
   external int st_mode;
 
+  /// Number of native hard links to the entry.
   @Uint16()
   external int st_nlink;
 
+  /// Filesystem inode identity within [st_dev].
   @Uint64()
   external int st_ino;
 
+  /// Native numeric owner user identifier.
   @Uint32()
   external int st_uid;
 
+  /// Native numeric owner group identifier.
   @Uint32()
   external int st_gid;
 
+  /// Device identifier associated with a device entry.
   @Int32()
   external int st_rdev;
 
+  /// Native last-access timestamp.
   external _DarwinTimespec st_atimespec;
+
+  /// Native last-content-modification timestamp.
   external _DarwinTimespec st_mtimespec;
+
+  /// Native last-metadata-change timestamp.
   external _DarwinTimespec st_ctimespec;
+
+  /// Native filesystem-entry creation timestamp.
   external _DarwinTimespec st_birthtimespec;
 
+  /// Apparent filesystem-entry size in bytes.
   @Int64()
   external int st_size;
 
+  /// Number of allocated native 512-byte blocks.
   @Int64()
   external int st_blocks;
 
+  /// Filesystem-preferred block size for I/O.
   @Int32()
   external int st_blksize;
 
+  /// Native file flags reported by Darwin.
   @Uint32()
   external int st_flags;
 
+  /// Native generation number associated with the entry.
   @Uint32()
   external int st_gen;
 
+  /// Reserved signed field retained for native ABI layout.
   @Int32()
   external int st_lspare;
 
+  /// Reserved native 64-bit fields retained for ABI layout.
   @Array(2)
   external Array<Int64> st_qspare;
 }
 
+/// C ABI for lstat inspection without following the final symbolic link.
 typedef _LstatNative = Int32 Function(Pointer<Utf8>, Pointer<_DarwinStat>);
 
+/// Dart FFI mapping for native lstat inspection.
 typedef _LstatDart = int Function(Pointer<Utf8>, Pointer<_DarwinStat>);
 
+/// C ABI for retrieving the native errno location.
 typedef _ErrnoNative = Pointer<Int32> Function();
+
+/// Dart FFI mapping for reading the native errno location.
 typedef _ErrnoDart = Pointer<Int32> Function();
 
 /// Provides read-only native filesystem inspection on macOS.

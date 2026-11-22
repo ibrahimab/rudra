@@ -47,6 +47,7 @@ final class WorkflowTransitionException implements Exception {
   /// Human-readable diagnostic text, not suitable for code matching.
   final String message;
 
+  /// Formats the stable transition failure for diagnostics.
   @override
   String toString() =>
       'WorkflowTransitionException('
@@ -70,6 +71,7 @@ final class WorkflowReplayException implements Exception {
   /// Underlying typed domain transition failure.
   final WorkflowTransitionException cause;
 
+  /// Formats the stable transition failure for diagnostics.
   @override
   String toString() =>
       'WorkflowReplayException(event_index: $event_index): $cause';

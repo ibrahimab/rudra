@@ -769,7 +769,11 @@ final class _Inspector implements TargetInspector {
        _failures = failures;
 
   final Map<String, List<String>> _children;
+
+  /// Fixture entries keyed by their target-native paths.
   final Map<String, FilesystemEntry> _entries;
+
+  /// Injected inspection failures keyed by target path.
   final Map<String, TargetInspectionException> _failures;
 
   /// Paths requested through directory enumeration.
@@ -862,8 +866,10 @@ final class _FakeTerminalHost implements ExplorerTerminalHost {
   /// Whether the last interaction completed its cleanup.
   bool restored = false;
 
+  /// Tracks whether the fake terminal host is active.
   bool _active = false;
 
+  /// Captures rendered terminal output for assertions.
   final StringBuffer _output = StringBuffer();
 
   @override

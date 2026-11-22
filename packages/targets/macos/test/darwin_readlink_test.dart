@@ -15,6 +15,7 @@ const int _errno_invalid_argument = 22;
 const int _initial_buffer_boundary_bytes = 256;
 const int _expanded_target_length_bytes = 600;
 
+/// Verifies darwin readlink behavior through this file's focused tests.
 void main() {
   group('DarwinReadLink', () {
     late Directory fixture;

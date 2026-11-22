@@ -67,6 +67,7 @@ final class WorkflowSliceReducer<
   /// applies a matching committed outcome.
   const WorkflowSliceReducer({required this.key, required this.reduce});
 
+  /// Typed slice key identifying the reducer's state contribution.
   @override
   final WorkflowSliceKey<T> key;
 

@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflows state behavior through this file's focused tests.
 void main() {
   group('WorkflowsState', () {
     test('represents verified absence explicitly', () {

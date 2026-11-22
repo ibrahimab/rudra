@@ -12,6 +12,7 @@ const int _darwin_allocation_block_bytes = 512;
 /// POSIX mode 0640: owner read/write, group read, others none.
 const int _fixture_posix_mode = 0x1A0;
 
+/// Verifies mac os target inspector behavior through this file's focused tests.
 void main() {
   group('MacOsTargetInspector.inspect', () {
     late Directory fixture;

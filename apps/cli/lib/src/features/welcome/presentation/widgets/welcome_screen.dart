@@ -56,6 +56,9 @@ final class WelcomeScreen implements TerminalWidget {
   @override
   int get height => _layout.height;
 
+  /// Composes the Welcome screen under [constraints].
+  ///
+  /// Returns the terminal lines produced by its child widgets.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return _layout.build(constraints);

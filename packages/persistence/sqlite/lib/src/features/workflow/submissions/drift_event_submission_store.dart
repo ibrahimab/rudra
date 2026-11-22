@@ -16,6 +16,10 @@ final class DriftEventSubmissionStore implements EventSubmissionStore {
   ///
   /// [codec] supplies the event serialization configuration.
   /// When omitted, Rudra's standard workflow modules are used.
+  ///
+  /// [database] owns the durable submission table and its connection.
+  /// [scope_id] is a trusted, nonblank submission namespace.
+  /// Throws [ArgumentError] if [scope_id] is blank.
   DriftEventSubmissionStore({
     required RudraDatabase database,
     required String scope_id,
@@ -28,12 +32,16 @@ final class DriftEventSubmissionStore implements EventSubmissionStore {
     }
   }
 
+  /// Generator for stable identities of accepted command submissions.
   static final Uuid _uuid = Uuid();
 
   /// Injected, registry-driven workflow event codec.
   final WorkflowEventCodec _codec;
 
+  /// Database supplying the durable submission inbox.
   final RudraDatabase _database;
+
+  /// Trusted namespace used to isolate accepted submissions.
   final String _scope_id;
 
   /// Durably accepts a workflow command.

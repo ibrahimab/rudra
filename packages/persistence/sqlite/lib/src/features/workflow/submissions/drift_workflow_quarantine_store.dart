@@ -17,6 +17,9 @@ import '../../../database/rudra_database.dart';
 final class DriftWorkflowQuarantineStore
     implements WorkflowSubmissionQuarantiner {
   /// Creates a scoped quarantine persistence boundary.
+  ///
+  /// [database] supplies the shared durable submission table.
+  /// [scope_id] is the trusted submission namespace; blank values throw [ArgumentError].
   DriftWorkflowQuarantineStore({
     required RudraDatabase database,
     required String scope_id,
@@ -29,7 +32,10 @@ final class DriftWorkflowQuarantineStore
   /// duplication of diagnostic information.
   static const int max_diagnostic_length = 512;
 
+  /// Database used to atomically quarantine unreadable submissions.
   final RudraDatabase _database;
+
+  /// Trusted submission scope applied to quarantine mutations.
   final String _scope_id;
 
   /// Atomically quarantines the exact unreadable submission.

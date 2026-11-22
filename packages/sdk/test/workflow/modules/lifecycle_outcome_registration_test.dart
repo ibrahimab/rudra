@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies lifecycle outcome registration behavior through this file's focused tests.
 void main() {
   group('Standard lifecycle outcome registration', () {
     test('registers establishment and terminal outcome rules', () {

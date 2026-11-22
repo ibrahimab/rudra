@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow slice behavior through this file's focused tests.
 void main() {
   group('WorkflowSliceKey', () {
     test('preserves stable identity and concrete type', () {
@@ -53,12 +54,17 @@ void main() {
   });
 }
 
+/// Test inspection slice used to verify typed state equality.
 final class _InspectionSlice extends WorkflowSlice {
+  /// Creates a test inspection slice holding [root].
   const _InspectionSlice(this.root);
 
+  /// Fixture root identifier stored in the typed workflow slice.
   final String root;
 }
 
+/// Test planning slice used to verify distinct typed state keys.
 final class _PlanningSlice extends WorkflowSlice {
+  /// Creates an empty planning slice for typed-key comparison.
   const _PlanningSlice();
 }

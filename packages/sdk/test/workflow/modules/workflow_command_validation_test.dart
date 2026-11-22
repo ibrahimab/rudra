@@ -3,6 +3,7 @@ import 'package:rudra_sdk/src/workflow/behaviors/workflow_start_behavior.dart';
 import 'package:rudra_sdk/src/workflow/behaviors/workflow_stop_behavior.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow command validation behavior through this file's focused tests.
 void main() {
   group('WorkflowStartBehavior command validation', () {
     const behavior = WorkflowStartBehavior();

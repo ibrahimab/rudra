@@ -37,6 +37,17 @@ enum WorkflowRejectionCode {
 /// The persistence adapter resolves this reference through the journal's
 /// causation identity, rather than inferring it from the current projection.
 /// [sequence] is database-global; [version] is workflow-local.
+///
+/// Example:
+/// ```dart
+/// final outcome = WorkflowCommittedOutcome(
+///   workflow_id: 'workflow-1',
+///   event_type: WorkflowStartedEvent.type_id,
+///   version: 1,
+///   sequence: 42,
+/// );
+/// print(outcome.workflow_id);
+/// ```
 final class WorkflowCommittedOutcome {
   /// Creates a validated reference to a committed outcome.
   ///
@@ -76,6 +87,15 @@ final class WorkflowCommittedOutcome {
 /// event-sourced lifecycle state. A completed resolution references the
 /// submission's own committed journal outcome; it never supplies a substitute
 /// current-workflow snapshot.
+///
+/// Example:
+/// ```dart
+/// final status = WorkflowSubmissionResolution(
+///   receipt: receipt,
+///   state: WorkflowSubmissionState.pending,
+/// );
+/// print(status.state);
+/// ```
 final class WorkflowSubmissionResolution {
   /// Creates an immutable view of submission processing.
   ///

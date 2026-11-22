@@ -45,6 +45,10 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   ///
   /// The database does not register modules or construct
   /// default state-transition rules independently.
+  ///
+  /// [database_file] is the SQLite file supplied by host composition.
+  /// [scope_id] identifies the trusted durable submission scope.
+  /// The caller must close this persistence instance after pending operations.
   RudraSqlitePersistence({
     required File database_file,
     required String scope_id,
@@ -53,8 +57,13 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
        _runtime = runtime,
        _database = RudraDatabase.file(database_file);
 
+  /// Trusted submission scope shared by every persistence adapter.
   final String _scope_id;
+
+  /// Immutable SDK workflow runtime shared by storage adapters.
   final WorkflowRuntime _runtime;
+
+  /// Database connection owned for this persistence lifetime.
   final RudraDatabase _database;
 
   /// Durable submission contract consumed by the SDK.

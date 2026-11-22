@@ -64,6 +64,9 @@ final class ExplorerScreen implements TerminalWidget {
   @override
   int get height => _layout.height;
 
+  /// Composes the Explorer screen under [constraints].
+  ///
+  /// Returns terminal lines from the screen's child widgets.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) {
     return _layout.build(constraints);

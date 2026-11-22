@@ -28,6 +28,9 @@ final class WorkflowLifecycle {
   /// Whether the lifecycle permanently forbids further transitions.
   final bool is_terminal;
 
+  /// Compares lifecycle identifier and terminality with [other].
+  ///
+  /// Returns true only for the same immutable lifecycle value.
   @override
   bool operator ==(Object other) =>
       other is WorkflowLifecycle &&
@@ -37,6 +40,9 @@ final class WorkflowLifecycle {
   @override
   int get hashCode => Object.hash(id, is_terminal);
 
+  /// Validates a lifecycle identifier [value].
+  ///
+  /// Returns the original identifier or throws [ArgumentError] if blank.
   static String _require_id(String value) {
     if (value.trim().isEmpty) {
       throw ArgumentError.value(

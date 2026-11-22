@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow outcome contracts behavior through this file's focused tests.
 void main() {
   group('WorkflowOutcomeTransition', () {
     test('supports initial establishment without a prior snapshot', () {
@@ -201,5 +202,6 @@ WorkflowIdentity _identity() {
 final class _InspectionSlice extends WorkflowSlice {
   const _InspectionSlice(this.root);
 
+  /// Fixture root captured by the test reducer.
   final String root;
 }

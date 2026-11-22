@@ -74,6 +74,7 @@ final class WorkflowStateReadException implements Exception {
   /// Zero-based journal position if the error concerns an outcome.
   final int? event_index;
 
+  /// Formats the restoration integrity failure for diagnostics.
   @override
   String toString() =>
       'WorkflowStateReadException(${code.name}, '

@@ -61,6 +61,9 @@ final class WorkflowSliceKey<T extends WorkflowSlice> {
     return slice;
   }
 
+  /// Compares this typed slice key with [other] by stable identifier.
+  ///
+  /// Returns true only when both keys identify the same slice.
   @override
   bool operator ==(Object other) =>
       other is WorkflowSliceKey<WorkflowSlice> &&
@@ -70,6 +73,9 @@ final class WorkflowSliceKey<T extends WorkflowSlice> {
   @override
   int get hashCode => Object.hash(id, slice_type);
 
+  /// Validates the registered slice key [value].
+  ///
+  /// Returns the original identifier or throws [ArgumentError] if blank.
   static String _require_id(String value) {
     if (value.trim().isEmpty) {
       throw ArgumentError.value(

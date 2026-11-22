@@ -1,6 +1,7 @@
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 import 'package:test/test.dart';
 
+/// Verifies filesystem metadata behavior through this file's focused tests.
 void main() {
   group('FilesystemMetadata', () {
     test('preserves unknown metadata', () {

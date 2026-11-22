@@ -25,6 +25,9 @@ final class WelcomeTarget implements TerminalWidget {
   @override
   int get height => view_model.can_inspect ? configured_rows : unsupported_rows;
 
+  /// Renders the selected target within [constraints].
+  ///
+  /// Returns terminal lines describing the current target view.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     if (view_model.can_inspect) {

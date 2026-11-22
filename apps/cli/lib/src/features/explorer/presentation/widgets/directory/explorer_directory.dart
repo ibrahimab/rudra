@@ -70,6 +70,9 @@ final class ExplorerDirectory implements TerminalWidget {
   @override
   int get height => heading_rows + view_model.visible_row_limit;
 
+  /// Renders the directory section within [constraints].
+  ///
+  /// Returns lines representing the prepared directory view state.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     final columns = constraints.require_bounded_columns();

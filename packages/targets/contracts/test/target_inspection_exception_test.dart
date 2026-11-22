@@ -1,6 +1,7 @@
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 import 'package:test/test.dart';
 
+/// Verifies target inspection exception behavior through this file's focused tests.
 void main() {
   group('TargetInspectionException', () {
     test('preserves typed failure information', () {

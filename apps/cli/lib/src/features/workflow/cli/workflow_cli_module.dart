@@ -106,8 +106,13 @@ final class _WorkflowStopCommand extends Command<int> {
        _output = output,
        _error_output = error_output;
 
+  /// Host-supplied operation that confirms a workflow's terminal outcome.
   final Future<String> Function() _stop_workflow;
+
+  /// Destination for successful workflow command output.
   final StringSink _output;
+
+  /// Destination for expected CLI error messages.
   final StringSink _error_output;
 
   @override
@@ -173,9 +178,16 @@ final class _WorkflowStartCommand extends Command<int> {
        _output = output,
        _error_output = error_output;
 
+  /// Default target-native root used by explicit Start.
   final TargetPath _working_directory;
+
+  /// Host-supplied operation that establishes and confirms a workflow.
   final Future<WorkflowSnapshot> Function(TargetPath) _start_workflow;
+
+  /// Destination for successful workflow command output.
   final StringSink _output;
+
+  /// Destination for expected CLI error messages.
   final StringSink _error_output;
 
   @override

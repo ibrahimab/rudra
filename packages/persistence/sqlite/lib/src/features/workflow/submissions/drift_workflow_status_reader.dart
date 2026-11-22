@@ -8,6 +8,15 @@ import '../../../database/rudra_database.dart';
 /// Completed submissions are linked to their committed journal outcomes
 /// through the already persisted causation identifier. The journal sequence
 /// provides a global order that is distinct from workflow-local versions.
+///
+/// Example:
+/// ```dart
+/// final reader = DriftWorkflowStatusReader(
+///   database: database,
+///   scope_id: trusted_scope_id,
+/// );
+/// final status = await reader.status_for(receipt);
+/// ```
 final class DriftWorkflowStatusReader
     implements WorkflowSubmissionStatusReader {
   /// Creates a status reader bound to [database] and [scope_id].

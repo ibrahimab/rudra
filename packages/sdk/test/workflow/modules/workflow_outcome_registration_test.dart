@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow outcome registration behavior through this file's focused tests.
 void main() {
   group('Workflow outcome registration', () {
     test('assembles lifecycle transitions and owned reducers', () {

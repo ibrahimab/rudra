@@ -78,7 +78,6 @@ const int _errno_name_too_long = 63;
 ///
 /// print(entry.kind);
 /// ```
-
 final class MacOsTargetInspector implements TargetInspector {
   /// Creates a macOS filesystem inspector.
   ///
@@ -92,15 +91,18 @@ final class MacOsTargetInspector implements TargetInspector {
   /// Construction does not inspect or modify filesystem content.
   MacOsTargetInspector() : _native = DarwinLStat();
 
+  /// Native lstat reader used for the terminal path component.
   final DarwinLStat _native;
 
   // Lazily initialize directory bindings only when enumeration
   // is first requested. Existing inspect() behavior is unchanged.
+  /// Native directory reader initialized on first use.
   late final DarwinDirectoryReader _directory_reader = DarwinDirectoryReader();
 
   // Resolve native readlink bindings only when a symbolic-link
   // destination is requested. Inspection and enumeration do not
   // depend on this additional native reader.
+  /// Native symbolic-link reader initialized on first use.
   late final DarwinReadLink _symbolic_link_reader = DarwinReadLink();
 
   /// Inspects one filesystem entry without following its final link.

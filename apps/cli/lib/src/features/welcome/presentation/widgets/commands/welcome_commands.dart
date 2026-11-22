@@ -27,6 +27,9 @@ final class WelcomeCommands implements TerminalWidget {
   int get height =>
       base_rows + (view_model.show_filesystem_commands ? filesystem_rows : 0);
 
+  /// Renders the available Welcome commands using [constraints].
+  ///
+  /// Returns the action descriptions as terminal lines.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine('Available commands:', role: TerminalRole.heading);

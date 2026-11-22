@@ -40,6 +40,9 @@ final class AboutInformation implements TerminalWidget {
   @override
   int get height => fixed_rows;
 
+  /// Renders About information using the available [constraints].
+  ///
+  /// Returns the informational terminal lines in display order.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield TerminalLine(

@@ -949,7 +949,10 @@ final class _TestIdentityProvider implements WorkflowIdentityProvider {
     required this.os_user_id,
   });
 
+  /// Committed workflow identity expected by the fixture.
   final String workflow_id;
+
+  /// Trusted owner identity expected by the fixture.
   final String os_user_id;
 
   @override

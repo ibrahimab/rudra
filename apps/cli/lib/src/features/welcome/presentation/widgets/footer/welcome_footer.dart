@@ -20,6 +20,9 @@ final class WelcomeFooter implements TerminalWidget {
   @override
   int get height => fixed_rows;
 
+  /// Renders the Welcome footer within [constraints].
+  ///
+  /// Returns the footer's terminal lines in presentation order.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine('');

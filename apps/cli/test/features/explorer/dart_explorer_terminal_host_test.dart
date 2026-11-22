@@ -404,40 +404,61 @@ final class _FakeTerminalDevice implements ExplorerTerminalDevice {
     );
   }
 
+  /// Whether the fake exposes an interactive input terminal.
   @override
   bool has_input_terminal = true;
 
+  /// Whether the fake exposes an interactive output terminal.
   @override
   bool has_output_terminal = true;
 
+  /// Whether the terminal fixture supports ANSI control sequences.
   @override
   bool supports_ansi = true;
 
+  /// Current fake terminal width in columns.
   @override
   int columns = 80;
 
+  /// Current fake terminal height in rows.
   @override
   int rows = 24;
 
+  /// Current emulated terminal echo mode.
   bool _echo_mode;
+
+  /// Current emulated canonical input mode.
   bool _line_mode;
 
   /// Simulates a device that rejects mode changes after
   /// its native input subscription has been canceled.
   bool require_active_input_for_mode_restore = false;
 
+  /// Injects a failure when disabling canonical input mode.
   bool fail_line_disable = false;
+
+  /// Injects a failure when restoring terminal echo.
   bool fail_echo_restore = false;
+
+  /// Injects a failure when hiding the terminal cursor.
   bool fail_cursor_hide = false;
 
+  /// Records whether the terminal input subscription was canceled.
   bool input_canceled = false;
+
+  /// Records whether terminal signal observation was canceled.
   bool signals_canceled = false;
 
+  /// Records terminal mode mutations in observed order.
   final List<String> mode_changes = [];
 
+  /// Broadcast stream of injected terminal input bytes.
   late final StreamController<List<int>> _input;
+
+  /// Broadcast stream of injected terminal signals.
   late final StreamController<ExplorerTerminalSignal> _signals;
 
+  /// Captures terminal bytes written by the host.
   final _RecordedOutput _output = _RecordedOutput();
 
   /// Complete terminal output produced during the interaction.
@@ -521,6 +542,8 @@ final class _RecordedOutput implements StringSink {
   final StringBuffer buffer = StringBuffer();
 
   /// Whether cursor hiding should fail after a partial write.
+  ///
+  /// Injects a failure when hiding the terminal cursor.
   bool fail_cursor_hide = false;
 
   @override

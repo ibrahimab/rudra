@@ -62,6 +62,7 @@ final class WorkflowCommandValidationException implements Exception {
   /// Human-readable explanation without serialized command payloads.
   final String message;
 
+  /// Formats the stable command-validation code and diagnostic message.
   @override
   String toString() {
     return 'WorkflowCommandValidationException('

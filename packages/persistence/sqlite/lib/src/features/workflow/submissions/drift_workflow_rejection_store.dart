@@ -13,6 +13,10 @@ import '../../../database/rudra_database.dart';
 /// can be rejected.
 final class DriftWorkflowRejectionStore implements WorkflowSubmissionRejector {
   /// Creates a rejection writer using shared persistence.
+  ///
+  /// [database] supplies shared durable storage. [scope_id] identifies the trusted
+  /// submission namespace. [codec] validates the accepted command payload.
+  /// Blank [scope_id] values throw [ArgumentError].
   DriftWorkflowRejectionStore({
     required RudraDatabase database,
     required String scope_id,
@@ -21,8 +25,13 @@ final class DriftWorkflowRejectionStore implements WorkflowSubmissionRejector {
        _scope_id = _require_scope(scope_id),
        _codec = codec;
 
+  /// Database used for durable business-rejection updates.
   final RudraDatabase _database;
+
+  /// Trusted namespace restricting rejection updates.
   final String _scope_id;
+
+  /// Codec used to verify the exact accepted command payload.
   final WorkflowEventCodec _codec;
 
   /// Durably rejects an eligible pending submission.

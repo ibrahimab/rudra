@@ -44,6 +44,10 @@ final class TerminalColumn implements TerminalWidget {
     return total;
   }
 
+  /// Renders the child widgets in sequence under [constraints].
+  ///
+  /// Returns the flattened terminal lines in child order. Throws [StateError]
+  /// when a child violates its declared height.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     for (final child in children) {

@@ -20,6 +20,17 @@ import '../reading/workflow_history_store.dart';
 ///   os_user_id: trusted_os_user_id,
 /// );
 /// ```
+///
+/// Example:
+/// ```dart
+/// final WorkflowApplicationPersistence persistence = configured_persistence;
+/// final application = WorkflowApplication(
+///   runtime: runtime,
+///   persistence: persistence,
+///   identity_provider: identity_provider,
+///   os_user_id: trusted_os_user_id,
+/// );
+/// ```
 abstract interface class WorkflowApplicationPersistence {
   /// Store that durably accepts explicit workflow commands.
   EventSubmissionStore get event_submission_store;

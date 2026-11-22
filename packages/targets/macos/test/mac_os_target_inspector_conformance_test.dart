@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 /// terminates enumeration before the directory is exhausted.
 const int _cancellation_fixture_count = 12;
 
+/// Verifies mac os target inspector conformance behavior through this file's focused tests.
 void main() {
   group('macOS TargetInspector conformance', () {
     late Directory fixture;

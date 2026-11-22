@@ -74,9 +74,11 @@ final class WorkflowOutcomeTransition<E extends WorkflowOutcomeEvent>
   }) : source_lifecycle_id = _require_optional_id(source_lifecycle_id),
        destination_lifecycle_id = _require_id(destination_lifecycle_id);
 
+  /// Permitted source lifecycle identifier, or null for establishment.
   @override
   final String? source_lifecycle_id;
 
+  /// Lifecycle identifier established by the registered outcome transition.
   @override
   final String destination_lifecycle_id;
 

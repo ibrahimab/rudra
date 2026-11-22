@@ -12,6 +12,15 @@ import 'package:uuid/uuid.dart';
 ///
 /// Construction and read-only checks never create workflow persistence.
 /// Only an explicit Start may initialize the storage directory.
+///
+/// Example:
+/// ```dart
+/// final workflows = ProductWorkflowComposition(
+///   database_file: File('/private/test/rudra.sqlite'),
+///   os_user_id_provider: () async => 'trusted-owner',
+/// );
+/// final current = await workflows.current();
+/// ```
 final class ProductWorkflowComposition {
   /// Creates composition with an injected [database_file] and identity source.
   ///

@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow snapshot behavior through this file's focused tests.
 void main() {
   group('WorkflowSnapshot', () {
     test('requires established identity, version and lifecycle', () {
@@ -200,14 +201,18 @@ WorkflowLifecycle _active() {
 
 /// Synthetic inspection state owned by the inspection test feature.
 final class _InspectionSlice extends WorkflowSlice {
+  /// Creates an inspection fixture retaining [root].
   const _InspectionSlice(this.root);
 
+  /// Fixture root stored in the inspection state slice.
   final String root;
 }
 
 /// Synthetic planning state owned by the planning test feature.
 final class _PlanningSlice extends WorkflowSlice {
+  /// Creates a planning fixture retaining [candidate_count].
   const _PlanningSlice(this.candidate_count);
 
+  /// Fixture candidate count stored in the planning state slice.
   final int candidate_count;
 }

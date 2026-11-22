@@ -31,6 +31,7 @@ final class WorkflowCommitException implements Exception {
   /// Diagnostic explanation.
   final String message;
 
+  /// Formats the commit rejection code and its diagnostic message.
   @override
   String toString() => 'WorkflowCommitException(code: ${code.name}): $message';
 }

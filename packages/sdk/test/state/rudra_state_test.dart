@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies rudra state behavior through this file's focused tests.
 void main() {
   group('RudraState', () {
     test('always exposes a non-null workflow collection', () {

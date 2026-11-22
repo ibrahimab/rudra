@@ -32,41 +32,65 @@ const int _directory_name_offset_bytes = 21;
 ///
 /// The structure is never allocated or freed directly by Rudra.
 final class _DarwinDirent extends Struct {
+  /// Inode number of the directory entry.
   @Uint64()
   external int d_ino;
 
+  /// Native directory position associated with this entry.
   @Uint64()
   external int d_seekoff;
 
+  /// Byte length of this native directory record.
   @Uint16()
   external int d_reclen;
 
+  /// Byte length of the filename stored in [d_name].
   @Uint16()
   external int d_namlen;
 
+  /// Native directory-entry type hint supplied by Darwin.
   @Uint8()
   external int d_type;
 
+  /// Fixed native buffer containing the entry name bytes.
   @Array(_directory_name_capacity)
   external Array<Uint8> d_name;
 }
 
+/// C ABI for opening a directory file descriptor with flags.
 typedef _OpenNative = Int32 Function(Pointer<Utf8>, Int32);
+
+/// Dart FFI mapping for the directory-descriptor open call.
 typedef _OpenDart = int Function(Pointer<Utf8>, int);
 
+/// C ABI for obtaining a directory stream from a file descriptor.
 typedef _FdOpenDirNative = Pointer<Void> Function(Int32);
+
+/// Dart FFI mapping for directory-stream creation.
 typedef _FdOpenDirDart = Pointer<Void> Function(int);
 
+/// C ABI for reading one native directory entry.
 typedef _ReadDirNative = Pointer<_DarwinDirent> Function(Pointer<Void>);
+
+/// Dart FFI mapping for native directory iteration.
 typedef _ReadDirDart = Pointer<_DarwinDirent> Function(Pointer<Void>);
 
+/// C ABI for closing a native directory stream.
 typedef _CloseDirNative = Int32 Function(Pointer<Void>);
+
+/// Dart FFI mapping for closing a directory stream.
 typedef _CloseDirDart = int Function(Pointer<Void>);
 
+/// C ABI for closing an opened file descriptor.
 typedef _CloseNative = Int32 Function(Int32);
+
+/// Dart FFI mapping for descriptor closure.
 typedef _CloseDart = int Function(int);
 
+/// C ABI for retrieving the native errno location.
 typedef _ErrnoNative = Pointer<Int32> Function();
+
+/// Dart FFI mapping for reading the native errno location.
 typedef _ErrnoDart = Pointer<Int32> Function();
 
 /// Creates a native filesystem exception from an observed errno.
@@ -285,9 +309,16 @@ final class DarwinDirectoryCursor {
   /// The original path used to open this directory.
   final String path;
 
+  /// Current native directory stream; released when the cursor closes.
   Pointer<Void> _directory;
+
+  /// Bound native function for advancing the directory stream.
   final _ReadDirDart _read_dir;
+
+  /// Bound native function for closing the directory stream.
   final _CloseDirDart _close_dir;
+
+  /// Bound native function for observing native errno on failure.
   final _ErrnoDart _errno;
 
   /// Whether ownership of the native directory stream has ended.

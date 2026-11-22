@@ -331,8 +331,13 @@ final class _StartupInspector implements TargetInspector {
              inspection_failures,
            );
 
+  /// Child paths exposed by the filesystem fixture.
   final List<TargetPath> _children;
+
+  /// Filesystem entries returned by the fixture inspector.
   final Map<String, FilesystemEntry> _entries;
+
+  /// Injected typed inspection errors keyed by path.
   final Map<String, TargetInspectionException> _inspection_failures;
 
   /// Optional typed directory enumeration failure.

@@ -476,6 +476,7 @@ PendingWorkflowCommand _stop_pending({
 final class _FakeWorkflowInbox implements WorkflowInbox {
   _FakeWorkflowInbox(this.pending);
 
+  /// Pending submission returned by this fake inbox.
   final PendingWorkflowCommand? pending;
 
   @override
@@ -556,10 +557,15 @@ final class _FakeWorkflowIdentityProvider implements WorkflowIdentityProvider {
 
 /// Simulates atomic commitment without implementing inbox reads.
 final class _FakeWorkflowCommitter implements WorkflowCommitter {
+  /// Creates a fake committer with optional [fail_commit] injection.
+  ///
+  /// Committed plans are captured without persistence I/O.
   _FakeWorkflowCommitter({this.fail_commit = false});
 
+  /// Whether the fake committer deliberately fails a commit.
   final bool fail_commit;
 
+  /// Last processing plan received by the fake committer.
   WorkflowProcessingPlan? committed;
 
   @override

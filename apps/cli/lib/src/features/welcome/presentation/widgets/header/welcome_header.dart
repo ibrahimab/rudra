@@ -20,6 +20,9 @@ final class WelcomeHeader implements TerminalWidget {
   @override
   int get height => fixed_rows;
 
+  /// Renders the Welcome header within [constraints].
+  ///
+  /// Returns the title and supporting header lines.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine('');

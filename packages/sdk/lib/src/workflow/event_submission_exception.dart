@@ -34,6 +34,7 @@ final class EventSubmissionException implements Exception {
   /// Human-readable diagnostic explanation.
   final String message;
 
+  /// Formats the stable submission failure and its diagnostic details.
   @override
   String toString() {
     return 'EventSubmissionException('

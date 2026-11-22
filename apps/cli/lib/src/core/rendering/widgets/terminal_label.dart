@@ -26,6 +26,9 @@ final class TerminalLabel implements TerminalWidget {
   @override
   int get height => 1;
 
+  /// Builds the label's terminal lines within [constraints].
+  ///
+  /// Returns the rendered label with its configured terminal role.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield TerminalLine(text, role: role);

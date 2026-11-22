@@ -5,6 +5,7 @@ import 'package:test/test.dart';
 
 import 'support/target_inspector_conformance.dart';
 
+/// Verifies target inspector conformance behavior through this file's focused tests.
 void main() {
   final fixture = TargetInspectorConformanceFixture(
     root_directory: TargetPath('/fixture'),

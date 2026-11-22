@@ -1,6 +1,7 @@
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 import 'package:test/test.dart';
 
+/// Verifies target inspector behavior through this file's focused tests.
 void main() {
   group('TargetInspector contract', () {
     final inspector = _FixtureTargetInspector();

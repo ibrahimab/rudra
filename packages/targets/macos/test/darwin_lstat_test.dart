@@ -11,6 +11,7 @@ const int _directory_type = 0x4000;
 const int _symbolic_link_type = 0xA000;
 const int _no_such_file_errno = 2;
 
+/// Verifies darwin lstat behavior through this file's focused tests.
 void main() {
   group('DarwinTimestamp', () {
     test('converts the Unix epoch to UTC', () {

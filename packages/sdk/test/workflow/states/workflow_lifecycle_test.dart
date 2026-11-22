@@ -1,6 +1,7 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+/// Verifies workflow lifecycle behavior through this file's focused tests.
 void main() {
   group('WorkflowLifecycle', () {
     test('preserves lifecycle identity and terminality', () {
