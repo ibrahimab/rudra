@@ -5,17 +5,37 @@ import 'workflow_commit_channel.dart';
 
 /// Observes authoritative SDK application state after committed changes.
 ///
-/// Every subscription first registers for persistence notifications, then
-/// restores current state. Changes overlapping restoration cause another
-/// read, so stale evidence cannot become the final observed value.
+/// Each subscription registers for notifications before restoring its initial
+/// state. A change overlapping restoration causes another authoritative read.
 ///
-/// Observation never submits or processes workflow commands.
+/// State is reconstructed by the supplied SDK reader, not by independently
+/// applying workflow events in this observer.
+///
+/// Observation never processes commands or modifies persistence.
+///
+/// Example:
+/// ```dart
+/// final observer = WorkflowStateObserver(
+///   read_state: application.read_state,
+///   commits: persistence.workflow_commit_subscriber,
+///   os_user_id: trusted_os_user_id,
+/// );
+///
+/// final subscription = observer.observe().listen((state) {
+///   print(state.workflows.current_workflow?.identity.workflow_id);
+/// });
+///
+/// await subscription.cancel();
+/// ```
 final class WorkflowStateObserver {
-  /// Creates an observer using the existing authoritative state reader.
+  /// Creates an SDK application-state observer.
   ///
-  /// [read_state] must restore and validate committed application state.
-  /// [commits] reports changes for the trusted [os_user_id].
-  /// Construction performs no I/O or subscription.
+  /// [read_state] restores validated, committed application state.
+  /// [commits] supplies owner-scoped persistence change notifications.
+  /// [os_user_id] is an authenticated owner from trusted composition.
+  ///
+  /// Throws [ArgumentError] when [os_user_id] is blank.
+  /// Construction does not subscribe, read persistence or process commands.
   WorkflowStateObserver({
     required Future<RudraState> Function() read_state,
     required WorkflowCommitSubscriber commits,
@@ -28,8 +48,13 @@ final class WorkflowStateObserver {
     }
   }
 
+  /// Authoritative, read-only SDK state restoration operation.
   final Future<RudraState> Function() _read_state;
+
+  /// Persistence-backed notification source for committed workflow changes.
   final WorkflowCommitSubscriber _commits;
+
+  /// Authenticated owner used to scope commit notifications.
   final String _os_user_id;
 
   /// Observes verified initial state and subsequent committed changes.

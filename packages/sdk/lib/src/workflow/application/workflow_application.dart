@@ -118,11 +118,17 @@ final class WorkflowApplication {
     );
   }
 
-  /// Stores the cohesive services prepared by the public constructor.
+  /// Stores the SDK services prepared by trusted application composition.
   ///
-  /// [events] accepts commands, [reader] restores committed state,
-  /// [processor] advances pending submissions and [statuses] queries their
-  /// durable resolutions. The caller retains persistence ownership.
+  /// [events] accepts explicit commands into durable persistence.
+  /// [reader] restores validated committed workflow state.
+  /// [processor] processes accepted commands through registered behaviors.
+  /// [statuses] resolves durable submission outcomes.
+  /// [commits] supplies committed-change notifications for observation.
+  /// [os_user_id] identifies the authenticated workflow owner.
+  ///
+  /// Construction retains these dependencies without performing I/O.
+  /// The caller owns persistence and notification-source lifetimes.
   WorkflowApplication._({
     required EventManager events,
     required WorkflowStateReader reader,
@@ -162,13 +168,30 @@ final class WorkflowApplication {
     os_user_id: _os_user_id,
   );
 
-  /// Observes initial verified application state and committed changes.
+  /// Observes verified application state for the trusted workflow owner.
   ///
-  /// Returns a stream of immutable [RudraState] snapshots.
-  /// Reading and observing never submit or process commands.
+  /// Returns a stream beginning with an authoritative [RudraState], followed
+  /// by reconciled state after committed local workflow changes.
   ///
-  /// Persistence and integrity failures propagate as stream errors.
-  /// The caller must cancel the subscription before closing persistence.
+  /// Each subscription owns its reconciliation and cancellation lifecycle.
+  /// Rapid commits may be coalesced into the latest validated state.
+  ///
+  /// Restoration or notification-source failures terminate observation with
+  /// a stream error; they are never represented as verified absence.
+  ///
+  /// Subscribing performs no command submission, processing or target
+  /// filesystem modification. The caller must cancel subscriptions before
+  /// disposing the supplied persistence owner.
+  ///
+  /// Example:
+  /// ```dart
+  /// final subscription = application.observe_state().listen((state) {
+  ///   final current = state.workflows.current_workflow;
+  ///   print(current?.identity.workflow_id);
+  /// });
+  ///
+  /// await subscription.cancel();
+  /// ```
   Stream<RudraState> observe_state() => _observer.observe();
 
   /// Reads the latest verified, coherent SDK application state.

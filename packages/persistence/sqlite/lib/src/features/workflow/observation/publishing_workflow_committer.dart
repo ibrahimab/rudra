@@ -1,14 +1,34 @@
+import 'dart:developer' as developer;
+
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-/// Publishes successful workflow commitments from a persistence adapter.
+/// Adds committed-change publication to an existing workflow committer.
 ///
-/// The delegate owns transactional validation and durability. Publication
-/// occurs only after its commit completes successfully.
+/// The delegate remains responsible for transactional validation and durable
+/// persistence. The publisher only reports successfully committed changes.
+///
+/// Publication failures are logged as diagnostics and cannot change the
+/// result of a transaction that has already committed.
+///
+/// Example:
+/// ```dart
+/// final committer = PublishingWorkflowCommitter(
+///   delegate: sqlite_committer,
+///   publisher: commit_channel,
+///   os_user_id: trusted_os_user_id,
+/// );
+///
+/// await committer.commit(plan);
+/// ```
 final class PublishingWorkflowCommitter implements WorkflowCommitter {
-  /// Wraps [delegate] with post-commit notifications through [publisher].
+  /// Creates a post-commit publishing decorator.
   ///
-  /// [os_user_id] is the authenticated owner supplied by trusted composition.
-  /// The publisher must not throw for a valid trusted owner.
+  /// [delegate] validates and commits workflow processing plans.
+  /// [publisher] receives notifications after successful commitments.
+  /// [os_user_id] identifies the authenticated owner from trusted composition.
+  ///
+  /// Throws [ArgumentError] if [os_user_id] is blank.
+  /// Construction performs no persistence or publication.
   PublishingWorkflowCommitter({
     required WorkflowCommitter delegate,
     required WorkflowCommitPublisher publisher,
@@ -17,23 +37,42 @@ final class PublishingWorkflowCommitter implements WorkflowCommitter {
        _publisher = publisher,
        _os_user_id = _require_owner(os_user_id);
 
+  /// Authoritative persistence committer receiving proposed changes.
   final WorkflowCommitter _delegate;
+
+  /// SDK-defined port used to report successful commitments.
   final WorkflowCommitPublisher _publisher;
+
+  /// Authenticated owner associated with this committer.
   final String _os_user_id;
 
-  /// Commits [plan], then publishes one committed-change notification.
+  /// Commits [plan] and reports one durable workflow-state change.
   ///
-  /// Failed transactions propagate without publishing. A notification is
-  /// never sent for a proposed or partially committed transition.
+  /// Returns after the delegate commits and publication is attempted.
+  /// Delegate failures propagate without publishing.
+  ///
+  /// If publication throws after commitment, the failure is logged.
+  /// The committed transaction remains successful and recoverable from
+  /// authoritative history, although live observers may require recovery.
   @override
   Future<void> commit(WorkflowProcessingPlan plan) async {
     await _delegate.commit(plan);
-    _publisher.publish(os_user_id: _os_user_id);
+
+    try {
+      _publisher.publish(os_user_id: _os_user_id);
+    } catch (error, stack_trace) {
+      developer.log(
+        'Workflow committed, but change publication failed.',
+        name: 'rudra.persistence.sqlite.workflow',
+        error: error,
+        stackTrace: stack_trace,
+      );
+    }
   }
 
-  /// Validates the owner before any transaction can be attempted.
+  /// Validates the authenticated [os_user_id] without normalizing it.
   ///
-  /// Returns the original [os_user_id] or throws [ArgumentError].
+  /// Returns the original identifier or throws [ArgumentError] when blank.
   static String _require_owner(String os_user_id) {
     if (os_user_id.trim().isEmpty) {
       throw ArgumentError.value(os_user_id, 'os_user_id');
