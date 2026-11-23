@@ -1,10 +1,10 @@
 # Rudra — Epic 6: Architectural Realignment
 
-**Status:** In progress. 6A and 6B implemented; 6C.1 implemented; 6C.2–6C.3 and 6D–6F remain open. The 6C.2 `publish()` / `watch()` architecture was agreed on 23 November 2026 (Europe/Amsterdam); **no 6C.2 implementation is claimed**. 6C.1 verification was reported successful by the developer; this document update does not independently execute tests.  
+**Status:** In progress. **6A, 6B, 6C.1 and 6C.2 are implemented; 6C.2 developer-verified green.** 6C.3 and 6D–6F remain open. 6C.2 supports local, persistence-backed observation, not live cross-process delivery.  
 **Original title:** Feature Isolation, Extensibility & Test Architecture  
 **Canonical repository:** https://github.com/ibrahimab/rudra  
 **Original audit baseline:** `ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513` (20 November 2026)  
-**Latest code inspected for this revision:** `dcf86f8e2457c636774c22e1cbfe97377d4019df` (22 November 2026)  
+**Latest code inspected for this revision:** `d326fbda9232141ba807e54d5578a70292c40424` (23 November 2026)  
 **Previous milestone:** Block 5C — persistent Start → Active → Stop → Ended, SDK state machine, SQLite/Drift, CLI and Explorer  
 **Companion design:** [Epic 6C — Observability and Future Trusted Host Direction](rudra-epic-6c-observability-and-trusted-host-direction.md)  
 **Architectural authority:** [ADR 0006 — Event-Sourced Workflow Architecture](../decisions/0006-event-sourced-workflow-architecture.md)
@@ -64,7 +64,7 @@ Workflow-local `snapshot.version` is useful for ordering outcomes **within a sin
 
 Do not introduce `NullWorkflowSnapshot`, a parallel state hierarchy, lifecycle data inside every feature slice, or a second frontend state machine. New inspection, planning, execution and recovery slices are added only when their domain features exist.
 
-### 3.3 Implemented operation and commitment path (6C.1)
+### 3.3 Implemented operation, commitment and observation paths (6C.1–6C.2)
 
 ```text
 Explicit frontend action
@@ -78,9 +78,9 @@ Explicit frontend action
   → WorkflowProcessingCommitted(plan), only after successful commit
 ```
 
-`WorkflowProcessingCommitted` is a **returned value**, not a broadcast to subscribed SDK clients. `WorkflowApplication.read_state()` reconstructs one validated current `RudraState`; there is not yet a live SDK subscription. No architectural change to transition or replay is needed to add observation. **6C.2 adds a separate post-commit notification path**, from persistence-owned `publish()` to SDK-owned `watch()` consumption and validated state observation.
+`WorkflowProcessingCommitted` is an **immediate processing result**, not a subscription event. In 6C.2, `PublishingWorkflowCommitter` wraps SQLite commitment and calls the SDK-defined `WorkflowCommitPublisher.publish()` after a successful transaction. A shared local channel supplies matching `WorkflowCommitSubscriber.watch()` change hints to the SDK observer. The observer reconstructs immutable `RudraState` using `WorkflowStateReader` and the existing state machine; neither the hint nor `plan.resulting_state` is treated as authoritative.
 
-`WorkflowApplication` currently exposes `read_state`, `submit_command`, `status_for`, `process_next`, `start` and `stop`. `start`/`stop` coordinate confirmed outcomes by processing eligible submissions when necessary; a future host may take over background processing, but it is not present in 6C.
+`WorkflowApplication` exposes `read_state()`, `observe_state()`, `submit_command()`, `status_for()`, `process_next()`, `start()` and `stop()`. `observe_state()` emits an initial verified snapshot followed by reconciled local changes. `start()` and `stop()` coordinate explicit command submission and confirmed processing; a future host may eventually take over independent processing, but is not part of 6C.
 
 ### 3.4 Reactive snapshots versus informational events
 
@@ -92,7 +92,7 @@ Explicit frontend action
 
 | Boundary | Agreed responsibility |
 |---|---|
-| `WorkflowStateMachine` | **Unchanged:** pure outcome transitions, typed reducers and deterministic replay, without I/O or subscriptions |
+| `WorkflowStateMachine` | Pure outcome transitions, typed reducers and deterministic replay, without I/O or subscriptions; its implementation may evolve where justified |
 | `WorkflowProcessor` | Proposes and validates outcomes; returns durable processing results, not a broadcast |
 | `WorkflowCommitter` | Revalidates against persistence and atomically commits journal, reservation and submission outcome |
 | **SDK-defined `WorkflowCommitPublisher`** | Persistence-facing port with **`publish()`**; the adapter invokes it **after** successful commitment, once per coherent transaction |
@@ -102,11 +102,11 @@ Explicit frontend action
 | **SDK observation coordinator / `WorkflowApplication`** | Registers local consumers, reconciles changes, and exposes immutable validated `RudraState` snapshots |
 | Frontends | Consume state and render; own UI lifetime and errors; never replay domain histories or authorize transitions |
 
-The two **contract responsibilities and method names are agreed**. They are not two independent notification services: the same composition-owned implementation may satisfy both interfaces. Neither the publisher nor persistence carries `WorkflowSnapshot` or `RudraState` as authority. After a signal, the SDK obtains a validated application snapshot using its existing reader and state machine. In particular, committed Stop yields a terminal `WorkflowSnapshot` but `WorkflowsState.current_workflow == null`.
+The **implemented** contract responsibilities and method names are complementary, not two independent notification services: the same composition-owned implementation may satisfy both interfaces. Neither the publisher nor persistence carries `WorkflowSnapshot` or `RudraState` as authority. After a signal, the SDK obtains a validated application snapshot using its existing reader and state machine. In particular, committed Stop yields a terminal `WorkflowSnapshot` but `WorkflowsState.current_workflow == null`.
 
-A transaction may commit multiple outcomes. Notify once after the transaction and publish a **coherent post-transaction application snapshot**, not intermediate proposals. Normal notification delivery/subscriber failures must not turn an already committed transaction into an apparent failure. Subscribe/read must detect or reconcile a commit occurring between listener registration and the initial state read. Trusted `os_user_id` scope is established by composition, never by an untrusted frontend.
+The implemented `PublishingWorkflowCommitter` publishes **one change hint per successful `commit(plan)`** after transaction completion; existing Start and Stop commits each contain one outcome. SDK observation always reads a **coherent post-commit application snapshot**, rather than publishing intermediate proposals. Publication exceptions are logged without changing the result of an already successful transaction, but a failed hint may leave a live subscriber stale until another notification or fresh restoration. Trusted `os_user_id` scope is established by composition, never by an untrusted frontend.
 
-**Still to design in 6C.2:** exact Dart parameter/return types for `publish()` and `watch()`, public `observe_state()` signature, registration/read race protocol, local fan-out, cancellation, failure behavior and any revision/cursor metadata. `Stream<void>` for `watch()` and `Stream<RudraState>` for application observation remain illustrative until their semantics are checked. No generic SDK polling loop, IPC or host is introduced in 6C.2. See the companion document §4.
+**Implemented signatures:** `void publish({required String os_user_id})`, `Stream<void> watch({required String os_user_id})` and `Stream<RudraState> observe_state()`. `WorkflowStateObserver` registers the listener before initial restoration, discards reads overtaken by subsequent local notifications, serializes reconciliation, coalesces rapid changes and reports restoration/source errors. Each subscription owns its lifecycle; the SQLite persistence context owns the shared notification channel. Missing SQLite storage is handled without creating a database on read. **Not implemented:** durable notification cursors, automatic catch-up after a lost hint, cross-process push, IPC or a background host. See the companion document §4.
 
 ## 4. Frontend composition and interaction
 
@@ -183,20 +183,20 @@ Continue using `RudraCliModule` and `package:args`. Start/Stop and future Pause 
 
 Original source review baseline: [Runner](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/apps/cli/lib/src/features/explorer/application/explorer_runner.dart), [SDK processor](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/sdk/lib/src/workflow/processing/workflow_processor.dart), [Drift committer](https://github.com/ibrahimab/rudra/blob/ffa62313fbfef6b0eeb3a4a1684e8dab7ea56513/packages/persistence/sqlite/lib/src/features/workflow/history/drift_workflow_committer.dart).
 
-### 5.2 Implementation ledger as of `dcf86f8`
+### 5.2 Implementation ledger as of `d326fbd`
 
 | Slice | Status | Evidence / qualification |
 |---|---|---|
 | **6A — Explorer realignment** | **Implemented** | `62d7c9551` marked 6A complete; physical input, action registry, compositional UI and isolated tests |
 | **6B — Composite SDK state** | **Implemented** | `e8338e130` through `be5275e1f`; snapshot, typed slices/reducers, immutable `RudraState`, outcome-only replay and tests |
 | **6C.1 — Portable operations** | **Implemented; developer-reported verification green** | `c0cd06543`, docs fixes `dcf86f8e2`; `WorkflowApplication`, SQLite durable status, CLI delegation |
-| **6C.2 — SDK `publish()` / `watch()` commit observation** | **Not implemented** | Publisher/subscriber ports and post-commit reconciliation direction agreed; precise signatures and implementation pending |
+| **6C.2 — SDK `publish()` / `watch()` commit observation** | **Implemented; developer-reported full-suite green** | `0439b29`–`d326fbd`; owner-scoped SDK ports, post-commit SQLite publisher, `observe_state()`, missing-storage guard, local race/error/cancellation and integration tests |
 | **6C.3 — Explorer observation integration** | **Not implemented** | Explorer still performs read-only refresh around actions |
 | **6D — Safe generic continuation/persistence** | **Pending** | Current SQLite committer still dispatches concrete Start/Stop categories |
 | **6E — Nested CLI feature contributions** | **Pending** | Architectural target accepted; not marked implemented |
 | **6F — Final audit and documentation** | **Pending** | Comprehensive verification and hypothetical Pause change-impact review |
 
-Do not describe 6B as upcoming work, or describe live observation as already present. Historical progress notes in the original epic were pinned to `434a925` and are superseded by the implementation ledger above. Update the ledger only after inspecting the newest pushed commit and verifying relevant tests.
+6C.2 local observation is implemented, but Explorer adoption and cross-process delivery are not. Historical progress notes in the original epic were pinned to `434a925` and are superseded by the implementation ledger above. The developer reported the full test suite green on 23 November 2026; this document records that report rather than claiming independent test execution.
 
 ## 6. Persistence safety and future continuation
 
@@ -243,7 +243,7 @@ apps/cli/test/
 
 ### 7.2 6C test ownership and scope
 
-6C.2 must verify: initial validated state, registration/read race, multiple local subscribers, post-commit `publish()` / `watch()` delivery, multi-outcome transaction coherence, no premature acceptance update, failed/rolled-back transaction silence, trusted owner isolation, cancellation, corrupt evidence, and no write-on-read. Use synthetic publisher/subscriber implementations and fake persistence for portable SDK contract tests; use real Drift/SQLite transactions for adapter-level safety tests. Demonstrate that SDK observation has no SQLite dependency and that another adapter could consume the same ports without SDK edits. When feasible, exercise workflow A → none → workflow B **within the supported local observation scope**.
+6C.2 test coverage includes initial validated state, registration/read overlap, rapid and replacement-workflow signals, multiple local observers, owner isolation, post-commit Start/Stop delivery, acceptance versus commitment, failure of the publisher, cancellation during restoration, stream shutdown, invalid history and absent-storage read-only behavior. Existing real Drift tests cover transaction rollback; separate publishing-decorator tests prove that a failing delegate does not notify. **A single combined real-Drift rollback-and-notification test and generalized multi-outcome persistence coverage are not separately established by these tests.** SDK observer tests use synthetic notification/read boundaries; SQLite integration tests use real persistence. The developer reported `./rudra verify all` green for the final 6C.2 code.
 
 6C.3 must verify: initial absent/active Explorer presentation, locally committed Start/Stop, stale UI action handling, safe rendering/input coordination, subscription cancellation and terminal restoration. Do not count cross-process live behavior as passing on the strength of in-process tests.
 
@@ -265,23 +265,23 @@ Immutable `RudraState`/`WorkflowsState`/`WorkflowSnapshot`; typed slices and red
 
 SDK read/current, confirmed Start/Stop, durable acceptance/processing status and CLI delegation. Implemented in `c0cd06543`; documentation cleanup in `dcf86f8e2`. Tests reported green by developer; retain latest-commit verification discipline.
 
-### 6C.2 — SDK commit publisher/subscriber and application-state observation — NEXT
+### 6C.2 — SDK commit publisher/subscriber and application-state observation — IMPLEMENTED; DEVELOPER-VERIFIED
 
-**Responsibility:** Connect the existing SDK state machine and durable persistence authority to a local observable application state **through SDK-defined persistence notification ports**. A SQLite/MySQL/other adapter calls `WorkflowCommitPublisher.publish()` only once the corresponding transaction has durably committed. The SDK application consumes the paired `WorkflowCommitSubscriber.watch()` notifications, reconstructs through `WorkflowStateReader` and emits validated immutable `RudraState` values. A different persistence adapter must not require changes to SDK domain/observation logic.
+**Responsibility:** Provide validated, immutable SDK application state to local observers, driven by committed persistence changes rather than command acceptance or proposed transitions.
 
-**Implementation constraints:**
+**Implemented components:**
 
-- **Lock in the responsibilities and names:** persistence calls **`publish()`**; SDK observation consumes **`watch()`**. Confirm precise Dart types and owner-scope semantics before coding; the companion §4 provides illustrative interfaces, not preapproved signatures.
-- Supply both ports through **one shared, explicitly owned notification context** at trusted composition. Do not accidentally give committers and observers unrelated stream controllers.
-- Leave `WorkflowStateMachine`, feature reducers, command behaviors and durable submission semantics unchanged. Its `transition()` proposes state; its `replay()` also powers verified restoration.
-- Publish only after atomic transaction success. A returned `WorkflowProcessingCommitted(plan)` is not the notification mechanism; `plan.resulting_state` is not blindly published as `RudraState`.
-- Failed/rolled-back transactions, accepted-but-pending submissions and rejected/quarantined commands do not cause a committed-domain-state notification.
-- Notification delivery/subscriber failures must not misreport committed transactions as failed. Define explicit observation errors and cancellation/disposal semantics.
-- Implement gap-aware initial watch/read and serialized reconciliation; handle rapid commits and changes between distinct current workflows without treating workflow-local version as an application revision.
-- Preserve trusted owner scoping, no implicit writes and no database creation merely because a frontend subscribes.
-- Deliver and test **local in-process** observation. No generic SDK polling loop, IPC, cross-process live push or background host in this slice.
+- SDK-defined `WorkflowCommitPublisher.publish()` and `WorkflowCommitSubscriber.watch()` contracts, plus the owner-scoped `LocalWorkflowCommitChannel`.
+- SQLite `PublishingWorkflowCommitter` decorator, publishing a hint after each successful atomic `commit(plan)` while logging publication errors without misreporting transaction success.
+- `WorkflowApplication.observe_state()` and `WorkflowStateObserver`, reconstructing state through existing `read_state()` / `WorkflowStateReader` / `WorkflowStateMachine.replay()`.
+- Watch-before-read startup, serialized reconciliation of overlapping signals, coalescing, independent local subscribers, cancellation and stream-error termination.
+- Lazy SQLite connection and `NonInitializingWorkflowHistoryStore`, preserving verified absence without implicit creation of missing persistence and detecting disappearance after persistence has been seen.
 
-**Done when:** A local consumer receives a validated initial `RudraState` and committed post-transaction updates through the portable SDK; real SQLite transaction tests and synthetic contract tests prove the publisher/subscriber separation, replay, race/error/cancellation/rollback and no-implicit-write guarantees. Scope limitations remain explicit.
+**Evidence:** Implementation commits `0439b29` (ports), `d0f7009` (SQLite wiring), `6f28b33` (SDK observer), `eaa3881` (publication safety/integration), `529a1b0` (missing-storage guard), and `d326fbd` (observer lifecycle tests). SDK contract/unit tests and real SQLite integration tests cover local Start → Active → Stop → verified absence, replacement/coalescing, owner isolation, publisher failures, restoration errors and cancellation. The developer reported the final full workspace suite green on 23 November 2026; this documentation update did not execute it independently.
+
+**Scope and residual limitations:** Notification hints are local to one shared in-process persistence context; another process or independently created context cannot observe those hints. There is no durable cursor, guaranteed recovery from a lost publication, cross-process live sync, host or transport. Existing Start/Stop commit one outcome each; generalized multi-outcome commitment belongs to 6D. A notification failure leaves the durable journal authoritative but may require explicit re-restoration for a stale live observer.
+
+**Completion:** 6C.2 implemented and developer-verified. Explorer integration remains 6C.3.
 
 ### 6C.3 — Explorer observation adoption — PLANNED
 
@@ -383,7 +383,7 @@ Inspect failing output and the list of changed files; do not assert tests were e
 
 ### Next-session baseline
 
-> Continue Rudra Epic 6 at **6C.2 — SDK commit publication and observable application state**. Read `docs/epics/rudra-epic-6-architectural-realignment.md` and the 6C companion, then inspect latest `main`. 6A, 6B and 6C.1 are implemented. The SDK already has immutable `RudraState`/`WorkflowsState`/`WorkflowSnapshot`, registered reducers, deterministic replay, `WorkflowApplication.read_state()` and a confirmed `WorkflowCommitter` boundary. The architecture is agreed: SDK-defined `WorkflowCommitPublisher.publish()` is called by SQLite (and future persistence adapters) **after** successful transaction commitment; SDK-defined `WorkflowCommitSubscriber.watch()` is consumed by SDK observation from the **same shared notification context**; the SDK restores authoritative state through its existing state machine and exposes `RudraState` snapshots. `publish` and `watch` are the agreed method names; precise types/race/failure semantics need review before coding. Do not put subscribers in the pure state machine, trust proposed `resulting_state` as committed state, introduce SDK polling, or build the host in 6C. Cross-process live sync is deferred. Work collaboratively in coherent slices, with feature-isolated tests and verification.
+> Continue Rudra Epic 6 at **6C.3 — Explorer observation adoption**. Read this epic and the 6C companion, then inspect latest pushed `main` (6C.2 baseline `d326fbd`). 6A, 6B, 6C.1 and 6C.2 are implemented; the developer reported full verification green. `WorkflowApplication.observe_state()` already emits validated `RudraState` from a shared in-process SQLite persistence context using the SDK-owned `publish()` / `watch()` ports. Reuse this API in Explorer, preserving feature-owned actions, compositional view models, terminal lifecycle and safety. The current one-operation CLI persistence lifetime is not suitable for a long-running subscription; design ownership and disposal deliberately. Do not add an independent frontend domain state machine, automatic command processing or cross-process IPC. State-machine changes are acceptable if architecturally justified, but pure transition/replay authority must remain in the SDK. Collaborate through explicit, documented, feature-coherent manual edits and isolated tests.
 
 ## 13. References and provenance
 
@@ -395,6 +395,8 @@ Inspect failing output and the list of changed files; do not assert tests were e
 - [SDK state](../../packages/sdk/lib/src/state/rudra_state.dart), [snapshot](../../packages/sdk/lib/src/workflow/states/workflow_snapshot.dart), [state machine](../../packages/sdk/lib/src/workflow/workflow_state_machine.dart)
 - [WorkflowApplication](../../packages/sdk/lib/src/workflow/application/workflow_application.dart), [WorkflowProcessor](../../packages/sdk/lib/src/workflow/processing/workflow_processor.dart), [WorkflowCommitter](../../packages/sdk/lib/src/workflow/processing/workflow_committer.dart)
 - [SQLite committer](../../packages/persistence/sqlite/lib/src/features/workflow/history/drift_workflow_committer.dart)
+- [SDK commit channel](../../packages/sdk/lib/src/workflow/observation/workflow_commit_channel.dart), [state observer](../../packages/sdk/lib/src/workflow/observation/workflow_state_observer.dart)
+- [SQLite publishing decorator](../../packages/persistence/sqlite/lib/src/features/workflow/observation/publishing_workflow_committer.dart), [non-initializing history store](../../packages/persistence/sqlite/lib/src/features/workflow/history/non_initializing_workflow_history_store.dart)
 - [Explorer action registry](../../apps/cli/lib/src/features/explorer/application/explorer_action_registry.dart), [Explorer runner](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart)
 
-**Provenance:** Original architecture agreed on 20 November 2026; 6C observability/host staging agreed on 22 November 2026; SDK `publish()` / `watch()` contract direction confirmed on 23 November 2026 (Europe/Amsterdam). Current implementation ledger grounded in inspected GitHub history through `dcf86f8e2`. Earlier 6A-only status, illustrative state designs and obsolete 6B resume prompts are superseded; ADR 0006's cross-process product requirement remains open until separately implemented and verified.
+**Provenance:** Original architecture agreed on 20 November 2026; observation/host staging agreed on 22 November 2026; SDK `publish()` / `watch()` direction confirmed on 23 November 2026 (Europe/Amsterdam). 6C.2 implementation inspected through `d326fbd`; the developer reported `./rudra verify all` green. This revision documents implementation and developer verification, not independent execution by the document author. ADR 0006's cross-process live observation, ordering and reconnect requirements remain for a future trusted host.
