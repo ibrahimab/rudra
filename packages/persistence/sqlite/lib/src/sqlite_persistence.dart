@@ -6,6 +6,7 @@ import 'database/rudra_database.dart';
 
 import 'features/workflow/history/drift_workflow_committer.dart';
 import 'features/workflow/history/drift_workflow_history_store.dart';
+import 'features/workflow/history/non_initializing_workflow_history_store.dart';
 
 import 'features/workflow/submissions/drift_event_submission_store.dart';
 import 'features/workflow/submissions/drift_workflow_inbox.dart';
@@ -57,6 +58,7 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
     required WorkflowRuntime runtime,
   }) : _scope_id = _validate_scope(scope_id),
        _runtime = runtime,
+       _database_file = database_file,
        _database = RudraDatabase.file(database_file);
 
   /// Trusted submission scope shared by every persistence adapter.
@@ -64,6 +66,9 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
 
   /// Immutable SDK workflow runtime shared by storage adapters.
   final WorkflowRuntime _runtime;
+
+  /// File backing this persistence context and its read-only presence guard.
+  final File _database_file;
 
   /// Database connection owned for this persistence lifetime.
   final RudraDatabase _database;
@@ -127,19 +132,20 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
     );
   }
 
-  /// Read-only access to authoritative committed workflow history.
+  /// Provides authoritative owner-scoped history without initializing
+  /// absent SQLite storage.
   ///
-  /// Shares the existing database connection with submissions,
-  /// processing, and workflow commitment.
+  /// The guard returns verified absence before the database exists.
+  /// Once present, the Drift delegate retrieves the complete committed
+  /// evidence required for SDK replay and integrity validation.
   ///
-  /// The caller supplies the trusted OS-user identity when
-  /// requesting history. This identity must not be inferred
-  /// from the submission scope.
-  ///
-  /// Decoding, replay, and lifecycle validation remain SDK
-  /// responsibilities.
+  /// Reading never submits or processes workflow commands.
+  @override
   late final WorkflowHistoryStore workflow_history_store =
-      DriftWorkflowHistoryStore(database: _database);
+      NonInitializingWorkflowHistoryStore(
+        database_file: _database_file,
+        delegate: DriftWorkflowHistoryStore(database: _database),
+      );
 
   /// Records confirmed business rejections of pending commands.
   ///

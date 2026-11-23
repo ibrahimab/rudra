@@ -29,20 +29,25 @@ final class RudraDatabase extends _$RudraDatabase {
   /// this database instance.
   RudraDatabase(QueryExecutor executor) : super(executor);
 
-  /// Opens a production file-backed SQLite database.
+  /// Prepares a file-backed SQLite database without opening it immediately.
   ///
-  /// Queries execute in a background isolate.
-  /// WAL supports concurrency and FULL synchronization
-  /// strengthens commit durability.
+  /// [database_file] identifies the persistent SQLite database.
+  /// The first database operation opens the connection in a background
+  /// isolate, using WAL journaling and FULL synchronization.
+  ///
+  /// Construction does not create the database file or its parent directory.
+  /// Explicit write operations may initialize a missing database.
   RudraDatabase.file(File database_file)
     : this(
-        NativeDatabase.createInBackground(
-          database_file,
-          setup: (database) {
-            database.execute('PRAGMA busy_timeout = 5000');
-            database.execute('PRAGMA journal_mode = WAL');
-            database.execute('PRAGMA synchronous = FULL');
-          },
+        LazyDatabase(
+          () async => NativeDatabase.createInBackground(
+            database_file,
+            setup: (database) {
+              database.execute('PRAGMA busy_timeout = 5000');
+              database.execute('PRAGMA journal_mode = WAL');
+              database.execute('PRAGMA synchronous = FULL');
+            },
+          ),
         ),
       );
 

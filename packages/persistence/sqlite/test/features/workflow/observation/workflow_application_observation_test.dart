@@ -57,6 +57,41 @@ void main() {
     return iterator.current;
   }
 
+  test('observation does not initialize missing SQLite storage', () async {
+    final database_file = File('${directory.path}/rudra.db');
+
+    expect(await database_file.exists(), isFalse);
+
+    final iterator = StreamIterator<RudraState>(application.observe_state());
+
+    try {
+      // Initial observation restores absence without opening SQLite.
+      final initial = await next_state(iterator);
+
+      expect(initial.workflows.current_workflow, isNull);
+      expect(await database_file.exists(), isFalse);
+
+      // Explicit Start is the operation authorized to initialize storage.
+      final started = await application.start(
+        target_id: 'local-macos',
+        root: TargetPath('/workspace'),
+      );
+
+      expect(await database_file.exists(), isTrue);
+
+      // The existing subscription must observe the committed workflow.
+      final active = await next_state(iterator);
+
+      expect(
+        active.workflows.current_workflow?.identity.workflow_id,
+        started.identity.workflow_id,
+      );
+      expect(active.workflows.current_workflow?.version, 1);
+    } finally {
+      await iterator.cancel();
+    }
+  });
+
   test('observes verified absence, Start and Stop', () async {
     // Initialize durable persistence through explicit workflow operations.
     // The new subscription must restore the resulting verified absence.
