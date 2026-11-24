@@ -51,6 +51,9 @@ export 'src/workflow/workflow.dart';
 /// Immutable composite SDK application state.
 export 'src/state/rudra_state.dart';
 
+/// Portable host runtime and platform contracts.
+export 'src/host/host.dart';
+
 /// Main SDK application facade.
 export 'src/rudra_sdk.dart';
 

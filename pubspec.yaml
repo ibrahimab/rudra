@@ -4,7 +4,9 @@ environment:
   sdk: ^3.14.0
 workspace:
   - apps/cli
+  - apps/host
   - packages/sdk
   - packages/targets/contracts
   - packages/targets/macos
   - packages/persistence/sqlite
+  - packages/host/macos

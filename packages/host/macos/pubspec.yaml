@@ -1,0 +1,14 @@
+name: rudra_host_macos
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  rudra_sdk:
+    path: ../../sdk
+
+dev_dependencies:
+  test: ^1.33.0
