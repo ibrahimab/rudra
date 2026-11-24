@@ -9,6 +9,7 @@ environment:
 dependencies:
   rudra_sdk:
     path: ../../sdk
+  args: ^2.7.0
 
 dev_dependencies:
   test: ^1.33.0

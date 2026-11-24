@@ -6,3 +6,6 @@ library;
 
 /// Native macOS operating-system identity resolution.
 export 'src/macos_identity.dart';
+
+/// Native macOS process termination coordination.
+export 'src/macos_host_shutdown.dart';
