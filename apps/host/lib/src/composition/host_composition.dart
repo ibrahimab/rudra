@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
+import '../development/host_transport_probe.dart';
+
 import 'host_workflow_identity_provider.dart';
 
 /// Composes the application resources owned by a Rudra host.
@@ -19,6 +21,7 @@ import 'host_workflow_identity_provider.dart';
 /// final composition = HostComposition(
 ///   identity_provider: identity_provider,
 ///   ownership_provider: ownership_provider,
+///   transport: transport,
 ///   data_directory: development_directory,
 ///   target_id: 'local-macos',
 /// );
@@ -37,6 +40,8 @@ final class HostComposition {
   /// [identity_provider] resolves the trusted operating-system owner.
   /// [ownership_provider] establishes exclusive ownership before
   /// application resources are constructed.
+  /// [transport] establishes the authenticated local communication
+  /// endpoint within the exclusively owned persistence scope.
   /// [data_directory] identifies an existing, dedicated development
   /// persistence directory.
   /// [target_id] identifies the configured filesystem target.
@@ -46,6 +51,7 @@ final class HostComposition {
   HostComposition({
     required this.identity_provider,
     required this.ownership_provider,
+    required this.transport,
     required this.data_directory,
     required this.target_id,
   });
@@ -55,6 +61,9 @@ final class HostComposition {
 
   /// Platform implementation responsible for exclusive host ownership.
   final HostOwnershipProvider ownership_provider;
+
+  /// Platform transport establishing authenticated client connections.
+  final HostTransport transport;
 
   /// Dedicated directory containing host development persistence.
   final Directory data_directory;
@@ -133,6 +142,7 @@ final class HostComposition {
     );
 
     var persistence_closed = true;
+    var listener_closed = true;
 
     try {
       final runtime = WorkflowRuntime.standard();
@@ -157,22 +167,43 @@ final class HostComposition {
 
         final host = RudraHost(application: application);
 
-        await host.run(
-          shutdown: shutdown,
-          on_startup: (application) async {
-            // Only an explicitly requested startup operation
-            // may establish a workflow.
-            if (startup_root != null) {
-              await application.start(target_id: target_id, root: startup_root);
-            }
-
-            // Restore authoritative application state before
-            // reporting successful host initialization.
-            final state = await application.read_state();
-
-            on_ready(os_user_id, state.workflows.current_workflow);
-          },
+        // Exclusive ownership is already established. Only the
+        // authorized host may prepare and bind its communication endpoint.
+        final listener = await transport.listen(
+          scope_directory: scope_directory,
+          os_user_id: os_user_id,
         );
+
+        listener_closed = false;
+
+        try {
+          await host.run(
+            listener: listener,
+            shutdown: shutdown,
+            handle_connection: run_host_transport_probe,
+            on_startup: (application) async {
+              // Explicit development startup remains the only operation
+              // authorized to establish a workflow during initialization.
+              if (startup_root != null) {
+                await application.start(
+                  target_id: target_id,
+                  root: startup_root,
+                );
+              }
+
+              final state = await application.read_state();
+
+              // Report readiness only after endpoint binding and
+              // authoritative workflow restoration have succeeded.
+              on_ready(os_user_id, state.workflows.current_workflow);
+            },
+          );
+        } finally {
+          // The SDK normally disposes of the listener. Confirm disposal
+          // here before permitting release of exclusive host ownership.
+          await listener.close();
+          listener_closed = true;
+        }
       } finally {
         // Close persistence while exclusive ownership remains
         // acquired, including after failed startup operations.
@@ -181,10 +212,10 @@ final class HostComposition {
         persistence_closed = true;
       }
     } finally {
-      // Fail closed if persistence disposal could not be confirmed.
-      // In that situation, process termination releases the native
-      // ownership resource rather than admitting another host early.
-      if (persistence_closed) {
+      // Fail closed if listener or persistence disposal could not
+      // be confirmed. Process termination releases native ownership
+      // rather than admitting another host prematurely.
+      if (listener_closed && persistence_closed) {
         await ownership.release();
       }
     }

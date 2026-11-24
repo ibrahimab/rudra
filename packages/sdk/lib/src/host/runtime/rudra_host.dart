@@ -1,5 +1,10 @@
 import '../../workflow/application/workflow_application.dart';
 
+import '../platform/contracts/host_connection.dart';
+import '../platform/contracts/host_listener.dart';
+
+import 'host_connection_service.dart';
+
 /// Coordinates the lifecycle of a configured Rudra host.
 ///
 /// Retains a single workflow application for the duration of the
@@ -15,22 +20,17 @@ import '../../workflow/application/workflow_application.dart';
 ///
 /// Example:
 /// ```dart
-/// import 'dart:async';
+/// final host = RudraHost(application: application);
 ///
-/// Future<void> run_host(
-///   WorkflowApplication application,
-///   Completer<void> shutdown,
-/// ) async {
-///   final host = RudraHost(application: application);
-///
-///   await host.run(
-///     shutdown: shutdown.future,
-///     on_startup: (application) async {
-///       final state = await application.read_state();
-///       print(state.workflows.current_workflow);
-///     },
-///   );
-/// }
+/// await host.run(
+///   listener: listener,
+///   shutdown: shutdown.future,
+///   handle_connection: handle_connection,
+///   on_startup: (application) async {
+///     final state = await application.read_state();
+///     print(state.workflows.current_workflow);
+///   },
+/// );
 /// ```
 final class RudraHost {
   /// Creates a host bound to the configured [application].
@@ -52,40 +52,46 @@ final class RudraHost {
   /// Prevents repeated or concurrent execution of the same host instance.
   bool _has_run = false;
 
-  /// Executes the configured host lifecycle.
+  /// Executes the configured host and connection lifecycle.
   ///
-  /// [shutdown] represents the externally managed termination signal.
+  /// [listener] supplies authenticated client connections.
+  /// Ownership transfers to this execution after the lifecycle
+  /// has been successfully claimed.
   ///
-  /// [on_startup] optionally performs an explicitly configured
-  /// startup operation using the retained application. The operation
-  /// completes before the host begins awaiting termination.
+  /// [handle_connection] executes an independent client session.
+  /// [shutdown] represents the external termination notification.
+  /// [on_startup] optionally initializes the retained application
+  /// before accepting client sessions.
   ///
-  /// Returns when startup has completed and shutdown has been
-  /// requested. Startup and shutdown failures propagate to the caller,
-  /// allowing the composition root to dispose of owned resources.
+  /// Returns after shutdown, listener disposal and termination
+  /// of outstanding connection handlers.
   ///
-  /// Throws [StateError] if this instance has previously entered
-  /// its execution lifecycle.
+  /// Throws [StateError] if this host has already been executed.
+  /// Startup and connection-service failures propagate.
   Future<void> run({
+    required HostListener listener,
     required Future<void> shutdown,
+    required Future<void> Function(HostConnection) handle_connection,
     Future<void> Function(WorkflowApplication)? on_startup,
   }) async {
     if (_has_run) {
       throw StateError('Host has already been run.');
     }
 
-    // Claim the execution lifecycle before awaiting asynchronous
-    // work to prevent overlapping calls from starting the same host.
+    // Claim the lifecycle before starting asynchronous work.
     _has_run = true;
 
-    // Complete explicitly configured startup operations before
-    // entering the host's long-running execution phase.
-    if (on_startup != null) {
-      await on_startup(_application);
-    }
+    const service = HostConnectionService();
 
-    // Delegate termination to the supplied lifecycle signal,
-    // keeping platform-specific signal handling outside the SDK.
-    await shutdown;
+    await service.run(
+      listener: listener,
+      shutdown: shutdown,
+      handle_connection: handle_connection,
+      on_startup: () async {
+        if (on_startup != null) {
+          await on_startup(_application);
+        }
+      },
+    );
   }
 }

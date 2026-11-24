@@ -11,5 +11,10 @@ export 'platform/contracts/host_identity_provider.dart';
 export 'platform/contracts/host_ownership_provider.dart';
 export 'platform/contracts/host_ownership_lease.dart';
 
+/// Authenticated local transport contracts.
+export 'platform/contracts/host_connection.dart';
+export 'platform/contracts/host_listener.dart';
+export 'platform/contracts/host_transport.dart';
+
 /// Portable host execution lifecycle.
 export 'runtime/rudra_host.dart';

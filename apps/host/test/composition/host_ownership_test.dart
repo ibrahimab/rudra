@@ -6,6 +6,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
 import '../support/test_host_ownership_provider.dart';
+import '../support/test_host_transport.dart';
 
 /// Verifies exclusive ownership at the host composition boundary.
 ///
@@ -32,6 +33,7 @@ void main() {
   HostComposition create_composition({Directory? scope}) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: ownership,
+    transport: TestHostTransport(),
     data_directory: scope ?? directory,
     target_id: 'test-target',
   );
