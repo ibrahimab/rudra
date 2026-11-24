@@ -11,6 +11,8 @@ dependencies:
     path: ../../packages/targets/macos
   rudra_persistence_sqlite:
     path: ../../packages/persistence/sqlite
+  rudra_host:
+    path: ../host
   args: ^2.7.0
   uuid: ^4.6.0
 dev_dependencies:

@@ -4,6 +4,10 @@ import 'package:args/command_runner.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
 
+import 'package:rudra_host/rudra_host.dart';
+
+import 'features/host/cli/host_cli_module.dart';
+
 import 'composition/product_sdk_composition.dart';
 
 import 'composition/product_workflow_composition.dart';
@@ -167,6 +171,17 @@ final class RudraCli {
 
     cli.register_module(
       AboutCliModule(product_name: application_name, renderer: about_renderer),
+    );
+
+    // Host commands manage the local application lifecycle independently
+    // of filesystem target discovery. Native support is resolved only
+    // when a host operation is explicitly requested.
+    cli.register_module(
+      HostCliModule(
+        run_host: run_local_host,
+        output: presentation_output,
+        error_output: diagnostic_output,
+      ),
     );
 
     if (composition != null) {
