@@ -9,3 +9,6 @@ export 'src/macos_identity.dart';
 
 /// Native macOS process termination coordination.
 export 'src/macos_host_shutdown.dart';
+
+/// Native macOS host ownership acquisition.
+export 'src/ownership/macos_host_ownership_provider.dart';

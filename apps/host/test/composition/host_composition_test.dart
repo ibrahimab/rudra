@@ -5,6 +5,8 @@ import 'package:rudra_host/src/composition/host_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
+import '../support/test_host_ownership_provider.dart';
+
 /// Verifies host resource ownership and workflow restoration
 /// using isolated development persistence.
 void main() {
@@ -25,6 +27,7 @@ void main() {
   /// Returns a fresh composition with deterministic trusted ownership.
   HostComposition create_composition() => HostComposition(
     identity_provider: const _TestIdentityProvider(),
+    ownership_provider: TestHostOwnershipProvider(),
     data_directory: directory,
     target_id: 'test-target',
   );

@@ -53,6 +53,15 @@ enum RudraExitCode {
   /// Rudra's existing workflow-conflict exit status.
   workflow_conflict(73),
 
+  /// Another host instance owns the requested persistence scope.
+  ///
+  /// The requested operation cannot proceed until the existing
+  /// host releases its ownership resource.
+  ///
+  /// Exit 75 follows BSD EX_TEMPFAIL conventions, indicating
+  /// that the operation may succeed on a subsequent attempt.
+  host_conflict(75),
+
   /// A required input file, manifest, or repository resource is missing.
   missing_input(66),
 

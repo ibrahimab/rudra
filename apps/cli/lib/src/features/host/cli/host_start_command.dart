@@ -89,6 +89,9 @@ final class HostStartCommand extends Command<int> {
   /// [RudraExitCode.configuration_error]. Other host execution
   /// failures return [RudraExitCode.software_error].
   ///
+  /// An occupied host persistence scope returns
+  /// [RudraExitCode.host_conflict].
+  ///
   /// Throws [UsageException] for unsupported arguments or missing
   /// required development configuration.
   @override
@@ -145,6 +148,13 @@ final class HostStartCommand extends Command<int> {
           _output.writeln('Host ready (pid: $pid)');
         },
       );
+    } on HostAlreadyOwnedException catch (error) {
+      _error_output.writeln(
+        'Rudra Host already running for scope: '
+        '${error.scope_directory}',
+      );
+
+      return RudraExitCode.host_conflict.value;
     } on WorkflowAlreadyActiveException catch (error) {
       _error_output.writeln('Workflow already active: $error');
 

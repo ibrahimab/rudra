@@ -18,6 +18,7 @@ import 'host_workflow_identity_provider.dart';
 /// ```dart
 /// final composition = HostComposition(
 ///   identity_provider: identity_provider,
+///   ownership_provider: ownership_provider,
 ///   data_directory: development_directory,
 ///   target_id: 'local-macos',
 /// );
@@ -34,19 +35,26 @@ final class HostComposition {
   /// Creates a host composition with its required dependencies.
   ///
   /// [identity_provider] resolves the trusted operating-system owner.
+  /// [ownership_provider] establishes exclusive ownership before
+  /// application resources are constructed.
   /// [data_directory] identifies an existing, dedicated development
   /// persistence directory.
   /// [target_id] identifies the configured filesystem target.
   ///
-  /// Construction retains configuration without opening SQLite.
+  /// Construction retains configuration without acquiring ownership
+  /// or opening SQLite.
   HostComposition({
     required this.identity_provider,
+    required this.ownership_provider,
     required this.data_directory,
     required this.target_id,
   });
 
   /// Platform implementation responsible for trusted identity resolution.
   final HostIdentityProvider identity_provider;
+
+  /// Platform implementation responsible for exclusive host ownership.
+  final HostOwnershipProvider ownership_provider;
 
   /// Dedicated directory containing host development persistence.
   final Directory data_directory;
@@ -66,7 +74,7 @@ final class HostComposition {
   File get database_file =>
       File.fromUri(data_directory.absolute.uri.resolve(database_filename));
 
-  /// Composes and executes one host lifecycle.
+  /// Composes and executes one exclusively owned host lifecycle.
   ///
   /// [shutdown] supplies the externally managed termination signal.
   /// [startup_root] optionally requests explicit workflow establishment
@@ -74,12 +82,17 @@ final class HostComposition {
   /// [on_ready] receives the trusted owner and verified current
   /// workflow after startup operations have completed.
   ///
-  /// Returns after the host has terminated and its persistence
-  /// resources have been released.
+  /// Acquires ownership before constructing application resources
+  /// and retains it until persistence disposal has completed.
   ///
-  /// Throws [StateError] for repeated execution, unavailable storage
-  /// directories or invalid trusted identity. Application and
-  /// persistence failures propagate to the caller.
+  /// Returns after graceful termination and resource disposal.
+  ///
+  /// Throws [HostAlreadyOwnedException] when the persistence scope
+  /// already has an owner, or [StateError] for repeated execution,
+  /// unavailable storage or invalid trusted identity.
+  ///
+  /// Application, ownership and persistence failures propagate
+  /// to the caller.
   Future<void> run({
     required Future<void> shutdown,
     required void Function(String os_user_id, WorkflowSnapshot? workflow)
@@ -91,7 +104,7 @@ final class HostComposition {
     }
 
     // Claim composition ownership before asynchronous initialization
-    // to prevent concurrent execution of the same composition instance.
+    // to prevent overlapping execution of the same instance.
     _has_run = true;
 
     final os_user_id = await identity_provider.resolve();
@@ -104,46 +117,76 @@ final class HostComposition {
       throw StateError('The host development directory must already exist.');
     }
 
-    final runtime = WorkflowRuntime.standard();
+    // Resolve one canonical directory for both ownership and
+    // persistence so alternative path spellings cannot establish
+    // independent ownership of the same storage location.
+    final scope_directory = await data_directory.resolveSymbolicLinks();
 
-    // Share the same runtime and persistence context throughout
-    // the complete application lifecycle.
-    final persistence = RudraSqlitePersistence(
-      database_file: database_file,
-      scope_id: 'rudra-host-dev:$os_user_id',
-      runtime: runtime,
+    final scoped_database = File.fromUri(
+      Directory(scope_directory).uri.resolve(database_filename),
     );
 
+    // Competing hosts must fail before constructing or accessing
+    // any workflow persistence resources.
+    final ownership = await ownership_provider.acquire(
+      scope_directory: scope_directory,
+    );
+
+    var persistence_closed = true;
+
     try {
-      final application = WorkflowApplication(
+      final runtime = WorkflowRuntime.standard();
+
+      final persistence = RudraSqlitePersistence(
+        database_file: scoped_database,
+        scope_id: 'rudra-host-dev:$os_user_id',
         runtime: runtime,
-        persistence: persistence,
-        identity_provider: HostWorkflowIdentityProvider(os_user_id: os_user_id),
-        os_user_id: os_user_id,
       );
 
-      final host = RudraHost(application: application);
+      persistence_closed = false;
 
-      await host.run(
-        shutdown: shutdown,
-        on_startup: (application) async {
-          // Workflow establishment is an explicit development
-          // operation rather than an implicit host startup action.
-          if (startup_root != null) {
-            await application.start(target_id: target_id, root: startup_root);
-          }
+      try {
+        final application = WorkflowApplication(
+          runtime: runtime,
+          persistence: persistence,
+          identity_provider: HostWorkflowIdentityProvider(
+            os_user_id: os_user_id,
+          ),
+          os_user_id: os_user_id,
+        );
 
-          // Read authoritative state instead of maintaining a
-          // separate host-owned workflow state representation.
-          final state = await application.read_state();
+        final host = RudraHost(application: application);
 
-          on_ready(os_user_id, state.workflows.current_workflow);
-        },
-      );
+        await host.run(
+          shutdown: shutdown,
+          on_startup: (application) async {
+            // Only an explicitly requested startup operation
+            // may establish a workflow.
+            if (startup_root != null) {
+              await application.start(target_id: target_id, root: startup_root);
+            }
+
+            // Restore authoritative application state before
+            // reporting successful host initialization.
+            final state = await application.read_state();
+
+            on_ready(os_user_id, state.workflows.current_workflow);
+          },
+        );
+      } finally {
+        // Close persistence while exclusive ownership remains
+        // acquired, including after failed startup operations.
+        await persistence.close();
+
+        persistence_closed = true;
+      }
     } finally {
-      // Persistence remains available until host execution and
-      // all awaited startup operations have completed.
-      await persistence.close();
+      // Fail closed if persistence disposal could not be confirmed.
+      // In that situation, process termination releases the native
+      // ownership resource rather than admitting another host early.
+      if (persistence_closed) {
+        await ownership.release();
+      }
     }
   }
 }
