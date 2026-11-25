@@ -1,5 +1,7 @@
 import 'application_messaging_module.dart';
 
+import '../workflow/messaging/workflow_messaging_module.dart';
+
 /// Returns the messaging modules enabled in standard Rudra.
 ///
 /// Feature composition is explicit and deterministic.
@@ -8,5 +10,5 @@ import 'application_messaging_module.dart';
 /// without acquiring communication resources or executing
 /// application operations.
 List<ApplicationMessagingModule> standard_messaging_modules() {
-  return [];
+  return [const WorkflowMessagingModule()];
 }

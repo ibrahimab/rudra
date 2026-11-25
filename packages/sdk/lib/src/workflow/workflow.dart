@@ -68,3 +68,6 @@ export 'observation/workflow_commit_channel.dart';
 /// Read-only workflow history and restoration.
 export 'reading/workflow_history_store.dart';
 export 'reading/workflow_state_reader.dart';
+
+/// Workflow application messaging contracts.
+export 'messaging/workflow_messaging.dart';

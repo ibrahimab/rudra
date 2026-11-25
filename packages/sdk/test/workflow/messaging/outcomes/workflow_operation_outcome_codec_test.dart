@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_sdk/src/workflow/messaging/outcomes/workflow_operation_outcome.dart';
 import 'package:rudra_sdk/src/workflow/messaging/outcomes/workflow_operation_outcome_codec.dart';
 import 'package:test/test.dart';
 
