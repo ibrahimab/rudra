@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A complete, 7B pending
+**Status:** In progress — 7A complete; 7B.1, 7B.2 and 7B.3.1 complete; 7B.3.2 next
 **Created:** 24 November 2026
 **Updated:** 25 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -382,6 +382,67 @@ This architectural realignment supersedes the earlier allocation of communicatio
 
 **Gate:** Concurrent Start yields at most one unfinished workflow and correct per-request outcomes, verified against real SQLite journal evidence.
 
+#### 7B.1 — Typed communication infrastructure (complete)
+
+Established reusable typed messaging infrastructure, including request and response registration, serialization, correlation and request execution.
+
+Communication remains independent of Rudra application semantics. Transport implementations and application-specific message contributions retain their respective ownership boundaries.
+
+#### 7B.2 — Typed application messaging contracts (complete)
+
+Introduced application-owned messaging contributions for workflow establishment, termination, durable submission resolution and composite application state reading.
+
+Operation identifiers, request correlation and durable submission identities remain independently owned concepts.
+
+Composite state serialization uses registered feature-owned slice codecs. Application messaging does not introduce lifecycle transitions or persistence behavior.
+
+#### 7B.3.1 — Durable idempotency and application resolution (complete)
+
+Established one authoritative execution contract for explicit workflow Start and Stop operations.
+
+- Start requires the configured target, original target-native root and idempotency key.
+- Stop requires the intended workflow identifier and idempotency key.
+- Durable acceptance precedes mutable workflow-state validation.
+- Identical scoped operations recover their original durable submission identities and terminal resolutions.
+- Conflicting key reuse returns a typed idempotency conflict without creating a replacement submission.
+- Application outcomes are owned by the application feature rather than messaging.
+- Resolution construction enforces mutually exclusive processing metadata.
+- Persistence validates historical command compatibility, causation, correlation, ownership and journal evidence inside a consistent read transaction.
+- Historical resolution is independent of the current unfinished-workflow projection.
+- One WorkflowApplication serializes command processing, including explicit processing requests and operation-driven resolution.
+- Failed processing releases the application processing lane without fabricating successful commitment.
+- Business rejection and quarantine remain durable terminal resolutions.
+- Existing CLI, Explorer and explicit host startup consumers use the new application contract.
+
+**Verification:** Dedicated SDK tests and real SQLite integration tests cover concurrent retries, conflicting submissions, historical resolutions, interrupted acceptance, persistence reopening, durable rejection and quarantine recovery, journal uniqueness and commit notification counts.
+
+**Boundary:** Application serialization applies to one retained application instance. Independent frontend processes do not yet share that instance. Transport-level recovery, authenticated request routing and competing independent client connections remain subsequent work.
+
+**Implementation increments:**
+
+- 7B.3.1A — Application outcome and resolution integrity: `72837bd6aa33e16fd408b9e3e53e4e0717348fa6`
+- 7B.3.1B — Serialized idempotent application execution: `53b24b35348c5cd15957640c6f7dba1657a5b4ce`
+- 7B.3.1C — Real SQLite recovery and concurrency verification.
+
+#### 7B.3.2 — Authoritative host application request handlers (next)
+
+Bind registered application request contracts to the single WorkflowApplication retained by RudraHost.
+
+- Register Start, Stop, durable submission-resolution and composite state-read handlers through feature-owned contributions.
+- Route explicit operation identifiers and command parameters unchanged to the authoritative application.
+- Return typed application outcomes through the existing communication contracts.
+- Keep authenticated ownership in trusted host composition.
+- Preserve the distinction between application outcomes and communication or infrastructure failures.
+- Introduce no additional workflow processor, persistence owner or domain execution path.
+
+**Gate:** Authenticated request dispatch invokes the retained application and returns its verified application outcomes.
+
+#### 7B.3.3 — Competing host clients
+
+Verify simultaneous requests from independent authenticated client connections against one retained host application and SQLite persistence context.
+
+**Gate:** Competing operations, identical retries and interrupted response delivery preserve the exact durable operation semantics established in 7B.3.1.
+
 ### 7C — Host state subscriptions and reconnection
 
 **Goal:** The host distributes validated SDK application state to multiple clients.
@@ -433,7 +494,7 @@ Test at the feature's owning boundary. Prefer separate unit, contract, real-pers
 - **Real host integration:** Two simultaneous Start requests with barriers (not timing sleeps), Start-vs-Stop races, committed change fan-out, failed commit silence and reconnect to verified journal state.
 - **Actual process integration:** Separate host, CLI commands and at least two Explorer processes; process termination, competing host startup, socket permission/identity enforcement and no accidental frontend SQLite usage.
 - **Explorer integration:** Initial verified display, external live Start/Stop, navigation-vs-notification ordering, stale displayed workflow ID guard, no phantom Active, terminal restoration and subscription cleanup on every exit path.
-- **No-write checks:** Absent database stays absent after host/client construction, read, observe, navigation and Quit; Start is the explicit initialization path.
+- **No-write checks:** Absent database stays absent after host/client construction, read, observe, navigation, Quit and Stop selection when no workflow exists. Explicit durable submissions may initialize persistence, including a Stop targeting a known workflow identifier whose absence must be durably recorded as a rejection.
 
 At every completed slice, run formatting, affected tests, full `./rudra verify all`, `git diff --check`, and inspect the resulting commit. Do not mark a behavior implemented or green without the corresponding execution evidence.
 
