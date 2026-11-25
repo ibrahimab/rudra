@@ -51,6 +51,11 @@ export 'src/workflow/workflow.dart';
 /// Immutable composite SDK application state.
 export 'src/state/rudra_state.dart';
 
+/// Application messaging contribution and composition contracts.
+export 'src/messaging/application_messaging_module.dart';
+export 'src/messaging/application_message_codecs.dart';
+export 'src/messaging/standard_messaging_modules.dart';
+
 /// Portable host runtime and platform contracts.
 export 'src/host/host.dart';
 
