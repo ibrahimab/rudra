@@ -21,9 +21,6 @@ void main() {
     scope_directory: scope,
     os_user_id: owner,
     shutdown: Future<void>.value(),
-    handle_connection: (_) async {
-      fail('No client connection is expected.');
-    },
     on_startup: on_startup,
   );
 

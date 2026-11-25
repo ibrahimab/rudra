@@ -2,18 +2,16 @@ import 'dart:async';
 
 import '../transport/contracts/transport_connection.dart';
 import '../transport/contracts/transport_listener.dart';
+import 'default_message_session.dart';
 
-/// Coordinates concurrent connections during a communication lifecycle.
+/// Coordinates concurrent typed sessions over authenticated connections.
 ///
-/// Accepts authenticated connections from a configured listener
-/// and executes each connection handler independently.
+/// Owns one listener execution lifecycle and maintains independent
+/// message sessions for accepted connections.
 ///
-/// Connection-local failures terminate the affected session.
-/// Listener and resource disposal failures terminate the service.
-///
-/// Each service instance owns one listener execution lifecycle.
-/// Resource disposal remains independently observable through
-/// [resources_released], including after unsuccessful execution.
+/// Session execution failures remain isolated to their respective
+/// clients. Listener and resource disposal failures terminate the
+/// coordinator and prevent confirmation of successful release.
 ///
 /// Example:
 /// ```dart
@@ -22,71 +20,66 @@ import '../transport/contracts/transport_listener.dart';
 /// await service.run(
 ///   listener: listener,
 ///   shutdown: shutdown.future,
-///   handle_connection: handle_connection,
+///   open_session: open_session,
 /// );
 ///
 /// assert(service.resources_released);
 /// ```
 final class ConnectionService {
-  /// Creates an inactive connection lifecycle coordinator.
+  /// Creates an inactive session lifecycle coordinator.
   ///
   /// Construction does not acquire a listener or accept connections.
   ConnectionService();
 
-  /// Records whether this service has claimed its execution lifecycle.
+  /// Whether this coordinator has claimed its execution lifecycle.
   bool _has_run = false;
 
-  /// Records whether all owned resources have been released.
-  ///
-  /// Remains false while execution is active or resource disposal
-  /// cannot be confirmed.
+  /// Whether all owned resources have been successfully released.
   bool _resources_released = true;
 
-  /// Whether all resources owned by this service have been released.
+  /// Whether listener and session disposal have been confirmed.
   ///
-  /// Returns true before execution and after confirmed disposal.
-  /// Returns false during execution or following failed disposal.
-  ///
-  /// Successful disposal does not imply successful session execution.
+  /// Returns true before execution and after successful disposal.
+  /// Returns false during execution or following disposal failure.
   bool get resources_released => _resources_released;
 
-  /// Executes authenticated sessions until shutdown.
+  /// Executes concurrent authenticated sessions until termination.
   ///
-  /// [listener] supplies authorized connections and is owned by
-  /// this execution until disposal completes.
+  /// [listener] supplies authenticated connections and transfers
+  /// ownership of its execution lifecycle to this coordinator.
+  ///
   /// [shutdown] supplies the external termination notification.
-  /// [handle_connection] executes an individual session.
-  /// [on_startup] optionally initializes application state before
-  /// connection acceptance begins.
   ///
-  /// Returns after closing the listener and awaiting outstanding
-  /// connection handlers.
+  /// [open_session] constructs an executing message session for
+  /// an accepted connection. Successful opening transfers
+  /// connection ownership to the returned session.
   ///
-  /// Throws [StateError] when this service has already been executed.
+  /// [on_startup] optionally initializes application resources
+  /// before accepting connections.
   ///
+  /// Returns after listener disposal, session resource disposal
+  /// and completion of outstanding application handlers.
+  ///
+  /// Throws [StateError] for repeated execution.
   /// Startup, listener and resource disposal failures propagate.
-  /// Individual handler failures remain isolated to their sessions.
-  ///
-  /// [resources_released] confirms whether listener disposal and
-  /// termination of outstanding sessions completed successfully,
-  /// independently of the execution result.
+  /// Individual session execution failures remain isolated.
   Future<void> run({
     required TransportListener listener,
     required Future<void> shutdown,
-    required Future<void> Function(TransportConnection) handle_connection,
+    required DefaultMessageSession Function(TransportConnection) open_session,
     Future<void> Function()? on_startup,
   }) async {
     if (_has_run) {
       throw StateError('Connection service has already been run.');
     }
 
-    // Claim the lifecycle before accepting asynchronous work.
-    // Resource ownership remains active until disposal is confirmed.
     _has_run = true;
     _resources_released = false;
 
     final failure = Completer<void>();
+
     final active = <Future<void>>{};
+    final sessions = <DefaultMessageSession>{};
 
     StreamSubscription<TransportConnection>? subscription;
 
@@ -95,12 +88,9 @@ final class ConnectionService {
     Object? disposal_error;
     StackTrace? disposal_stack;
 
-    // Attach the shutdown and listener-failure observers before
-    // startup can perform asynchronous application operations.
+    // Observe termination before asynchronous startup begins.
     final termination = Future.any<void>([shutdown, failure.future]);
 
-    // Observe an early termination failure while startup is
-    // running. The original result is still awaited below.
     termination.ignore();
 
     try {
@@ -112,23 +102,26 @@ final class ConnectionService {
         (connection) {
           late final Future<void> task;
 
-          // Do not await a connection handler in the acceptance
-          // callback. Each client requires an independent session.
-          task = _serve_connection(connection, handle_connection)
-              .then<void>(
-                (_) {},
-                onError: (Object error, StackTrace stack) {
-                  disposal_error ??= error;
-                  disposal_stack ??= stack;
+          task =
+              _serve_connection(
+                    connection: connection,
+                    open_session: open_session,
+                    sessions: sessions,
+                  )
+                  .then<void>(
+                    (_) {},
+                    onError: (Object error, StackTrace stack) {
+                      disposal_error ??= error;
+                      disposal_stack ??= stack;
 
-                  if (!stopping && !failure.isCompleted) {
-                    failure.completeError(error, stack);
-                  }
-                },
-              )
-              .whenComplete(() {
-                active.remove(task);
-              });
+                      if (!stopping && !failure.isCompleted) {
+                        failure.completeError(error, stack);
+                      }
+                    },
+                  )
+                  .whenComplete(() {
+                    active.remove(task);
+                  });
 
           active.add(task);
         },
@@ -151,46 +144,87 @@ final class ConnectionService {
       stopping = true;
 
       try {
-        // Closing native connections unblocks handlers that
-        // are awaiting incoming transport data.
+        // Stop accepting native connections and terminate
+        // connections retained by the listener.
         await listener.close();
       } finally {
         try {
           await subscription?.cancel();
         } finally {
-          // Application resources remain available until all
-          // accepted sessions have actually terminated.
-          await Future.wait(active.toList(growable: false));
+          try {
+            // Explicitly terminate remaining message sessions
+            // even when listener disposal reports failure.
+            await Future.wait<void>(
+              sessions
+                  .toList(growable: false)
+                  .map((session) => session.close()),
+            );
+          } finally {
+            // Application resources must remain available until
+            // every admitted handler has finished executing.
+            await Future.wait<void>(active.toList(growable: false));
+          }
         }
       }
 
-      if (disposal_error != null) {
-        Error.throwWithStackTrace(disposal_error!, disposal_stack!);
+      final error = disposal_error;
+
+      if (error != null) {
+        Error.throwWithStackTrace(error, disposal_stack!);
       }
 
-      // Reaching this point establishes that the listener, subscription
-      // and outstanding connection handlers have all been disposed of.
       _resources_released = true;
     }
   }
 
-  /// Executes [handler] for one authenticated [connection].
+  /// Executes one authenticated connection as a typed session.
   ///
-  /// Isolates session failures from other connected clients.
-  /// Returns after disposing of the connection.
+  /// [connection] supplies the accepted native transport.
+  /// [open_session] establishes its object-level session.
+  /// [sessions] tracks sessions retained by the coordinator.
   ///
-  /// Connection disposal failures propagate to the coordinator.
-  Future<void> _serve_connection(
-    TransportConnection connection,
-    Future<void> Function(TransportConnection) handler,
-  ) async {
+  /// Failed session initialization disposes of the untransferred
+  /// transport connection.
+  ///
+  /// Session execution failures remain isolated. Resource disposal
+  /// failures propagate to the coordinator.
+  ///
+  /// Returns after session disposal and application-handler draining.
+  Future<void> _serve_connection({
+    required TransportConnection connection,
+    required DefaultMessageSession Function(TransportConnection) open_session,
+    required Set<DefaultMessageSession> sessions,
+  }) async {
+    final DefaultMessageSession session;
+
     try {
-      await handler(connection);
+      session = open_session(connection);
     } catch (_) {
-      // A failed client session must not terminate the shared
-      // host or interrupt other independent connections.
-    } finally {
+      // Session opening did not transfer connection ownership.
       await connection.close();
+
+      return;
+    }
+
+    sessions.add(session);
+
+    try {
+      try {
+        await session.done;
+      } catch (_) {
+        // Protocol and transport execution failures remain
+        // isolated to the affected client session.
+      }
+    } finally {
+      try {
+        // Unlike session.done, close reports the retained
+        // resource disposal result independently of execution.
+        await session.close();
+      } finally {
+        await session.handlers_done;
+
+        sessions.remove(session);
+      }
     }
   }
 }

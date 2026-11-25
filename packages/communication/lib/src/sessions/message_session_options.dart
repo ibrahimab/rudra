@@ -8,7 +8,8 @@ import 'serialized_writer.dart';
 /// executing sessions. Each session maintains its own resource counts
 /// and applies these limits independently.
 ///
-/// Configuration values are validated when a session is opened.
+/// Configuration values are validated before communication execution
+/// and when an individual session is opened.
 ///
 /// Example:
 /// ```dart
@@ -55,4 +56,49 @@ final class MessageSessionOptions {
 
   /// Deadline applied to each outgoing request.
   final Duration request_timeout;
+
+  /// Validates the configured session execution limits.
+  ///
+  /// Performs validation without acquiring native resources
+  /// or starting communication.
+  ///
+  /// Throws [ArgumentError] for invalid frame sizes, non-positive
+  /// execution capacities or non-positive request deadlines.
+  void validate() {
+    // Reuse the framing component's wire-size validation rather
+    // than duplicate the protocol's representable length range.
+    LengthPrefixedFraming(maximum_frame_size: maximum_frame_size);
+
+    if (maximum_pending <= 0) {
+      throw ArgumentError.value(
+        maximum_pending,
+        'maximum_pending',
+        'Pending request capacity must be positive.',
+      );
+    }
+
+    if (maximum_incoming <= 0) {
+      throw ArgumentError.value(
+        maximum_incoming,
+        'maximum_incoming',
+        'Incoming request capacity must be positive.',
+      );
+    }
+
+    if (maximum_outstanding <= 0) {
+      throw ArgumentError.value(
+        maximum_outstanding,
+        'maximum_outstanding',
+        'Write capacity must be positive.',
+      );
+    }
+
+    if (request_timeout <= Duration.zero) {
+      throw ArgumentError.value(
+        request_timeout,
+        'request_timeout',
+        'Request deadline must be positive.',
+      );
+    }
+  }
 }

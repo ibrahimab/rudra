@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
+import 'package:rudra_communication/src/sessions/connection_service.dart';
+import 'package:rudra_communication/src/sessions/default_message_session.dart';
+
 /// Verifies portable host connection lifecycle coordination.
 void main() {
   const operation_timeout = Duration(seconds: 5);
@@ -29,18 +32,20 @@ void main() {
     final running = service.run(
       listener: listener,
       shutdown: shutdown.future,
-      handle_connection: (connection) async {
+      open_session: (connection) {
+        final session = _open_session(connection);
+
         started++;
+
+        session.done.then<void>((_) {
+          completed++;
+        }).ignore();
 
         if (started == 2) {
           both_started.complete();
         }
 
-        // Both handlers must remain active until listener
-        // disposal terminates their respective streams.
-        await connection.incoming.drain<void>();
-
-        completed++;
+        return session;
       },
     );
 
@@ -70,7 +75,7 @@ void main() {
       service.run(
         listener: listener,
         shutdown: Future<void>.value(),
-        handle_connection: (_) async {
+        open_session: (_) {
           fail('Client execution must not begin.');
         },
         on_startup: () async {
@@ -95,19 +100,23 @@ void main() {
     final running = service.run(
       listener: listener,
       shutdown: shutdown.future,
-      handle_connection: (connection) async {
-        if (identical(connection, first)) {
-          throw StateError('Controlled session failure.');
+      open_session: (connection) {
+        final session = _open_session(connection);
+
+        if (identical(connection, second)) {
+          second_started.complete();
         }
 
-        second_started.complete();
-
-        await connection.incoming.drain<void>();
+        return session;
       },
     );
 
     try {
       listener.accept(first);
+
+      // A zero-length frame violates the actual communication
+      // protocol and terminates only this client session.
+      first.inject(Uint8List(4));
 
       await first.closed.timeout(operation_timeout);
 
@@ -133,7 +142,7 @@ void main() {
     final running = service.run(
       listener: listener,
       shutdown: shutdown.future,
-      handle_connection: (_) async {},
+      open_session: _open_session,
     );
 
     final result = expectLater(
@@ -143,11 +152,35 @@ void main() {
 
     listener.accept(connection);
 
+    // Initiate actual protocol termination. Failed session
+    // disposal must propagate rather than be isolated as an
+    // ordinary client execution failure.
+    connection.inject(Uint8List(4));
+
     await result;
 
     expect(listener.is_closed, isTrue);
     expect(service.resources_released, isFalse);
   });
+}
+
+/// Opens an executing session over the supplied [connection].
+///
+/// Uses empty frozen application registration so these tests
+/// exercise communication lifecycle ownership independently of
+/// application-specific messaging.
+///
+/// Returns a session owning the supplied connection.
+DefaultMessageSession _open_session(TransportConnection connection) {
+  final codecs = MessageCodecRegistry()..freeze();
+
+  final handlers = RequestHandlerRegistry()..freeze(codecs: codecs);
+
+  return DefaultMessageSession.open(
+    connection: connection,
+    codecs: codecs,
+    handlers: handlers,
+  );
 }
 
 /// Supplies controlled connections to the portable coordinator.
@@ -240,6 +273,11 @@ final class _TestConnection implements TransportConnection {
   /// Controlled stream of incoming bytes.
   @override
   Stream<Uint8List> get incoming => _incoming.stream;
+
+  /// Delivers [bytes] to the executing session's incoming stream.
+  void inject(Uint8List bytes) {
+    _incoming.add(bytes);
+  }
 
   /// Accepts [bytes] without performing native transport I/O.
   @override

@@ -31,9 +31,6 @@ void main() {
       scope_directory: scope,
       os_user_id: owner,
       shutdown: Future<void>.value(),
-      handle_connection: (_) async {
-        fail('No client connection is expected.');
-      },
       on_startup: () async {
         expect(
           await FileSystemEntity.type(socket_path, followLinks: false),
@@ -60,10 +57,6 @@ void main() {
         scope_directory: '/unused',
         os_user_id: 'test-owner',
         shutdown: Future<void>.value(),
-        handle_connection: (_) async {},
-        on_startup: () async {
-          fail('Unsupported transport must not report readiness.');
-        },
       ),
       throwsA(isA<UnsupportedError>()),
     );

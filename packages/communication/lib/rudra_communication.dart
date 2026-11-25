@@ -1,24 +1,40 @@
-/// Authenticated local communication infrastructure.
+/// Authenticated object-level application communication.
 ///
-/// Provides a communication facade, typed application messaging,
-/// message codec registration, portable transport contracts,
-/// native transport implementations and concurrent session management.
+/// Provides typed application messaging, codec and handler
+/// registration, portable transport contracts and native
+/// communication implementations.
 ///
-/// Consumers supply trusted endpoint configuration and retain
-/// responsibility for their application-specific behavior.
+/// Communication owns session construction, protocol processing,
+/// request correlation and resource disposal.
+///
+/// Consumers supply trusted endpoint configuration and their
+/// application-specific message representations and behavior.
 ///
 /// Example:
 /// ```dart
 /// import 'package:rudra_communication/rudra_communication.dart';
 ///
-/// final communication = Communication();
+/// final communication = Communication(
+///   codecs: codecs,
+///   handlers: handlers,
+/// );
 ///
-/// await communication.run(
+/// final session = await communication.connect(
 ///   scope_directory: scope,
 ///   os_user_id: trusted_owner,
-///   shutdown: shutdown.future,
-///   handle_connection: handle_connection,
 /// );
+///
+/// try {
+///   final response = await session.request(
+///     const EchoRequest('Hello'),
+///   );
+/// } finally {
+///   try {
+///     await session.close();
+///   } finally {
+///     await communication.done;
+///   }
+/// }
 /// ```
 library;
 
@@ -39,12 +55,10 @@ export 'src/transport/contracts/transport.dart';
 export 'src/transport/contracts/transport_connection.dart';
 export 'src/transport/contracts/transport_listener.dart';
 
-/// Object-level communication session contract and execution failures.
+/// Object-level communication session contracts and configuration.
 export 'src/sessions/message_session.dart';
 export 'src/sessions/message_session_exception.dart';
+export 'src/sessions/message_session_options.dart';
 
-/// Concurrent connection lifecycle coordination.
-export 'src/sessions/connection_service.dart';
-
-/// Native macOS transport implementation.
+/// Explicitly selectable native macOS transport implementation.
 export 'src/transport/macos/unix/macos_unix_transport.dart';

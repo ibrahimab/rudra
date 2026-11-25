@@ -23,7 +23,6 @@ import '../../workflow/application/workflow_application.dart';
 ///   scope_directory: scope,
 ///   os_user_id: trusted_owner,
 ///   shutdown: shutdown.future,
-///   handle_connection: handle_connection,
 ///   on_startup: (application) async {
 ///     final state = await application.read_state();
 ///     print(state.workflows.current_workflow);
@@ -61,24 +60,24 @@ final class RudraHost {
   /// Its execution lifecycle remains the responsibility of this host.
   final Communication communication;
 
-  /// Records whether this instance has entered its execution lifecycle.
-  ///
-  /// Prevents repeated or concurrent execution of the same host instance.
+  /// Whether this instance has entered its execution lifecycle.
   bool _has_run = false;
 
   /// Executes the configured host lifecycle.
   ///
   /// [scope_directory] identifies the exclusively owned communication
   /// scope established by trusted application composition.
+  ///
   /// [os_user_id] identifies the trusted operating-system owner
   /// associated with the application.
+  ///
   /// [shutdown] supplies the external termination notification.
-  /// [handle_connection] processes an authenticated communication session.
+  ///
   /// [on_startup] optionally initializes the retained application
   /// before accepting client sessions.
   ///
-  /// Returns after communication disposal and termination of
-  /// outstanding session handlers.
+  /// Returns after communication resource disposal and completion
+  /// of previously admitted application handlers.
   ///
   /// Throws [StateError] if this host has already been executed.
   /// Application initialization and communication failures propagate.
@@ -86,7 +85,6 @@ final class RudraHost {
     required String scope_directory,
     required String os_user_id,
     required Future<void> shutdown,
-    required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function(WorkflowApplication)? on_startup,
   }) async {
     if (_has_run) {
@@ -101,7 +99,6 @@ final class RudraHost {
       scope_directory: scope_directory,
       os_user_id: os_user_id,
       shutdown: shutdown,
-      handle_connection: handle_connection,
       on_startup: on_startup == null ? null : () => on_startup(_application),
     );
   }

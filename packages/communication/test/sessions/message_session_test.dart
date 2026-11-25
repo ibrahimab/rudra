@@ -6,7 +6,6 @@ import 'package:rudra_communication/src/messaging/protocol/json_envelope_encodin
 import 'package:rudra_communication/src/messaging/protocol/length_prefixed_framing.dart';
 import 'package:rudra_communication/src/messaging/protocol/message_envelope.dart';
 import 'package:rudra_communication/src/sessions/default_message_session.dart';
-import 'package:rudra_communication/src/sessions/message_session_options.dart';
 import 'package:test/test.dart';
 
 /// Verifies integrated object-level communication over substituted

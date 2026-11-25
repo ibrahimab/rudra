@@ -1,85 +1,161 @@
+import 'dart:async';
+
+import 'messaging/message_codec_registry.dart';
+import 'messaging/request_handler_registry.dart';
 import 'sessions/connection_service.dart';
+import 'sessions/default_message_session.dart';
+import 'sessions/message_session.dart';
+import 'sessions/message_session_options.dart';
 import 'transport/contracts/transport.dart';
 import 'transport/contracts/transport_connection.dart';
 import 'transport/contracts/transport_listener.dart';
 import 'transport/local_transport.dart';
 
-/// Coordinates authenticated communication for an application.
+/// Coordinates authenticated object-level application communication.
 ///
-/// Owns transport initialization, concurrent connection execution
-/// and resource disposal behind a portable application-facing API.
+/// Owns native transport selection, messaging configuration,
+/// session execution and communication resource disposal.
 ///
-/// Application-specific behavior is supplied by the consumer.
-/// Communication has no dependency on application domain models,
-/// persistence implementations or host orchestration.
+/// Application consumers supply their message codecs, handlers
+/// and trusted environmental configuration.
 ///
-/// Each instance represents one communication execution lifecycle.
+/// Each instance owns one execution lifecycle, either a listening
+/// endpoint or an independently connected client session.
 ///
 /// Example:
 /// ```dart
-/// final communication = Communication();
-///
-/// await communication.run(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-///   shutdown: shutdown.future,
-///   handle_connection: handle_connection,
+/// final communication = Communication(
+///   codecs: codecs,
+///   handlers: handlers,
 /// );
 ///
-/// assert(communication.resources_released);
+/// final session = await communication.connect(
+///   scope_directory: scope,
+///   os_user_id: trusted_owner,
+/// );
+///
+/// try {
+///   final response = await session.request(
+///     const EchoRequest('Hello'),
+///   );
+/// } finally {
+///   try {
+///     await session.close();
+///   } finally {
+///     await communication.done;
+///   }
+/// }
 /// ```
 abstract interface class Communication {
-  /// Creates a communication instance with internally owned components.
+  /// Creates communication with internally owned execution components.
   ///
-  /// [transport] optionally substitutes the default local transport.
-  /// The supplied implementation must satisfy the transport ownership
-  /// and resource disposal contracts.
+  /// [transport] optionally substitutes native transport selection.
   ///
-  /// Construction does not bind endpoints or acquire native resources.
-  factory Communication({Transport? transport}) =>
-      _Communication(transport: transport);
+  /// [codecs] supplies application message codec configuration.
+  /// When absent, communication constructs an empty registry.
+  ///
+  /// [handlers] supplies application request handler configuration.
+  /// When absent, communication constructs an empty registry.
+  ///
+  /// Supplied registries are frozen before execution begins.
+  ///
+  /// [options] optionally configures session limits and deadlines.
+  ///
+  /// Construction does not bind endpoints, establish connections
+  /// or execute application handlers.
+  factory Communication({
+    Transport? transport,
+    MessageCodecRegistry? codecs,
+    RequestHandlerRegistry? handlers,
+    MessageSessionOptions options,
+  }) = _Communication;
 
-  /// Whether all resources owned by communication have been released.
+  /// Whether all owned communication resources have been released.
   ///
-  /// Returns true before execution and after confirmed disposal.
-  /// Returns false during initialization, active execution or after
+  /// Returns true before execution and after successful disposal.
+  ///
+  /// Returns false during native resource acquisition, active
+  /// communication, outstanding handler draining or following
   /// unsuccessful resource disposal.
   ///
-  /// Consumers may inspect this property after failed execution to
-  /// determine whether external ownership resources can be released.
+  /// Execution failures do not independently prevent successful
+  /// resource release.
   bool get resources_released;
 
-  /// Executes one authenticated communication lifecycle.
+  /// Completion of the entire owning communication lifecycle.
   ///
-  /// [scope_directory] identifies the exclusively owned communication
-  /// directory prepared by trusted application composition.
-  /// [os_user_id] identifies the trusted operating-system owner.
+  /// Completes after communication disposal and termination of
+  /// previously admitted application handlers.
+  ///
+  /// Initialization, terminal execution and resource disposal
+  /// failures propagate through this future.
+  ///
+  /// Remains pending until this communication instance executes.
+  ///
+  /// Application handlers must not await completion of their
+  /// own owning communication lifecycle.
+  Future<void> get done;
+
+  /// Executes an authenticated listening endpoint.
+  ///
+  /// [scope_directory] identifies the exclusively owned
+  /// communication directory prepared by trusted composition.
+  ///
+  /// [os_user_id] identifies the authorized operating-system owner.
+  ///
   /// [shutdown] supplies the external termination notification.
-  /// [handle_connection] executes an individual authenticated session.
-  /// [on_startup] optionally initializes application resources after
-  /// endpoint binding and before connection acceptance.
   ///
-  /// Returns after communication resources have been disposed of
-  /// and outstanding session handlers have terminated.
+  /// [on_startup] optionally initializes application resources
+  /// after endpoint binding and before connection acceptance.
   ///
-  /// Throws [StateError] for repeated execution or [UnsupportedError]
-  /// when the default transport cannot support the current platform.
+  /// Returns after listener disposal, session disposal and
+  /// completion of previously admitted application handlers.
   ///
-  /// Initialization, listener and resource disposal failures propagate.
+  /// Throws [StateError] for repeated execution or incompatible
+  /// messaging configuration, and [ArgumentError] for invalid
+  /// execution limits.
+  ///
+  /// Initialization, listener and resource disposal failures
+  /// propagate to the caller.
   Future<void> run({
     required String scope_directory,
     required String os_user_id,
     required Future<void> shutdown,
-    required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function()? on_startup,
+  });
+
+  /// Establishes an authenticated object-level client session.
+  ///
+  /// [scope_directory] identifies the existing trusted
+  /// communication endpoint.
+  ///
+  /// [os_user_id] identifies the expected authenticated remote
+  /// operating-system peer.
+  ///
+  /// Returns an executing session providing typed messaging.
+  /// The caller may terminate communication through its close
+  /// operation.
+  ///
+  /// This communication instance retains lifecycle coordination
+  /// and reports complete handler draining through [done].
+  ///
+  /// Throws [StateError] for repeated execution or incompatible
+  /// configuration, and [ArgumentError] for invalid limits.
+  ///
+  /// Native connection, authentication and session initialization
+  /// failures propagate to the caller.
+  ///
+  /// Connection establishment does not acquire listener ownership.
+  Future<MessageSession> connect({
+    required String scope_directory,
+    required String os_user_id,
   });
 }
 
-/// Implements the default communication subsystem.
+/// Implements communication's default ownership and execution model.
 ///
-/// Retains one transport and one connection lifecycle coordinator,
-/// delegating native initialization and session execution to their
-/// respective components.
+/// Constructs intrinsic dependencies internally and coordinates
+/// their lifecycles without exposing concrete protocol components.
 ///
 /// Example:
 /// ```dart
@@ -90,87 +166,239 @@ final class _Communication implements Communication {
   /// Creates the default communication implementation.
   ///
   /// [transport] optionally replaces native transport selection.
-  /// The connection service is constructed and owned internally.
+  /// [codecs] and [handlers] supply application registration.
+  /// [options] defines session execution limits.
   ///
+  /// Absent dependencies are constructed internally.
   /// Construction performs no external resource acquisition.
-  _Communication({Transport? transport})
-    : _transport = transport ?? const LocalTransport();
+  _Communication({
+    Transport? transport,
+    MessageCodecRegistry? codecs,
+    RequestHandlerRegistry? handlers,
+    MessageSessionOptions options = const MessageSessionOptions(),
+  }) : _transport = transport ?? const LocalTransport(),
+       _codecs = codecs ?? MessageCodecRegistry(),
+       _handlers = handlers ?? RequestHandlerRegistry(),
+       _options = options {
+    // Lifecycle failure may occur before the owner awaits done.
+    // Observe the future without changing its retained result.
+    _completion.future.ignore();
+  }
 
   /// Transport responsible for authenticated endpoint establishment.
   final Transport _transport;
 
-  /// Internally owned concurrent connection lifecycle coordinator.
+  /// Application codec configuration owned by communication.
+  final MessageCodecRegistry _codecs;
+
+  /// Application handler configuration owned by communication.
+  final RequestHandlerRegistry _handlers;
+
+  /// Immutable execution limits shared by independently owned sessions.
+  final MessageSessionOptions _options;
+
+  /// Internally owned concurrent server session coordinator.
   final ConnectionService _connection_service = ConnectionService();
 
-  /// Records whether this instance has entered its lifecycle.
+  /// Completion source for the entire owning lifecycle.
+  final Completer<void> _completion = Completer<void>();
+
+  /// Whether this instance has claimed its execution lifecycle.
   bool _has_run = false;
 
-  /// Records whether communication resource disposal is confirmed.
+  /// Whether resource disposal has been successfully confirmed.
   bool _resources_released = true;
 
-  /// Whether initialization and execution resources have been released.
+  /// Whether all communication resources have been released.
   @override
   bool get resources_released => _resources_released;
 
-  /// Executes the configured communication lifecycle.
+  /// Final owning communication lifecycle result.
+  @override
+  Future<void> get done => _completion.future;
+
+  /// Claims the single execution lifecycle.
   ///
-  /// [scope_directory] identifies the caller's exclusively owned scope.
-  /// [os_user_id] supplies the trusted authorization identity.
+  /// Throws [StateError] after any previous execution attempt.
+  void _claim_lifecycle() {
+    if (_has_run) {
+      throw StateError('Communication has already been executed.');
+    }
+
+    _has_run = true;
+  }
+
+  /// Validates execution configuration and freezes registration.
+  ///
+  /// Performs validation before acquiring native resources.
+  /// Configuration failures propagate without endpoint creation.
+  void _prepare() {
+    _options.validate();
+
+    _codecs.freeze();
+    _handlers.freeze(codecs: _codecs);
+  }
+
+  /// Opens an executing session over the authenticated [connection].
+  ///
+  /// Returns a session using the retained messaging configuration.
+  /// Successful opening transfers connection ownership to it.
+  ///
+  /// If opening fails, connection ownership remains with the caller.
+  DefaultMessageSession _open_session(TransportConnection connection) {
+    return DefaultMessageSession.open(
+      connection: connection,
+      codecs: _codecs,
+      handlers: _handlers,
+      options: _options,
+    );
+  }
+
+  /// Executes the configured listening communication lifecycle.
+  ///
+  /// [scope_directory] identifies the exclusively owned endpoint
+  /// scope. [os_user_id] supplies the trusted authorization identity.
+  ///
   /// [shutdown] supplies the external termination notification.
-  /// [handle_connection] processes an authenticated session.
-  /// [on_startup] initializes the consumer before accepting connections.
+  /// [on_startup] optionally initializes application resources
+  /// before accepting connections.
   ///
-  /// Returns after confirmed connection service disposal.
+  /// Returns after confirmed listener and session disposal.
   /// Initialization, execution and disposal failures propagate.
-  ///
-  /// Throws [StateError] if this instance has already been executed.
   @override
   Future<void> run({
     required String scope_directory,
     required String os_user_id,
     required Future<void> shutdown,
-    required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function()? on_startup,
   }) async {
-    if (_has_run) {
-      throw StateError('Communication has already been run.');
-    }
+    _claim_lifecycle();
 
-    // Claim the lifecycle before asynchronous endpoint initialization.
-    _has_run = true;
-    _resources_released = false;
-
-    // Observe early shutdown failures while the transport initializes.
-    // The connection service still receives the original notification.
+    // Observe early shutdown failures during configuration and
+    // endpoint initialization.
     shutdown.ignore();
 
-    final TransportListener listener;
-
     try {
-      listener = await _transport.listen(
-        scope_directory: scope_directory,
-        os_user_id: os_user_id,
-      );
-    } catch (_) {
-      // Failed initialization retains no acquired listener according
-      // to the transport contract.
-      _resources_released = true;
+      _prepare();
+
+      _resources_released = false;
+
+      final TransportListener listener;
+
+      try {
+        listener = await _transport.listen(
+          scope_directory: scope_directory,
+          os_user_id: os_user_id,
+        );
+      } catch (_) {
+        // Failed transport initialization must release any
+        // resources acquired during the unsuccessful attempt.
+        _resources_released = true;
+
+        rethrow;
+      }
+
+      try {
+        await _connection_service.run(
+          listener: listener,
+          shutdown: shutdown,
+          open_session: _open_session,
+          on_startup: on_startup,
+        );
+      } finally {
+        _resources_released = _connection_service.resources_released;
+      }
+
+      _completion.complete();
+    } catch (error, stack) {
+      _completion.completeError(error, stack);
+
       rethrow;
     }
+  }
+
+  /// Establishes an authenticated client communication session.
+  ///
+  /// [scope_directory] identifies the trusted endpoint scope.
+  /// [os_user_id] identifies the expected remote peer identity.
+  ///
+  /// Returns an executing object-level session.
+  /// Connection and session initialization failures propagate.
+  @override
+  Future<MessageSession> connect({
+    required String scope_directory,
+    required String os_user_id,
+  }) async {
+    _claim_lifecycle();
 
     try {
-      // Ownership of the acquired listener transfers to the
-      // connection service for the remainder of this lifecycle.
-      await _connection_service.run(
-        listener: listener,
-        shutdown: shutdown,
-        handle_connection: handle_connection,
-        on_startup: on_startup,
-      );
-    } finally {
-      // Preserve the disposal result independently of execution
-      // success so the application can safely release its own resources.
-      _resources_released = _connection_service.resources_released;
+      _prepare();
+
+      _resources_released = false;
+
+      final TransportConnection connection;
+
+      try {
+        connection = await _transport.connect(
+          scope_directory: scope_directory,
+          os_user_id: os_user_id,
+        );
+      } catch (_) {
+        // Failed outbound establishment retains no connection
+        // resources according to the transport contract.
+        _resources_released = true;
+
+        rethrow;
+      }
+
+      final DefaultMessageSession session;
+
+      try {
+        session = _open_session(connection);
+      } catch (_) {
+        // Failed session opening did not transfer ownership.
+        // Confirm disposal before permitting resource release.
+        await connection.close();
+
+        _resources_released = true;
+
+        rethrow;
+      }
+
+      unawaited(_observe_client(session));
+
+      return session;
+    } catch (error, stack) {
+      _completion.completeError(error, stack);
+
+      rethrow;
+    }
+  }
+
+  /// Observes the complete owning lifecycle of [session].
+  ///
+  /// Session execution and disposal failures remain observable
+  /// independently of application-handler draining.
+  ///
+  /// Completes the communication lifecycle after all previously
+  /// admitted handlers have finished.
+  Future<void> _observe_client(DefaultMessageSession session) async {
+    try {
+      try {
+        await session.done;
+      } finally {
+        try {
+          await session.close();
+        } finally {
+          await session.handlers_done;
+        }
+
+        _resources_released = true;
+      }
+
+      _completion.complete();
+    } catch (error, stack) {
+      _completion.completeError(error, stack);
     }
   }
 }

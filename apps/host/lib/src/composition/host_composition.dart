@@ -4,8 +4,6 @@ import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../development/host_transport_probe.dart';
-
 import 'host_workflow_identity_provider.dart';
 
 /// Composes the application resources owned by a Rudra host.
@@ -182,7 +180,6 @@ final class HostComposition {
           scope_directory: scope_directory,
           os_user_id: os_user_id,
           shutdown: shutdown,
-          handle_connection: run_host_transport_probe,
           on_startup: (application) async {
             // Only an explicitly requested startup operation
             // may establish a workflow.
