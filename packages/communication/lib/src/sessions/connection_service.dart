@@ -11,19 +11,44 @@ import '../transport/contracts/transport_listener.dart';
 /// Connection-local failures terminate the affected session.
 /// Listener and resource disposal failures terminate the service.
 ///
+/// Each service instance owns one listener execution lifecycle.
+/// Resource disposal remains independently observable through
+/// [resources_released], including after unsuccessful execution.
+///
 /// Example:
 /// ```dart
-/// const service = ConnectionService();
+/// final service = ConnectionService();
 ///
 /// await service.run(
 ///   listener: listener,
 ///   shutdown: shutdown.future,
 ///   handle_connection: handle_connection,
 /// );
+///
+/// assert(service.resources_released);
 /// ```
 final class ConnectionService {
-  /// Creates a portable connection lifecycle coordinator.
-  const ConnectionService();
+  /// Creates an inactive connection lifecycle coordinator.
+  ///
+  /// Construction does not acquire a listener or accept connections.
+  ConnectionService();
+
+  /// Records whether this service has claimed its execution lifecycle.
+  bool _has_run = false;
+
+  /// Records whether all owned resources have been released.
+  ///
+  /// Remains false while execution is active or resource disposal
+  /// cannot be confirmed.
+  bool _resources_released = true;
+
+  /// Whether all resources owned by this service have been released.
+  ///
+  /// Returns true before execution and after confirmed disposal.
+  /// Returns false during execution or following failed disposal.
+  ///
+  /// Successful disposal does not imply successful session execution.
+  bool get resources_released => _resources_released;
 
   /// Executes authenticated sessions until shutdown.
   ///
@@ -37,14 +62,29 @@ final class ConnectionService {
   /// Returns after closing the listener and awaiting outstanding
   /// connection handlers.
   ///
+  /// Throws [StateError] when this service has already been executed.
+  ///
   /// Startup, listener and resource disposal failures propagate.
   /// Individual handler failures remain isolated to their sessions.
+  ///
+  /// [resources_released] confirms whether listener disposal and
+  /// termination of outstanding sessions completed successfully,
+  /// independently of the execution result.
   Future<void> run({
     required TransportListener listener,
     required Future<void> shutdown,
     required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function()? on_startup,
   }) async {
+    if (_has_run) {
+      throw StateError('Connection service has already been run.');
+    }
+
+    // Claim the lifecycle before accepting asynchronous work.
+    // Resource ownership remains active until disposal is confirmed.
+    _has_run = true;
+    _resources_released = false;
+
     final failure = Completer<void>();
     final active = <Future<void>>{};
 
@@ -127,6 +167,10 @@ final class ConnectionService {
       if (disposal_error != null) {
         Error.throwWithStackTrace(disposal_error!, disposal_stack!);
       }
+
+      // Reaching this point establishes that the listener, subscription
+      // and outstanding connection handlers have all been disposed of.
+      _resources_released = true;
     }
   }
 

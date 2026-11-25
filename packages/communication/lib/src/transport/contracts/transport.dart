@@ -28,6 +28,12 @@ abstract interface class Transport {
   ///
   /// Returns a listener accepting only authorized peers.
   ///
+  /// Successful initialization transfers ownership of the listener
+  /// to the caller.
+  ///
+  /// Failed initialization must release any communication resources
+  /// acquired during the attempt before propagating the failure.
+  ///
   /// Configuration, authentication infrastructure and endpoint
   /// initialization failures propagate to the caller.
   Future<TransportListener> listen({

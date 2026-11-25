@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host/rudra_host.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -33,7 +34,7 @@ void main() {
   HostComposition create_composition({Directory? scope}) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: ownership,
-    transport: TestHostTransport(),
+    communication: Communication(transport: TestHostTransport()),
     data_directory: scope ?? directory,
     target_id: 'test-target',
   );

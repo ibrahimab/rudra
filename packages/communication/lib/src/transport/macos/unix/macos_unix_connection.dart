@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import '../../contracts/transport_connection.dart';
 
-/// Adapts an authenticated Unix-domain socket to the SDK contract.
+/// Adapts an authenticated Unix-domain socket to the portable
+/// transport connection contract.
 ///
 /// Retains the connected native socket and its verified peer
 /// identity throughout the connection lifecycle.

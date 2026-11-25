@@ -1,25 +1,28 @@
 /// Authenticated local communication infrastructure.
 ///
-/// Provides portable transport contracts, native transport
-/// implementations and concurrent connection coordination.
+/// Provides a communication facade, portable transport contracts,
+/// native transport implementations and concurrent session management.
 ///
-/// Consumers supply trusted endpoint configuration and remain
-/// responsible for their application-specific behavior.
+/// Consumers supply trusted endpoint configuration and retain
+/// responsibility for their application-specific behavior.
 ///
 /// Example:
 /// ```dart
 /// import 'package:rudra_communication/rudra_communication.dart';
 ///
-/// final transport = MacOsUnixTransport();
+/// final communication = Communication();
 ///
-/// final listener = await transport.listen(
-///   scope_directory: directory,
+/// await communication.run(
+///   scope_directory: scope,
 ///   os_user_id: trusted_owner,
+///   shutdown: shutdown.future,
+///   handle_connection: handle_connection,
 /// );
-///
-/// await listener.close();
 /// ```
 library;
+
+/// Application-facing communication API.
+export 'src/communication.dart';
 
 /// Portable transport capability contracts.
 export 'src/transport/contracts/transport.dart';

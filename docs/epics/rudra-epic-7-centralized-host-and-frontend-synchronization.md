@@ -1,18 +1,22 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** Planned — architecture agreed, implementation not started  
-**Created:** 24 November 2026  
-**Updated:** 24 November 2026  
-**Repository:** https://github.com/ibrahimab/rudra  
-**Planning baseline:** `86cb08462467260afee8beba5f90d05be3aab33b`  
-**Predecessors:** [Epic 6 — Architectural Realignment](rudra-epic-6-architectural-realignment.md) and [Epic 6C — Observability and Future Trusted Host Direction](rudra-epic-6c-observability-and-trusted-host-direction.md)  
-**Architectural authority:** [ADR 0006 — Event-Sourced Workflow and Reactive SDK Architecture](../decisions/0006-event-sourced-workflow-architecture.md)
+**Status:** In progress — 7A complete, 7B pending
+**Created:** 24 November 2026
+**Updated:** 25 November 2026
+**Repository:** https://github.com/ibrahimab/rudra
+**Planning baseline:** `86cb08462467260afee8beba5f90d05be3aab33b`
+**Predecessors:** [Epic 6 — Architectural Realignment](rudra-epic-6-architectural-realignment.md) and [Epic 6C — Observability and Future Trusted Host Direction](rudra-epic-6c-observability-and-trusted-host-direction.md)
+**Architectural authority:** [ADR 0006 — Event-Sourced Workflow and Reactive SDK Architecture](../decisions/0006-event-sourced-workflow-architecture.md) and [ADR 0007 — Hierarchical Ownership and Encapsulated Composition](../decisions/0007-hierarchical-ownership-and-encapsulated-composition.md)
 
 ## 1. Purpose
 
 Move Rudra's trusted application execution and persistence ownership out of independent frontend processes into **one per-user, long-running Rudra Host**. The host executes the existing SDK application machinery and distributes validated committed application state to connected frontends.
 
-**The host must be platform-agnostic by design**, like the existing filesystem, workflow and state features. Portable host contracts, extension registries and orchestration belong in `packages/sdk/lib/src/host/`. Native implementations live under `packages/host/<platform>/`; `apps/host` is a headless Dart executable and **composition root** that selects and injects those implementations. This keeps the product executable free of operating-system mechanics without shifting composition responsibility into an adapter package.
+**The host must be platform-agnostic by design**, like the existing filesystem, workflow and state features. Portable host contracts, extension registries and orchestration belong in `packages/sdk/lib/src/host/`. Native host capabilities live under `packages/host/<platform>/`.
+
+The independent `packages/communication/` package owns native communication mechanisms, transport contracts, peer authentication, session management and generic messaging infrastructure. RudraHost constructs and maintains its communication instance by default, while allowing explicit substitution through contracts.
+
+`apps/host` provides headless application composition, establishing trusted identity, exclusive ownership and persistence resources before executing the host. The existing modular CLI provides the host launch command.
 
 The immediate deliverable is a **small, working local macOS host using those portable boundaries**, not a generalized distributed-services framework or an implementation of all three desktop operating systems at once. Windows and Linux must be implementable by adding platform adapters and registering them, without changing portable SDK host logic.
 
@@ -31,25 +35,23 @@ This epic is complete only when the scenario is proven with **separate operating
 
 ### 2.1 SDK-first host architecture and composition root
 
-Rudra retains a one-way dependency direction:
+Rudra follows SDK-first application architecture and hierarchical component ownership.
 
-- **SDK (`packages/sdk/lib/src/host/`):** Defines portable host contracts, typed capability/plugin and installation-contribution registries, and reusable host orchestration around `WorkflowApplication`, processing, observation and client coordination. Existing `filesystem`, `workflow` and `state` features remain authoritative for their own concerns.
-- **Native adapters (`packages/host/<platform>/`):** Implement SDK-defined contracts using platform APIs. macOS is first; Windows and Linux should be addable through their own implementations and registration, without changes to the SDK host core. Native adapters do not import `apps/host`.
-- **Executable/composition (`apps/host/`):** Detects the current OS, selects platform adapters and explicit plugin/installation contributions, composes the SDK host and its persistence, then invokes its lifecycle. It owns **wiring**, not OS algorithms, domain decisions or service mechanisms.
-- **Frontends (`apps/cli/`, later Flutter clients):** Use application-facing host clients and subscribe to verified state. They do not own persistence or lifecycle processing after cutover.
+- **SDK (`packages/sdk/`):** Owns application operations, domain semantics, workflow processing, state observation and portable host orchestration.
+- **Communication (`packages/communication/`):** Owns reusable transport contracts, native communication implementations, connection and session lifecycles, and generic messaging infrastructure. It remains independent of the Rudra SDK, host application and persistence packages.
+- **Native host adapters (`packages/host/<platform>/`):** Implement trusted identity, exclusive process ownership, process lifecycle coordination and explicit native service-management capabilities.
+- **Host application (`apps/host/`):** Establishes trusted environmental configuration, exclusive ownership, application resources and persistence. It delegates execution to RudraHost.
+- **Frontends (`apps/cli/`, later Flutter clients):** Consume application-facing host capabilities and observe verified state.
 
-`packages/host/<platform>` may depend on SDK host contracts; `packages/sdk` must **not import** concrete `packages/host` implementations. A portable SDK host can therefore expose a `run()` method on a **configured instance**. It must not internally select macOS/Windows/Linux implementations via reverse imports or hidden globals. Platform detection and the selection of registered implementations happen in `apps/host` composition.
+RudraHost constructs its communication instance by default. Communication constructs its default transport internally. Both support explicit substitution through contracts.
 
-The conceptual bootstrap is:
+The SDK never imports concrete native host adapters. Native communication selection remains encapsulated within the communication package.
 
-```dart
-// Illustrative design only; not an existing API.
-final platform = select_host_platform();
-final host = RudraHost(platform: platform, application: application);
-await host.run();
-```
+Application-specific message semantics and handlers belong to the host and domain SDK. Generic communication infrastructure remains unaware of those semantics.
 
-The concrete API names and the ownership/lifetime of `application` will be decided from inspected code in 7A. The SDK host runtime must not accidentally instantiate a second workflow application or persistence context during client handling.
+Communication resource disposal must be confirmed before exclusive host ownership can be released. Failed execution and failed resource disposal are independently distinguishable.
+
+One host retains one workflow application and one persistence context throughout its execution lifecycle.
 
 ### 2.2 Proposed feature-first layout
 
@@ -66,13 +68,27 @@ packages/
           host.dart                     # SDK host feature barrel
           runtime/                     # Portable host lifecycle/coordination
           platform/
-            contracts/                 # Identity, transport, storage, ownership
+            contracts/                 # Identity, storage, ownership
             host_platform_plugin.dart  # Optional capability contribution
             host_platform_registry.dart
           install/
             host_install_step.dart      # Explicit installation contribution
             host_install_registry.dart
             host_install_plan.dart      # Describe/validate proposed changes
+  communication/
+    lib/
+      rudra_communication.dart
+      src/
+        communication.dart
+        sessions/
+          connection_service.dart
+        transport/
+          contracts/
+          local_transport.dart
+          macos/
+            unix/
+    test/
+    pubspec.yaml
   persistence/
     sqlite/                             # Existing SDK persistence adapter
   host/
@@ -81,8 +97,6 @@ packages/
         rudra_host_macos.dart           # Native adapter exports
         src/
           macos_identity.dart
-          transports/
-            macos_ipc_transport.dart
           plugins/
             launchd/
               macos_launchd_plugin.dart
@@ -102,10 +116,14 @@ packages/
     linux/                               # Future native adapter package
 apps/
   host/
-    bin/
-      rudra_host.dart                   # Thin headless Dart entrypoint
-    lib/src/composition/
-      host_composition.dart             # Platform detection, registration, wiring
+    lib/
+      rudra_host.dart                   # Host application API
+      src/
+        composition/
+          host_composition.dart
+          local_host.dart
+        development/
+          host_transport_probe.dart
   cli/
 ```
 
@@ -334,6 +352,24 @@ Slices are defined by **coherent responsibilities**, not file counts. Agree on i
 
 **Gate:** One explicitly started host accepts multiple local connections while owning one SDK application/persistence context. Startup, exclusivity, shutdown and missing-storage behavior are tested. No frontend cutover yet; no macOS branches in SDK host orchestration; no automatic host installation.
 
+### 7A.4 — Communication infrastructure extraction
+
+**Goal:** Establish an independently reusable communication package and hierarchical component ownership in accordance with ADR 0007.
+
+- Extract portable transport contracts and connection lifecycle coordination into `packages/communication/`.
+- Relocate native communication implementations and their feature-owned tests.
+- Establish an independent communication package without dependencies on Rudra application, host or persistence packages.
+- Introduce the Communication facade with internally constructed defaults and explicit contract-based substitution.
+- Encapsulate native transport selection within the communication subsystem.
+- Make RudraHost construct, maintain and own its communication instance.
+- Remove listener construction, binding and disposal responsibilities from host application composition.
+- Preserve trusted identity, authenticated connections, exclusive ownership and deterministic resource disposal.
+- Verify default construction, explicit substitution, independent testing and fail-closed ownership behavior.
+
+**Gate:** Existing authenticated IPC and concurrent session behavior remain verified. Communication is independently reusable and owns its internal components. Typed application messaging remains the responsibility of 7B.
+
+This architectural realignment supersedes the earlier allocation of communication contracts and native IPC implementations to the SDK host and native host adapter packages.
+
 ### 7B — Host application command contract
 
 **Goal:** Independent clients can invoke the same SDK operations through the host.
@@ -390,7 +426,8 @@ Test at the feature's owning boundary. Prefer separate unit, contract, real-pers
 
 - **SDK host unit/contract:** Portable lifecycle orchestration, command routing, state fan-out, typed contracts, cancellation and fake capability adapters; tests cannot depend on macOS APIs.
 - **`apps/host` composition:** OS detection, selected adapter/feature registrations, trusted runtime/persistence assembly, no native algorithms and clean disposal.
-- **Native adapters (`packages/host/<platform>`):** Trusted identity/scope, socket/peer security, instance ownership, correct native contract behavior and cleanup.
+- **Communication (`packages/communication`):** Default construction, transport substitution, authenticated peers, native endpoint security, concurrent sessions, communication lifecycle and resource disposal.
+- **Native host adapters (`packages/host/<platform>`):** Trusted identity, instance ownership, process lifecycle, native host capabilities and explicit service management.
 - **Plugin/installation contracts:** Multiple independent contributions, duplicate ID/conflict rejection, no side effects on registration, explicit activation and release, inspectable install plans, repeated installation behavior, partial failures and data retention on uninstall.
 - **SDK/persistence regression:** Existing state-machine replay, atomic commit, owner uniqueness, expected identity/version, idempotency, rejected/quarantined submission semantics and no publication on rollback.
 - **Real host integration:** Two simultaneous Start requests with barriers (not timing sleeps), Start-vs-Stop races, committed change fan-out, failed commit silence and reconnect to verified journal state.
@@ -403,9 +440,10 @@ At every completed slice, run formatting, affected tests, full `./rudra verify a
 ## 8. Architectural safeguards and change-impact test
 
 - **SDK first:** Domain semantics, transitions, reducers, journal validation, processing, application operations and portable host contracts/orchestration are implemented once in the SDK.
-- **Explicit dependency direction:** `packages/host/<platform>` implements SDK host contracts; `packages/sdk` never imports native implementations; adapters do not depend on `apps/host`.
+- **Explicit dependency direction:** `packages/host/<platform>` implements SDK host contracts; `packages/sdk` never imports concrete native host adapters. The SDK consumes `packages/communication`, which remains independent of the SDK, host application and persistence implementations.
+- **Hierarchical ownership:** RudraHost constructs and owns Communication by default. Communication constructs and maintains its internal transport and session components. Explicit substitution remains available through contracts, and resource disposal is coordinated by the immediate resource owner.
 - **Composition root:** `apps/host` selects and registers concrete adapters/plugins and constructs the configured SDK host, but contains neither native algorithms nor duplicate application/domain logic.
-- **Feature-owned native extensions:** Core identity/transport infrastructure stays separate from optional `plugins/` and explicit `install/steps/`. New capabilities and installation steps should primarily add code and one registration.
+- **Feature-owned native extensions:** Communication infrastructure belongs to the independent communication package. Native host identity and ownership capabilities remain separate from optional `plugins/` and explicit `install/steps/`. New capabilities and installation steps should primarily add code and one registration.
 - **No implicit host installation:** Registration, SDK construction, observation and `host.run()` do not install or configure OS services; install/uninstall actions are separate, explicit and auditable.
 - **Portability by construction:** Adding Windows or Linux support should involve adapter implementations and composition registration, not edits to portable SDK host behavior.
 - **One persistence owner:** Host composition owns SQLite and its notification channel; frontends use transport clients.

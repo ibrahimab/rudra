@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host_macos/rudra_host_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
@@ -71,7 +70,6 @@ Future<void> run_local_host({
   final composition = HostComposition(
     identity_provider: const MacOsHostIdentity(),
     ownership_provider: const MacOsHostOwnershipProvider(),
-    transport: const MacOsUnixTransport(),
     data_directory: data_directory,
     target_id: 'local-macos',
   );

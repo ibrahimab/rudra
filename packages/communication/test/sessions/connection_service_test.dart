@@ -6,8 +6,13 @@ import 'package:test/test.dart';
 
 /// Verifies portable host connection lifecycle coordination.
 void main() {
-  const service = ConnectionService();
   const operation_timeout = Duration(seconds: 5);
+
+  late ConnectionService service;
+
+  setUp(() {
+    service = ConnectionService();
+  });
 
   test('executes independent sessions concurrently', () async {
     final listener = _TestListener();
@@ -118,6 +123,31 @@ void main() {
       await running.timeout(operation_timeout);
     }
   });
+
+  test('failed connection disposal leaves resources unconfirmed', () async {
+    final listener = _TestListener();
+    final shutdown = Completer<void>();
+
+    final connection = _TestConnection(fail_disposal: true);
+
+    final running = service.run(
+      listener: listener,
+      shutdown: shutdown.future,
+      handle_connection: (_) async {},
+    );
+
+    final result = expectLater(
+      running.timeout(operation_timeout),
+      throwsStateError,
+    );
+
+    listener.accept(connection);
+
+    await result;
+
+    expect(listener.is_closed, isTrue);
+    expect(service.resources_released, isFalse);
+  });
 }
 
 /// Supplies controlled connections to the portable coordinator.
@@ -183,7 +213,13 @@ final class _TestListener implements TransportListener {
 /// ```
 final class _TestConnection implements TransportConnection {
   /// Creates an isolated in-memory connection.
-  _TestConnection();
+  ///
+  /// [fail_disposal] requests a failure during the initial
+  /// connection disposal operation.
+  _TestConnection({this.fail_disposal = false});
+
+  /// Whether connection disposal should report failure.
+  final bool fail_disposal;
 
   /// Stream representing incoming transport bytes.
   final StreamController<Uint8List> _incoming = StreamController<Uint8List>();
@@ -221,5 +257,9 @@ final class _TestConnection implements TransportConnection {
     // Do not await single-subscription stream delivery when
     // a failed handler never subscribed to incoming bytes.
     unawaited(_incoming.close());
+
+    if (fail_disposal) {
+      throw StateError('Controlled connection disposal failure.');
+    }
   }
 }

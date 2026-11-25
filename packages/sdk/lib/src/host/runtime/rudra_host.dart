@@ -4,23 +4,24 @@ import '../../workflow/application/workflow_application.dart';
 
 /// Coordinates the lifecycle of a configured Rudra host.
 ///
-/// Retains a single workflow application for the duration of the
-/// host lifecycle, providing a central execution context for
-/// trusted application operations.
+/// Retains one workflow application and one communication instance
+/// throughout its execution lifecycle.
 ///
-/// The composition root supplies the configured application,
-/// manages its persistence resources and provides the shutdown
-/// signal appropriate to the execution environment.
+/// The caller supplies the trusted application context and retains
+/// ownership of its associated persistence resources.
+///
+/// Communication is constructed and maintained internally unless
+/// an alternative implementation is explicitly supplied.
 ///
 /// Each host instance represents one execution lifecycle.
-/// Restarting the host requires constructing a new instance.
 ///
 /// Example:
 /// ```dart
 /// final host = RudraHost(application: application);
 ///
 /// await host.run(
-///   listener: listener,
+///   scope_directory: scope,
+///   os_user_id: trusted_owner,
 ///   shutdown: shutdown.future,
 ///   handle_connection: handle_connection,
 ///   on_startup: (application) async {
@@ -32,41 +33,58 @@ import '../../workflow/application/workflow_application.dart';
 final class RudraHost {
   /// Creates a host bound to the configured [application].
   ///
-  /// [application] supplies the trusted workflow operations used
-  /// throughout the host lifecycle. Its associated persistence
-  /// resources must remain available until [run] completes.
+  /// [application] supplies trusted workflow operations throughout
+  /// the host lifecycle. The caller retains ownership of its
+  /// associated persistence resources.
   ///
-  /// The caller retains ownership of those resources.
-  RudraHost({required WorkflowApplication application})
-    : _application = application;
+  /// [communication] optionally substitutes the default communication
+  /// implementation. The supplied instance must be unused and its
+  /// execution lifecycle transfers to this host.
+  ///
+  /// Construction does not initialize persistence, bind communication
+  /// endpoints or execute application operations.
+  RudraHost({
+    required WorkflowApplication application,
+    Communication? communication,
+  }) : _application = application,
+       communication = communication ?? Communication();
 
   /// Retained application context responsible for trusted workflow
   /// submission, processing, restoration and state observation.
   final WorkflowApplication _application;
+
+  /// Communication subsystem owned by this host.
+  ///
+  /// Exposes the retained communication instance for inspection
+  /// and communication-specific capabilities.
+  ///
+  /// Its execution lifecycle remains the responsibility of this host.
+  final Communication communication;
 
   /// Records whether this instance has entered its execution lifecycle.
   ///
   /// Prevents repeated or concurrent execution of the same host instance.
   bool _has_run = false;
 
-  /// Executes the configured host and connection lifecycle.
+  /// Executes the configured host lifecycle.
   ///
-  /// [listener] supplies authenticated client connections.
-  /// Ownership transfers to this execution after the lifecycle
-  /// has been successfully claimed.
-  ///
-  /// [handle_connection] executes an independent client session.
-  /// [shutdown] represents the external termination notification.
+  /// [scope_directory] identifies the exclusively owned communication
+  /// scope established by trusted application composition.
+  /// [os_user_id] identifies the trusted operating-system owner
+  /// associated with the application.
+  /// [shutdown] supplies the external termination notification.
+  /// [handle_connection] processes an authenticated communication session.
   /// [on_startup] optionally initializes the retained application
   /// before accepting client sessions.
   ///
-  /// Returns after shutdown, listener disposal and termination
-  /// of outstanding connection handlers.
+  /// Returns after communication disposal and termination of
+  /// outstanding session handlers.
   ///
   /// Throws [StateError] if this host has already been executed.
-  /// Startup and connection-service failures propagate.
+  /// Application initialization and communication failures propagate.
   Future<void> run({
-    required TransportListener listener,
+    required String scope_directory,
+    required String os_user_id,
     required Future<void> shutdown,
     required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function(WorkflowApplication)? on_startup,
@@ -75,20 +93,16 @@ final class RudraHost {
       throw StateError('Host has already been run.');
     }
 
-    // Claim the lifecycle before starting asynchronous work.
+    // Claim the host lifecycle before initializing its
+    // internally owned communication subsystem.
     _has_run = true;
 
-    const service = ConnectionService();
-
-    await service.run(
-      listener: listener,
+    await communication.run(
+      scope_directory: scope_directory,
+      os_user_id: os_user_id,
       shutdown: shutdown,
       handle_connection: handle_connection,
-      on_startup: () async {
-        if (on_startup != null) {
-          await on_startup(_application);
-        }
-      },
+      on_startup: on_startup == null ? null : () => on_startup(_application),
     );
   }
 }

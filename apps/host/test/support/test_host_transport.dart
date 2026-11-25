@@ -20,7 +20,14 @@ import 'package:rudra_communication/rudra_communication.dart';
 /// ```
 final class TestHostTransport implements Transport {
   /// Creates an initially inactive transport fixture.
-  TestHostTransport();
+  ///
+  /// [on_close] optionally observes listener disposal before
+  /// successful completion is recorded. Throwing from the callback
+  /// simulates an unsuccessful listener disposal.
+  TestHostTransport({void Function()? on_close}) : _on_close = on_close;
+
+  /// Optional callback observing or rejecting listener disposal.
+  final void Function()? _on_close;
 
   /// Number of successfully created test listeners.
   int listen_count = 0;
@@ -42,6 +49,10 @@ final class TestHostTransport implements Transport {
     listen_count++;
 
     return _TestTransportListener(() {
+      // Exercise the surrounding resource ownership boundary
+      // before recording successful listener disposal.
+      _on_close?.call();
+
       close_count++;
     });
   }
