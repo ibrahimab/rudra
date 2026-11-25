@@ -3,6 +3,39 @@ import 'dart:typed_data';
 
 import 'package:rudra_communication/rudra_communication.dart';
 
+/// Controls the first outbound frame of a test connection.
+///
+/// Allows tests to distinguish completed application execution from
+/// successful delivery of its communication response.
+final class LoopbackResponseBarrier {
+  /// Signals that outbound transmission has reached the barrier.
+  final Completer<void> _entered = Completer<void>();
+
+  /// Releases the suspended transmission.
+  final Completer<void> _released = Completer<void>();
+
+  /// Completes when transmission reaches the controlled boundary.
+  Future<void> get entered => _entered.future;
+
+  /// Signals transmission entry and waits for explicit release.
+  Future<void> hold() {
+    if (!_entered.isCompleted) {
+      _entered.complete();
+    }
+
+    return _released.future;
+  }
+
+  /// Releases the held transmission.
+  ///
+  /// Repeated release is permitted.
+  void release() {
+    if (!_released.isCompleted) {
+      _released.complete();
+    }
+  }
+}
+
 /// Supplies in-memory authenticated connectivity for host integration tests.
 ///
 /// Uses the public transport contracts so tests exercise the real
@@ -21,6 +54,12 @@ final class LoopbackHostTransport implements Transport {
 
   /// Optional deliberately inconsistent server-side peer identity.
   final String? server_peer_override;
+
+  /// Optional barrier assigned to the next connected server endpoint.
+  ///
+  /// The next connection consumes this configuration. Its first outbound
+  /// frame is held until the barrier is released or the connection closes.
+  LoopbackResponseBarrier? next_response_barrier;
 
   /// Current listening endpoint.
   _LoopbackListener? _listener;
@@ -77,7 +116,12 @@ final class LoopbackHostTransport implements Transport {
 
     final client = _LoopbackConnection(os_user_id);
 
-    final server = _LoopbackConnection(server_peer_override ?? os_user_id);
+    final server = _LoopbackConnection(
+      server_peer_override ?? os_user_id,
+      response_barrier: next_response_barrier,
+    );
+
+    next_response_barrier = null;
 
     client.peer = server;
     server.peer = client;
@@ -143,11 +187,22 @@ final class _LoopbackListener implements TransportListener {
 /// Represents one endpoint of a bidirectional loopback connection.
 final class _LoopbackConnection implements TransportConnection {
   /// Creates an endpoint reporting authenticated [os_user_id].
-  _LoopbackConnection(this.os_user_id);
+  ///
+  /// [response_barrier] optionally suspends the first outbound frame.
+  _LoopbackConnection(
+    this.os_user_id, {
+    LoopbackResponseBarrier? response_barrier,
+  }) : _response_barrier = response_barrier;
 
   /// Trusted remote peer identity reported by this endpoint.
   @override
   final String os_user_id;
+
+  /// Optional barrier consumed by the first outbound transmission.
+  LoopbackResponseBarrier? _response_barrier;
+
+  /// Signals termination of incoming delivery and releases blocked writes.
+  final Completer<void> _terminated = Completer<void>();
 
   /// Independently owned endpoint receiving transmitted bytes.
   late final _LoopbackConnection peer;
@@ -164,9 +219,19 @@ final class _LoopbackConnection implements TransportConnection {
 
   /// Transmits an independent copy of [bytes] to the peer.
   ///
+  /// An optional response barrier suspends the first transmission.
+  /// Connection termination releases that suspension.
+  ///
   /// Throws [StateError] when either direction is closed.
   @override
   Future<void> send(Uint8List bytes) async {
+    final barrier = _response_barrier;
+    _response_barrier = null;
+
+    if (barrier != null) {
+      await Future.any<void>([barrier.hold(), _terminated.future]);
+    }
+
     if (_closing != null || _input.isClosed || peer._input.isClosed) {
       throw StateError('Loopback connection is closed.');
     }
@@ -186,8 +251,12 @@ final class _LoopbackConnection implements TransportConnection {
     peer._finish_input();
   }
 
-  /// Terminates this endpoint's incoming byte stream.
+  /// Terminates incoming delivery and releases suspended transmission.
   void _finish_input() {
+    if (!_terminated.isCompleted) {
+      _terminated.complete();
+    }
+
     if (!_input.isClosed) {
       _input.close().ignore();
     }

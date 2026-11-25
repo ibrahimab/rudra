@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A complete; 7B.1, 7B.2, 7B.3.1 and 7B.3.2 complete; 7B.3.3 next
+**Status:** In progress — 7A and 7B complete; 7C next
 **Created:** 24 November 2026
 **Updated:** 25 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -453,11 +453,34 @@ Bind registered application request contracts to the single WorkflowApplication 
 
 No changes to the generic communication infrastructure, workflow processing rules, state machine or database schema were required.
 
-#### 7B.3.3 — Competing host clients
+#### 7B.3.3 — Competing host clients (complete)
 
 Verify simultaneous requests from independent authenticated client connections against one retained host application and SQLite persistence context.
 
 **Gate:** Competing operations, identical retries and interrupted response delivery preserve the exact durable operation semantics established in 7B.3.1.
+
+**Implementation and verification:**
+
+- Independent authenticated client sessions invoke the same retained WorkflowApplication through feature-owned request handlers.
+- Test-only commitment barriers establish overlapping durable acceptance without timing-dependent sleeps.
+- Distinct competing Start operations produce one establishment and one durable ownership rejection.
+- Identical concurrent Start and Stop operations recover their original submission identities and committed outcomes.
+- Conflicting key reuse cannot replace an outstanding accepted command.
+- Distinct competing Stop operations produce one terminal commitment and one durable rejection.
+- Mixed Start and Stop operations preserve serialized execution and explicit workflow identity.
+- Historical Stop retries cannot terminate a subsequently established replacement workflow.
+- Disconnecting an originating client does not cancel an already admitted application operation.
+- Interrupted response delivery and host lifecycle reopening preserve durable operation resolution.
+- Independent client state queries observe the same authoritative committed workflow.
+- Reopened SQLite persistence confirms exact committed journal references, original submission resolutions and valid unfinished-workflow ownership.
+
+No production application, communication, persistence or domain changes were required.
+
+**Boundary:** These application-level concurrency tests use independent communication sessions over controlled loopback transport. Host lifecycle reopening represents graceful termination and recreation of the host, rather than abrupt operating-system process termination.
+
+Actual cross-process application acceptance, native endpoint integration, reactive state delivery and production frontend cutover remain part of the subsequent Epic 7 slices.
+
+**7B completion:** The authoritative host command contract is implemented and verified. Application execution, typed request dispatch, idempotency, concurrent processing and durable recovery share one execution authority.
 
 ### 7C — Host state subscriptions and reconnection
 
