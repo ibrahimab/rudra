@@ -62,10 +62,20 @@ void main() {
         .listen((_) => foreign_signal_count++);
 
     try {
-      final started = await application.start(
+      final started_outcome = await application.start(
         target_id: 'local-macos',
         root: TargetPath('/workspace'),
+        idempotency_key: 'start-workspace',
       );
+
+      expect(started_outcome, isA<WorkflowOperationResolved>());
+
+      final started_resolution =
+          (started_outcome as WorkflowOperationResolved).resolution;
+
+      expect(started_resolution.state, WorkflowSubmissionState.completed);
+
+      final started = started_resolution.committed_outcome!;
 
       await first_signal.future.timeout(notification_timeout);
 
@@ -75,13 +85,24 @@ void main() {
       final active = await application.read_state();
       expect(active.workflows.current_workflow?.version, 1);
 
-      final stopped_id = await application.stop(
-        expected_workflow_id: started.identity.workflow_id,
+      final stopped_outcome = await application.stop(
+        workflow_id: started.workflow_id,
+        idempotency_key: 'stop-workspace',
       );
+
+      expect(stopped_outcome, isA<WorkflowOperationResolved>());
+
+      final stopped_resolution =
+          (stopped_outcome as WorkflowOperationResolved).resolution;
+
+      expect(stopped_resolution.state, WorkflowSubmissionState.completed);
 
       await second_signal.future.timeout(notification_timeout);
 
-      expect(stopped_id, started.identity.workflow_id);
+      expect(
+        stopped_resolution.committed_outcome!.workflow_id,
+        started.workflow_id,
+      );
       expect(signal_count, 2);
       expect(foreign_signal_count, 0);
 

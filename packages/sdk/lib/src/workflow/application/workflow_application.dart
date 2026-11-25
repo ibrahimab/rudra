@@ -10,51 +10,19 @@ import '../events/workflow_ended_event.dart';
 import '../events/workflow_start_event.dart';
 import '../events/workflow_started_event.dart';
 import '../events/workflow_stop_event.dart';
+import '../event_submission_exception.dart';
+import 'outcomes/workflow_operation_outcome.dart';
 import '../processing/workflow_identity_provider.dart';
 import '../processing/workflow_processing_result.dart';
 import '../processing/workflow_processor.dart';
 import '../processing/workflow_submission_resolution.dart';
 import '../reading/workflow_state_reader.dart';
-import '../states/workflow_snapshot.dart';
 import '../states/workflows_state.dart';
 import '../workflow_runtime.dart';
 import '../observation/workflow_commit_channel.dart';
 import '../observation/workflow_state_observer.dart';
 
 import 'workflow_application_persistence.dart';
-
-/// Expected conflict when a trusted owner already has an unfinished workflow.
-///
-/// [workflow_id] identifies the existing workflow when restoration can
-/// establish its identity. The rejected Start never replaces that workflow.
-final class WorkflowAlreadyActiveException implements Exception {
-  /// Creates a conflict with the optional existing [workflow_id].
-  const WorkflowAlreadyActiveException({this.workflow_id});
-
-  /// Identifier of the existing unfinished workflow, when known.
-  final String? workflow_id;
-
-  /// Formats the stable conflict name and its known workflow identity.
-  @override
-  String toString() =>
-      'WorkflowAlreadyActiveException(workflow_id: $workflow_id)';
-}
-
-/// Expected refusal of an explicit workflow Stop request.
-///
-/// The rejection [code] describes either a pre-submission conflict or a
-/// durable business rejection from the trusted workflow processor.
-final class WorkflowStopRejectedException implements Exception {
-  /// Creates a Stop refusal classified by [code].
-  const WorkflowStopRejectedException({required this.code});
-
-  /// Machine-readable reason the requested workflow could not be stopped.
-  final WorkflowRejectionCode code;
-
-  /// Formats the stable conflict name and its rejection code.
-  @override
-  String toString() => 'WorkflowStopRejectedException(code: ${code.name})';
-}
 
 /// Owner-scoped SDK application operations over confirmed workflow state.
 ///
@@ -154,6 +122,13 @@ final class WorkflowApplication {
   /// Registered workflow command processing service.
   final WorkflowProcessor _processor;
 
+  /// Completion boundary of the last scheduled processing operation.
+  ///
+  /// Every processing operation acquires this lane before accessing the
+  /// processor. The lane completes independently of operation success,
+  /// allowing subsequent operations to proceed after a failure.
+  Future<void> _processing_tail = Future<void>.value();
+
   /// Durable submission-resolution lookup service.
   final WorkflowSubmissionStatusReader _statuses;
 
@@ -227,195 +202,248 @@ final class WorkflowApplication {
     EventSubmissionReceipt receipt,
   ) => _statuses.status_for(receipt);
 
-  /// Processes at most one previously accepted command in trusted scope.
+  /// Processes at most one accepted command within trusted ownership.
   ///
-  /// Returns a typed committed, rejected, quarantined or idle result.
-  /// This is an explicit host processing operation and may commit history.
-  /// Domain validation and persistence failures propagate without success.
-  Future<WorkflowProcessingResult> process_next() => _processor.process_next();
+  /// Returns a committed, rejected, quarantined or idle processing result.
+  /// Execution is serialized with other application processing operations.
+  ///
+  /// Domain integrity and persistence failures propagate. A failed operation
+  /// releases the processing lane without reporting successful commitment.
+  Future<WorkflowProcessingResult> process_next() {
+    return _serialize_processing(_processor.process_next);
+  }
 
   /// Starts a workflow at the requested [target_id] and [root].
   ///
-  /// The host is responsible for target-specific path validation and
-  /// provision of writable persistence before invoking this operation.
-  /// Returns a committed, owner-verified [WorkflowSnapshot] whose identity
-  /// matches the exact accepted submission's causally linked journal outcome.
+  /// [idempotency_key] identifies the logical Start operation within the
+  /// trusted submission scope. Retries must preserve the original key,
+  /// target and root.
   ///
-  /// An existing unfinished workflow throws [WorkflowAlreadyActiveException]
-  /// without submitting another Start. Processing rejection, quarantine,
-  /// inconsistent confirmation and infrastructure errors propagate.
+  /// The caller supplies target-specific validation and writable persistence.
+  ///
+  /// Returns the durable application outcome of the original operation.
+  /// A completed outcome identifies its historical establishment rather than
+  /// the currently active workflow.
+  ///
+  /// Expected business rejections and quarantine remain durable resolutions.
+  /// Conflicting key reuse returns [WorkflowOperationIdempotencyConflict].
+  ///
+  /// Throws [ArgumentError] for invalid command arguments or a blank key.
+  /// Persistence, processing and integrity failures propagate.
   ///
   /// Example:
   /// ```dart
-  /// final started = await application.start(
+  /// final outcome = await application.start(
   ///   target_id: 'local-macos',
   ///   root: TargetPath('/workspace'),
+  ///   idempotency_key: operation_id,
   /// );
-  /// print(started.identity.workflow_id);
+  ///
+  /// if (outcome is WorkflowOperationResolved) {
+  ///   print(outcome.resolution.state);
+  /// }
   /// ```
-  Future<WorkflowSnapshot> start({
+  Future<WorkflowOperationOutcome> start({
     required String target_id,
     required TargetPath root,
-  }) async {
-    final existing = (await read_state()).workflows.current_workflow;
-    if (existing != null) {
-      throw WorkflowAlreadyActiveException(
-        workflow_id: existing.identity.workflow_id,
-      );
-    }
-
-    final receipt = await submit_command(
+    required String idempotency_key,
+  }) {
+    return _execute(
       WorkflowStartEvent(target_id: target_id, root: root),
+      idempotency_key: idempotency_key,
     );
-    final resolution = await _await_resolution(receipt);
-
-    switch (resolution.state) {
-      case WorkflowSubmissionState.completed:
-        final committed = resolution.committed_outcome;
-        if (committed == null ||
-            committed.event_type != WorkflowStartedEvent.type_id ||
-            committed.version != 1) {
-          throw StateError('Completed Start lacks its establishment outcome.');
-        }
-
-        final active = (await read_state()).workflows.current_workflow;
-        if (active == null ||
-            active.identity.workflow_id != committed.workflow_id ||
-            active.identity.target_id != target_id ||
-            active.identity.root.value != root.value ||
-            active.version < committed.version) {
-          throw StateError(
-            'Committed Start cannot be consistently restored as current.',
-          );
-        }
-        return active;
-
-      case WorkflowSubmissionState.rejected:
-        if (resolution.rejection_code ==
-            WorkflowRejectionCode.ownership_conflict) {
-          final current = (await read_state()).workflows.current_workflow;
-          throw WorkflowAlreadyActiveException(
-            workflow_id: current?.identity.workflow_id,
-          );
-        }
-        throw StateError(
-          'Workflow Start rejected: '
-          '${resolution.rejection_code?.name ?? "unknown"}.',
-        );
-
-      case WorkflowSubmissionState.quarantined:
-        throw StateError(
-          'Workflow Start quarantined: '
-          '${resolution.quarantine_code?.name ?? "unknown"}.',
-        );
-
-      case WorkflowSubmissionState.pending:
-        throw StateError('Workflow Start has no confirmed resolution.');
-    }
   }
 
-  /// Stops the owner's unfinished workflow through an explicit command.
+  /// Stops the explicitly requested [workflow_id].
   ///
-  /// [expected_workflow_id] optionally binds the request to a workflow
-  /// previously displayed by a frontend. It is a concurrency guard, not an
-  /// authorization credential. Blank values throw [ArgumentError].
+  /// [workflow_id] identifies the intended workflow and cannot be replaced
+  /// by a subsequently established workflow.
   ///
-  /// Returns the exact committed terminal workflow identifier. Missing or
-  /// replaced workflows throw [WorkflowStopRejectedException]. Quarantine,
-  /// inconsistent confirmation and infrastructure failures propagate.
+  /// [idempotency_key] identifies the logical Stop operation. Retries must
+  /// preserve both the original key and workflow identifier.
+  ///
+  /// Returns the original durable operation outcome, independently of the
+  /// current workflow lifecycle.
+  ///
+  /// Expected business rejections and quarantine remain durable resolutions.
+  /// Conflicting key reuse returns [WorkflowOperationIdempotencyConflict].
+  ///
+  /// Throws [ArgumentError] for blank identifiers. Persistence, processing
+  /// and integrity failures propagate.
   ///
   /// Example:
   /// ```dart
-  /// final stopped_id = await application.stop(
-  ///   expected_workflow_id: displayed.identity.workflow_id,
+  /// final outcome = await application.stop(
+  ///   workflow_id: displayed.identity.workflow_id,
+  ///   idempotency_key: operation_id,
   /// );
   /// ```
-  Future<String> stop({String? expected_workflow_id}) async {
-    if (expected_workflow_id != null && expected_workflow_id.trim().isEmpty) {
-      throw ArgumentError.value(
-        expected_workflow_id,
-        'expected_workflow_id',
-        'Expected workflow identifier must not be blank.',
-      );
-    }
-
-    final active = (await read_state()).workflows.current_workflow;
-    if (active == null) {
-      throw const WorkflowStopRejectedException(
-        code: WorkflowRejectionCode.workflow_not_active,
-      );
-    }
-
-    final workflow_id = active.identity.workflow_id;
-    if (expected_workflow_id != null && workflow_id != expected_workflow_id) {
-      throw const WorkflowStopRejectedException(
-        code: WorkflowRejectionCode.workflow_id_mismatch,
-      );
-    }
-
-    final receipt = await submit_command(
+  Future<WorkflowOperationOutcome> stop({
+    required String workflow_id,
+    required String idempotency_key,
+  }) {
+    return _execute(
       WorkflowStopEvent(workflow_id: workflow_id),
+      idempotency_key: idempotency_key,
     );
-    final resolution = await _await_resolution(receipt);
+  }
 
-    switch (resolution.state) {
-      case WorkflowSubmissionState.completed:
-        final committed = resolution.committed_outcome;
-        if (committed == null ||
-            committed.workflow_id != workflow_id ||
-            committed.event_type != WorkflowEndedEvent.type_id) {
-          throw StateError('Completed Stop lacks its terminal outcome.');
-        }
-        return workflow_id;
+  /// Durably accepts and resolves one explicit [command].
+  ///
+  /// [idempotency_key] binds retries to the original logical operation.
+  ///
+  /// Acceptance may occur concurrently. Resolution is performed within the
+  /// application's processing lane so that terminal submissions cannot
+  /// trigger another processing attempt.
+  ///
+  /// Returns a durable resolution or an explicit idempotency conflict.
+  /// All other submission and processing failures propagate.
+  Future<WorkflowOperationOutcome> _execute(
+    WorkflowCommandEvent command, {
+    required String idempotency_key,
+  }) async {
+    if (idempotency_key.trim().isEmpty) {
+      throw ArgumentError.value(
+        idempotency_key,
+        'idempotency_key',
+        'Idempotency key must not be blank.',
+      );
+    }
 
-      case WorkflowSubmissionState.rejected:
-        final code = resolution.rejection_code;
-        if (code == WorkflowRejectionCode.workflow_not_active ||
-            code == WorkflowRejectionCode.workflow_id_mismatch) {
-          throw WorkflowStopRejectedException(code: code!);
-        }
-        throw StateError('Workflow Stop rejected: ${code?.name ?? "unknown"}.');
+    final EventSubmissionReceipt receipt;
 
-      case WorkflowSubmissionState.quarantined:
-        throw StateError(
-          'Workflow Stop quarantined: '
-          '${resolution.quarantine_code?.name ?? "unknown"}.',
-        );
+    try {
+      receipt = await submit_command(command, idempotency_key: idempotency_key);
+    } on EventSubmissionException catch (error) {
+      if (error.code == EventSubmissionErrorCode.idempotency_conflict) {
+        return const WorkflowOperationIdempotencyConflict();
+      }
 
-      case WorkflowSubmissionState.pending:
-        throw StateError('Workflow Stop has no confirmed resolution.');
+      rethrow;
+    }
+
+    return _serialize_processing(() async {
+      final resolution = await _await_resolution(receipt);
+
+      _validate_completed_operation(command, resolution);
+
+      return WorkflowOperationResolved(resolution: resolution);
+    });
+  }
+
+  /// Executes [operation] exclusively within this application's processing
+  /// lane.
+  ///
+  /// Returns the operation's result after all earlier scheduled processing
+  /// operations have released the lane.
+  ///
+  /// Operation failures propagate to their respective callers without
+  /// preventing subsequent operations from acquiring the lane.
+  Future<T> _serialize_processing<T>(Future<T> Function() operation) async {
+    final previous = _processing_tail;
+    final release = Completer<void>();
+
+    // Reserve the next position before yielding to another caller.
+    _processing_tail = release.future;
+
+    try {
+      await previous;
+      return await operation();
+    } finally {
+      release.complete();
     }
   }
 
-  /// Resolves one exact [receipt] by querying durable processing status.
+  /// Resolves the exact accepted [receipt] while owning the processing lane.
   ///
-  /// Pending submissions may cause another accepted command to be processed
-  /// first. An idle processor with no observable progress fails explicitly;
-  /// a caller can subsequently recover using [status_for].
+  /// Returns its durable terminal resolution. Pending submissions may
+  /// require earlier accepted commands to be processed first.
+  ///
+  /// Throws [StateError] if the accepted submission disappears or remains
+  /// pending without observable processing progress.
   Future<WorkflowSubmissionResolution> _await_resolution(
     EventSubmissionReceipt receipt,
   ) async {
     while (true) {
-      final resolution = await status_for(receipt);
-      if (resolution == null) {
-        throw StateError('Accepted workflow submission is missing.');
-      }
+      final resolution = await _require_resolution(receipt);
 
       if (resolution.state != WorkflowSubmissionState.pending) {
         return resolution;
       }
 
-      final processed = await process_next();
+      // This method already owns the processing lane. Calling the public
+      // process_next() here would attempt to acquire the same lane again.
+      final processed = await _processor.process_next();
+
       if (processed is WorkflowProcessingIdle) {
-        // Another process may commit between the status and inbox reads.
-        // Recheck persistence before declaring processing unavailable.
-        final latest = await status_for(receipt);
-        if (latest == null || latest.state == WorkflowSubmissionState.pending) {
+        final latest = await _require_resolution(receipt);
+
+        if (latest.state == WorkflowSubmissionState.pending) {
           throw StateError(
             'Workflow submission remains pending without '
             'an available processor.',
           );
         }
+
+        return latest;
+      }
+    }
+  }
+
+  /// Retrieves the durable resolution of the exact accepted [receipt].
+  ///
+  /// Returns the matching resolution or throws [StateError] if the
+  /// persistence adapter cannot establish the original submission identity.
+  ///
+  /// Persistence and journal-integrity failures propagate.
+  Future<WorkflowSubmissionResolution> _require_resolution(
+    EventSubmissionReceipt receipt,
+  ) async {
+    final resolution = await status_for(receipt);
+
+    if (resolution == null) {
+      throw StateError('Accepted workflow submission is missing.');
+    }
+
+    if (resolution.receipt.event_id != receipt.event_id ||
+        resolution.receipt.correlation_id != receipt.correlation_id) {
+      throw StateError(
+        'Submission resolution disagrees with the accepted receipt.',
+      );
+    }
+
+    return resolution;
+  }
+
+  /// Validates that a completed [resolution] describes the supplied [command].
+  ///
+  /// Historical journal validation belongs to the persistence reader.
+  /// This boundary verifies the operation-specific committed reference
+  /// before returning it to the application consumer.
+  ///
+  /// Throws [StateError] when the reference contradicts the accepted
+  /// operation. Non-completed resolutions require no committed outcome.
+  static void _validate_completed_operation(
+    WorkflowCommandEvent command,
+    WorkflowSubmissionResolution resolution,
+  ) {
+    if (resolution.state != WorkflowSubmissionState.completed) {
+      return;
+    }
+
+    final committed = resolution.committed_outcome!;
+
+    if (command is WorkflowStartEvent) {
+      if (committed.event_type != WorkflowStartedEvent.type_id ||
+          committed.version != 1) {
+        throw StateError('Completed Start lacks its establishment outcome.');
+      }
+    } else if (command is WorkflowStopEvent) {
+      if (committed.event_type != WorkflowEndedEvent.type_id ||
+          committed.workflow_id != command.workflow_id) {
+        throw StateError(
+          'Completed Stop lacks its requested terminal outcome.',
+        );
       }
     }
   }

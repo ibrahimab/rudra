@@ -107,7 +107,17 @@ void main() {
 
     await expectLater(
       run_once(create_composition(), startup_root: TargetPath(directory.path)),
-      throwsA(isA<WorkflowAlreadyActiveException>()),
+      throwsA(
+        isA<HostStartupWorkflowException>().having(
+          (error) => error.outcome,
+          'outcome',
+          isA<WorkflowOperationResolved>().having(
+            (outcome) => outcome.resolution.rejection_code,
+            'rejection_code',
+            WorkflowRejectionCode.ownership_conflict,
+          ),
+        ),
+      ),
     );
 
     // Failed startup must release persistence without replacing

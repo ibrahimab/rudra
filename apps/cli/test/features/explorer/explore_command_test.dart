@@ -6,6 +6,7 @@ import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
 import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_operation_exception.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -378,7 +379,17 @@ void main() {
           // workflow established by the first invocation.
           await expectLater(
             second.create_cli().run(['explore']),
-            throwsA(isA<WorkflowAlreadyActiveException>()),
+            throwsA(
+              isA<WorkflowExplorerOperationException>().having(
+                (error) => error.outcome,
+                'outcome',
+                isA<WorkflowOperationResolved>().having(
+                  (outcome) => outcome.resolution.rejection_code,
+                  'rejection_code',
+                  WorkflowRejectionCode.ownership_conflict,
+                ),
+              ),
+            ),
           );
 
           final second_screen = second.terminal.output_buffer.toString();

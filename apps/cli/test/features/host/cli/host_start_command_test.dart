@@ -182,8 +182,18 @@ void main() {
       required start_workflow,
       required on_ready,
     }) async {
-      throw const WorkflowAlreadyActiveException(
-        workflow_id: 'existing-workflow',
+      throw HostStartupWorkflowException(
+        outcome: WorkflowOperationResolved(
+          resolution: WorkflowSubmissionResolution(
+            receipt: EventSubmissionReceipt(
+              event_id: 'startup-event',
+              correlation_id: 'startup-correlation',
+            ),
+            state: WorkflowSubmissionState.rejected,
+            rejection_code: WorkflowRejectionCode.ownership_conflict,
+            rejected_at_unix_ms: 1795618800000,
+          ),
+        ),
       );
     });
 
@@ -197,7 +207,7 @@ void main() {
     ]);
 
     expect(status, RudraExitCode.workflow_conflict.value);
-    expect(errors.toString(), contains('existing-workflow'));
+    expect(errors.toString(), contains('ownership_conflict'));
     expect(output.toString(), isNot(contains('Host ready')));
   });
 

@@ -1,5 +1,7 @@
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
 import 'package:rudra_cli/src/features/workflow/explorer/workflow_stop_explorer_action.dart';
+import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_operation_exception.dart';
+
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -12,7 +14,7 @@ void main() {
     test('has a stable identity and keyboard shortcut', () {
       final action = WorkflowStopExplorerAction(
         displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (id) async => id,
+        stop_workflow: (id, _) async => _completed_stop(id),
       );
 
       expect(action.id, 'workflow.stop');
@@ -24,9 +26,9 @@ void main() {
 
       final action = WorkflowStopExplorerAction(
         displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (expected_id) async {
+        stop_workflow: (expected_id, _) async {
           requested_id = expected_id;
-          return expected_id;
+          return _completed_stop(expected_id);
         },
       );
 
@@ -40,9 +42,9 @@ void main() {
 
       final action = WorkflowStopExplorerAction(
         displayed_workflow: () => null,
-        stop_workflow: (id) async {
+        stop_workflow: (id, _) async {
           calls++;
-          return id;
+          return _completed_stop(id);
         },
       );
 
@@ -54,7 +56,7 @@ void main() {
     test('rejects a mismatched confirmed workflow ID', () async {
       final action = WorkflowStopExplorerAction(
         displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (_) async => 'workflow-2',
+        stop_workflow: (_, _) async => _completed_stop('workflow-2'),
       );
 
       await expectLater(action.execute(_explorer()), throwsStateError);
@@ -68,14 +70,14 @@ void main() {
 
         final action = WorkflowStopExplorerAction(
           displayed_workflow: () => displayed,
-          stop_workflow: (expected_id) async {
+          stop_workflow: (expected_id, _) async {
             requested_id = expected_id;
 
             // Simulate another presentation snapshot replacing the
             // workflow while the original operation is in flight.
             displayed = _active('workflow-2');
 
-            return expected_id;
+            return _completed_stop(expected_id);
           },
         );
 
@@ -86,10 +88,10 @@ void main() {
       },
     );
 
-    test('propagates application rejection', () async {
+    test('propagates unexpected application failure', () async {
       final action = WorkflowStopExplorerAction(
         displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (_) async {
+        stop_workflow: (_, _) async {
           throw StateError('Injected Stop rejection.');
         },
       );
@@ -105,12 +107,63 @@ void main() {
           reads++;
           return _active('workflow-1');
         },
-        stop_workflow: (id) async => id,
+        stop_workflow: (id, _) async => _completed_stop(id),
       );
 
       await action.execute(_explorer());
 
       expect(reads, 1);
+    });
+
+    test('preserves the durable rejection of a stale Stop', () async {
+      final outcome = WorkflowOperationResolved(
+        resolution: WorkflowSubmissionResolution(
+          receipt: EventSubmissionReceipt(
+            event_id: 'rejected-stop-event',
+            correlation_id: 'rejected-stop-correlation',
+          ),
+          state: WorkflowSubmissionState.rejected,
+          rejection_code: WorkflowRejectionCode.workflow_id_mismatch,
+          rejected_at_unix_ms: 1795618800000,
+        ),
+      );
+
+      final action = WorkflowStopExplorerAction(
+        displayed_workflow: () => _active('workflow-1'),
+        stop_workflow: (_, _) async => outcome,
+      );
+
+      await expectLater(
+        action.execute(_explorer()),
+        throwsA(
+          isA<WorkflowExplorerOperationException>().having(
+            (error) => error.outcome,
+            'outcome',
+            same(outcome),
+          ),
+        ),
+      );
+    });
+
+    test('supplies an explicit identity and operation key', () async {
+      String? requested_id;
+      String? requested_key;
+
+      final action = WorkflowStopExplorerAction(
+        displayed_workflow: () => _active('workflow-1'),
+        stop_workflow: (workflow_id, idempotency_key) async {
+          requested_id = workflow_id;
+          requested_key = idempotency_key;
+
+          return _completed_stop(workflow_id);
+        },
+      );
+
+      await action.execute(_explorer());
+
+      expect(requested_id, 'workflow-1');
+      expect(requested_key, isNotNull);
+      expect(requested_key!.trim(), isNotEmpty);
     });
   });
 }
@@ -145,6 +198,25 @@ ExplorerModel _explorer() {
       directory: root,
       entries: const [],
       is_complete: true,
+    ),
+  );
+}
+
+/// Creates a committed terminal outcome for [workflow_id].
+WorkflowOperationOutcome _completed_stop(String workflow_id) {
+  return WorkflowOperationResolved(
+    resolution: WorkflowSubmissionResolution(
+      receipt: EventSubmissionReceipt(
+        event_id: 'fixture-stop-event',
+        correlation_id: 'fixture-stop-correlation',
+      ),
+      state: WorkflowSubmissionState.completed,
+      committed_outcome: WorkflowCommittedOutcome(
+        workflow_id: workflow_id,
+        event_type: WorkflowEndedEvent.type_id,
+        version: 2,
+        sequence: 2,
+      ),
     ),
   );
 }

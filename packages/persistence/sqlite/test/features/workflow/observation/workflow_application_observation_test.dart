@@ -71,10 +71,13 @@ void main() {
       expect(initial.workflows.current_workflow, isNull);
       expect(await database_file.exists(), isFalse);
 
-      // Explicit Start is the operation authorized to initialize storage.
-      final started = await application.start(
-        target_id: 'local-macos',
-        root: TargetPath('/workspace'),
+      // An explicit Start submission may initialize durable storage.
+      final started = _committed(
+        await application.start(
+          target_id: 'local-macos',
+          root: TargetPath('/workspace'),
+          idempotency_key: 'start-workspace',
+        ),
       );
 
       expect(await database_file.exists(), isTrue);
@@ -84,7 +87,7 @@ void main() {
 
       expect(
         active.workflows.current_workflow?.identity.workflow_id,
-        started.identity.workflow_id,
+        started.workflow_id,
       );
       expect(active.workflows.current_workflow?.version, 1);
     } finally {
@@ -95,12 +98,22 @@ void main() {
   test('observes verified absence, Start and Stop', () async {
     // Initialize durable persistence through explicit workflow operations.
     // The new subscription must restore the resulting verified absence.
-    final seeded = await application.start(
-      target_id: 'local-macos',
-      root: TargetPath('/seed'),
+    final seeded = _committed(
+      await application.start(
+        target_id: 'local-macos',
+        root: TargetPath('/seed'),
+        idempotency_key: 'start-seed',
+      ),
     );
 
-    await application.stop(expected_workflow_id: seeded.identity.workflow_id);
+    final seed_stop = _committed(
+      await application.stop(
+        workflow_id: seeded.workflow_id,
+        idempotency_key: 'stop-seed',
+      ),
+    );
+
+    expect(seed_stop.workflow_id, seeded.workflow_id);
 
     final iterator = StreamIterator<RudraState>(application.observe_state());
 
@@ -108,16 +121,19 @@ void main() {
       final initial = await next_state(iterator);
       expect(initial.workflows.current_workflow, isNull);
 
-      final started = await application.start(
-        target_id: 'local-macos',
-        root: TargetPath('/workspace'),
+      final started = _committed(
+        await application.start(
+          target_id: 'local-macos',
+          root: TargetPath('/workspace'),
+          idempotency_key: 'start-workspace',
+        ),
       );
 
       final active = await next_state(iterator);
 
       expect(
         active.workflows.current_workflow?.identity.workflow_id,
-        started.identity.workflow_id,
+        started.workflow_id,
       );
       expect(active.workflows.current_workflow?.version, 1);
       expect(
@@ -125,9 +141,14 @@ void main() {
         '/workspace',
       );
 
-      await application.stop(
-        expected_workflow_id: started.identity.workflow_id,
+      final stopped = _committed(
+        await application.stop(
+          workflow_id: started.workflow_id,
+          idempotency_key: 'stop-workspace',
+        ),
       );
+
+      expect(stopped.workflow_id, started.workflow_id);
 
       final ended = await next_state(iterator);
       expect(ended.workflows.current_workflow, isNull);
@@ -137,9 +158,12 @@ void main() {
   });
 
   test('multiple consumers receive committed state changes', () async {
-    final started = await application.start(
-      target_id: 'local-macos',
-      root: TargetPath('/workspace'),
+    final started = _committed(
+      await application.start(
+        target_id: 'local-macos',
+        root: TargetPath('/workspace'),
+        idempotency_key: 'start-workspace',
+      ),
     );
 
     final first = StreamIterator<RudraState>(application.observe_state());
@@ -152,17 +176,22 @@ void main() {
 
       expect(
         first_initial.workflows.current_workflow?.identity.workflow_id,
-        started.identity.workflow_id,
+        started.workflow_id,
       );
 
       expect(
         second_initial.workflows.current_workflow?.identity.workflow_id,
-        started.identity.workflow_id,
+        started.workflow_id,
       );
 
-      await application.stop(
-        expected_workflow_id: started.identity.workflow_id,
+      final stopped = _committed(
+        await application.stop(
+          workflow_id: started.workflow_id,
+          idempotency_key: 'stop-workspace',
+        ),
       );
+
+      expect(stopped.workflow_id, started.workflow_id);
 
       final first_ended = await next_state(first);
       final second_ended = await next_state(second);
@@ -174,6 +203,20 @@ void main() {
       await second.cancel();
     }
   });
+}
+
+/// Extracts the committed journal reference from an application [outcome].
+///
+/// Asserts successful durable completion before returning the original
+/// committed outcome reference.
+WorkflowCommittedOutcome _committed(WorkflowOperationOutcome outcome) {
+  expect(outcome, isA<WorkflowOperationResolved>());
+
+  final resolution = (outcome as WorkflowOperationResolved).resolution;
+
+  expect(resolution.state, WorkflowSubmissionState.completed);
+
+  return resolution.committed_outcome!;
 }
 
 /// Generates distinct workflow identities for explicit Start operations.

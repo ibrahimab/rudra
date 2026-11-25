@@ -1,75 +1,74 @@
-import 'package:rudra_sdk/rudra_sdk.dart' show TargetPath, WorkflowSnapshot;
+import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../explorer/application/explorer_action_registry.dart';
 import '../../explorer/application/explorer_model.dart';
 
-/// Explorer action for starting a workflow.
+import 'workflow_explorer_operation_exception.dart';
+
+/// Explorer action requesting workflow establishment.
 ///
-/// The S shortcut starts a workflow using the directory currently
-/// displayed in Explorer as its requested filesystem root.
+/// The S shortcut captures the currently displayed directory and creates
+/// a new identified Start operation.
 ///
-/// Workflow creation is performed by the supplied application
-/// operation, which returns a confirmed [WorkflowSnapshot].
+/// The application determines whether establishment can be committed.
 ///
 /// Example:
 /// ```dart
 /// final action = WorkflowStartExplorerAction(
-///   start_workflow: (root) => workflows.start(
+///   start_workflow: (root, key) => workflows.start(
 ///     target_id: target_id,
 ///     root: root,
+///     idempotency_key: key,
 ///   ),
-/// );
-///
-/// final contribution = ExplorerFeatureContribution(
-///   id: 'workflow',
-///   actions: [action],
 /// );
 /// ```
 final class WorkflowStartExplorerAction implements ExplorerAction {
-  /// Creates a workflow Start action.
+  /// Creates a Start action using [start_workflow].
   ///
-  /// [start_workflow] is the application operation responsible for
-  /// creating a workflow at the requested filesystem root.
-  ///
-  /// The operation must return an authoritatively committed
-  /// [WorkflowSnapshot]. Submission acceptance alone is
-  /// insufficient.
-  ///
-  /// Construction does not invoke the supplied operation.
+  /// The supplied operation returns the durable application outcome.
+  /// Construction does not submit or process workflow commands.
   const WorkflowStartExplorerAction({required this.start_workflow});
 
-  /// Application operation used to create a workflow.
-  ///
-  /// Receives a [TargetPath] identifying the requested root
-  /// and returns the resulting committed [WorkflowSnapshot].
-  ///
-  /// Validation, persistence, and processing exceptions propagate
-  /// through the returned future.
-  final Future<WorkflowSnapshot> Function(TargetPath) start_workflow;
+  /// Application operation receiving the requested root and operation key.
+  final Future<WorkflowOperationOutcome> Function(
+    TargetPath root,
+    String idempotency_key,
+  )
+  start_workflow;
 
-  /// Stable identifier for workflow creation.
+  /// Stable identifier for workflow establishment.
   @override
   String get id => 'workflow.start';
 
-  /// Keyboard shortcut used to start a workflow.
+  /// Keyboard shortcut used to request Start.
   @override
   String get shortcut => 's';
 
-  /// Starts a workflow for the currently displayed directory.
+  /// Requests workflow establishment for [model]'s displayed directory.
   ///
-  /// [model] supplies the Explorer navigation snapshot at dispatch
-  /// time. Its [ExplorerModel.current_directory] determines the
-  /// requested workflow root.
+  /// Completes only after the application confirms establishment.
   ///
-  /// Returns a future that completes when the application operation
-  /// confirms workflow creation.
-  ///
-  /// Errors from [start_workflow] propagate to the caller.
+  /// Throws [WorkflowExplorerOperationException] for unsuccessful
+  /// application outcomes, or [StateError] for contradictory commitment
+  /// evidence. Unexpected application failures propagate.
   @override
   Future<void> execute(ExplorerModel model) async {
-    // Capture the root associated with this keyboard interaction.
     final root = model.current_directory;
+    final idempotency_key = Uuid().v4();
 
-    await start_workflow(root);
+    final outcome = await start_workflow(root, idempotency_key);
+
+    if (outcome is! WorkflowOperationResolved ||
+        outcome.resolution.state != WorkflowSubmissionState.completed) {
+      throw WorkflowExplorerOperationException(outcome: outcome);
+    }
+
+    final committed = outcome.resolution.committed_outcome!;
+
+    if (committed.event_type != WorkflowStartedEvent.type_id ||
+        committed.version != 1) {
+      throw StateError('Start result lacks its establishment outcome.');
+    }
   }
 }

@@ -1,10 +1,51 @@
 import 'dart:io';
 
+import 'package:uuid/uuid.dart';
+
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
 import 'host_workflow_identity_provider.dart';
+
+/// Indicates that an explicitly requested startup workflow operation
+/// did not complete successfully.
+///
+/// Preserves the application outcome responsible for preventing host
+/// readiness. Infrastructure and resource-management failures propagate
+/// through their existing boundaries.
+final class HostStartupWorkflowException implements Exception {
+  /// Creates a startup failure associated with [outcome].
+  ///
+  /// Throws [ArgumentError] if the operation completed successfully.
+  HostStartupWorkflowException({required this.outcome}) {
+    final result = outcome;
+
+    if (result is WorkflowOperationResolved &&
+        result.resolution.state == WorkflowSubmissionState.completed) {
+      throw ArgumentError.value(
+        outcome,
+        'outcome',
+        'A completed operation is not a startup failure.',
+      );
+    }
+  }
+
+  /// Durable application outcome preventing host readiness.
+  final WorkflowOperationOutcome outcome;
+
+  /// Formats the unsuccessful operation's stable classification.
+  @override
+  String toString() {
+    return switch (outcome) {
+      WorkflowOperationIdempotencyConflict() =>
+        'Startup workflow idempotency conflict.',
+      WorkflowOperationResolved(:final resolution) =>
+        'Startup workflow ${resolution.state.name}'
+            ' (${resolution.rejection_code?.name ?? resolution.quarantine_code?.name ?? resolution.receipt.event_id}).',
+    };
+  }
+}
 
 /// Composes the application resources owned by a Rudra host.
 ///
@@ -108,6 +149,8 @@ final class HostComposition {
   ///
   /// Application, communication, ownership and persistence failures
   /// propagate to the caller.
+  /// Throws [HostStartupWorkflowException] when an explicitly requested
+  /// workflow operation does not complete successfully.
   Future<void> run({
     required Future<void> shutdown,
     required void Function(String os_user_id, WorkflowSnapshot? workflow)
@@ -181,10 +224,22 @@ final class HostComposition {
           os_user_id: os_user_id,
           shutdown: shutdown,
           on_startup: (application) async {
-            // Only an explicitly requested startup operation
-            // may establish a workflow.
+            // Explicit startup is a new user intention, identified once before
+            // invoking the authoritative application operation.
             if (startup_root != null) {
-              await application.start(target_id: target_id, root: startup_root);
+              final idempotency_key = Uuid().v4();
+
+              final outcome = await application.start(
+                target_id: target_id,
+                root: startup_root,
+                idempotency_key: idempotency_key,
+              );
+
+              if (outcome is! WorkflowOperationResolved ||
+                  outcome.resolution.state !=
+                      WorkflowSubmissionState.completed) {
+                throw HostStartupWorkflowException(outcome: outcome);
+              }
             }
 
             // Restore authoritative application state before

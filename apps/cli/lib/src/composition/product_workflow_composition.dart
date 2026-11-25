@@ -11,7 +11,7 @@ import 'package:uuid/uuid.dart';
 /// workflow-ID generation belong to this host composition boundary.
 ///
 /// Construction and read-only checks never create workflow persistence.
-/// Only an explicit Start may initialize the storage directory.
+/// Only an explicit workflow submission may initialize storage.
 ///
 /// Example:
 /// ```dart
@@ -95,15 +95,18 @@ final class ProductWorkflowComposition {
     );
   }
 
-  /// Explicitly establishes a workflow at [target_id] and absolute [root].
+  /// Requests workflow establishment at [target_id] and absolute [root].
   ///
-  /// MacOS path validation precedes persistence initialization. The storage
-  /// directory is created with owner-only permissions before opening SQLite.
-  /// Returns a committed SDK [WorkflowSnapshot]. SDK business conflicts and
-  /// persistence errors propagate without fabricating successful outcomes.
-  Future<WorkflowSnapshot> start({
+  /// [idempotency_key] identifies the logical operation and is forwarded
+  /// unchanged to the SDK application.
+  ///
+  /// Returns the durable operation outcome. Invalid arguments throw
+  /// [ArgumentError] before storage initialization. Identity, persistence
+  /// and infrastructure failures propagate.
+  Future<WorkflowOperationOutcome> start({
     required String target_id,
     required TargetPath root,
+    required String idempotency_key,
   }) async {
     if (!root.value.startsWith('/')) {
       throw ArgumentError.value(
@@ -113,53 +116,87 @@ final class ProductWorkflowComposition {
       );
     }
 
-    // Resolve ownership before creating any persistence directory.
+    if (target_id.trim().isEmpty) {
+      throw ArgumentError.value(target_id, 'target_id');
+    }
+
+    _validate_operation_key(idempotency_key);
+
     final os_user_id = await _trusted_os_user_id();
 
-    // Only explicit Start may initialize and secure the storage directory.
+    await _prepare_storage();
+
+    return _with_application(
+      os_user_id: os_user_id,
+      operation: (application) => application.start(
+        target_id: target_id,
+        root: root,
+        idempotency_key: idempotency_key,
+      ),
+    );
+  }
+
+  /// Requests termination of the explicitly identified [workflow_id].
+  ///
+  /// [idempotency_key] identifies the logical Stop operation and is
+  /// forwarded unchanged to the SDK application.
+  ///
+  /// Returns the durable operation outcome, including business rejection
+  /// when the requested workflow no longer exists.
+  ///
+  /// Throws [ArgumentError] for blank identifiers before storage
+  /// initialization. Identity and infrastructure failures propagate.
+  Future<WorkflowOperationOutcome> stop({
+    required String workflow_id,
+    required String idempotency_key,
+  }) async {
+    if (workflow_id.trim().isEmpty) {
+      throw ArgumentError.value(workflow_id, 'workflow_id');
+    }
+
+    _validate_operation_key(idempotency_key);
+
+    final os_user_id = await _trusted_os_user_id();
+
+    await _prepare_storage();
+
+    return _with_application(
+      os_user_id: os_user_id,
+      operation: (application) => application.stop(
+        workflow_id: workflow_id,
+        idempotency_key: idempotency_key,
+      ),
+    );
+  }
+
+  /// Prepares owner-restricted storage for an explicit durable submission.
+  ///
+  /// Creates the persistence directory if necessary and applies
+  /// owner-only permissions.
+  ///
+  /// Throws [StateError] when directory permissions cannot be established.
+  /// Filesystem failures propagate.
+  Future<void> _prepare_storage() async {
     await database_file.parent.create(recursive: true);
+
     final permissions = await Process.run('/bin/chmod', [
       '700',
       database_file.parent.path,
     ]);
+
     if (permissions.exitCode != 0) {
       throw StateError('Unable to secure Rudra persistence directory.');
     }
-
-    return _with_application(
-      os_user_id: os_user_id,
-      operation: (application) =>
-          application.start(target_id: target_id, root: root),
-    );
   }
 
-  /// Explicitly stops the owner's current unfinished workflow.
+  /// Validates an [idempotency_key] before accessing persistence.
   ///
-  /// [expected_workflow_id] optionally guards the workflow previously shown
-  /// by a frontend. Empty identifiers throw [ArgumentError]. Missing storage
-  /// yields a typed conflict without creating a database. Returns the exact
-  /// workflow ID confirmed by committed terminal journal evidence.
-  Future<String> stop({String? expected_workflow_id}) async {
-    if (expected_workflow_id != null && expected_workflow_id.trim().isEmpty) {
-      throw ArgumentError.value(
-        expected_workflow_id,
-        'expected_workflow_id',
-        'Expected workflow identifier must not be blank.',
-      );
+  /// Throws [ArgumentError] when the key is blank. The original key is
+  /// preserved without normalization.
+  static void _validate_operation_key(String idempotency_key) {
+    if (idempotency_key.trim().isEmpty) {
+      throw ArgumentError.value(idempotency_key, 'idempotency_key');
     }
-
-    if (!await database_file.exists()) {
-      throw const WorkflowStopRejectedException(
-        code: WorkflowRejectionCode.workflow_not_active,
-      );
-    }
-
-    final os_user_id = await _trusted_os_user_id();
-    return _with_application(
-      os_user_id: os_user_id,
-      operation: (application) =>
-          application.stop(expected_workflow_id: expected_workflow_id),
-    );
   }
 
   /// Runs one SDK [operation] using a trusted owner and persistence lifetime.

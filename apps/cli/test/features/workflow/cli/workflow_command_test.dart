@@ -67,7 +67,7 @@ void main() {
         .run(['workflow', 'start', '/fixture']);
 
     expect(status, RudraExitCode.success.value);
-    expect(output.toString(), contains('Workflow: ACTIVE'));
+    expect(output.toString(), contains('Workflow: STARTED'));
     expect(output.toString(), contains('Version: 1'));
     expect(database_file.existsSync(), isTrue);
 
@@ -100,7 +100,7 @@ void main() {
     final second_status = await second_cli.run(['workflow', 'start']);
 
     expect(second_status, RudraExitCode.workflow_conflict.value);
-    expect(errors.toString(), contains('Workflow already active:'));
+    expect(errors.toString(), contains('Workflow already active.'));
 
     final restored = await workflow_composition.current();
 
@@ -164,6 +164,48 @@ void main() {
     expect(database_file.existsSync(), isFalse);
   });
 
+  test('explicit identified Stop durably records workflow absence', () async {
+    expect(database_file.existsSync(), isFalse);
+
+    final outcome = await workflow_composition.stop(
+      workflow_id: 'previous-workflow',
+      idempotency_key: 'stop-previous',
+    );
+
+    expect(outcome, isA<WorkflowOperationResolved>());
+
+    final resolution = (outcome as WorkflowOperationResolved).resolution;
+
+    expect(resolution.state, WorkflowSubmissionState.rejected);
+    expect(
+      resolution.rejection_code,
+      WorkflowRejectionCode.workflow_not_active,
+    );
+
+    expect(database_file.existsSync(), isTrue);
+    expect(await workflow_composition.current(), isNull);
+
+    final retried = await workflow_composition.stop(
+      workflow_id: 'previous-workflow',
+      idempotency_key: 'stop-previous',
+    );
+
+    final retried_resolution =
+        (retried as WorkflowOperationResolved).resolution;
+
+    expect(retried_resolution.receipt.event_id, resolution.receipt.event_id);
+
+    expect(
+      retried_resolution.receipt.correlation_id,
+      resolution.receipt.correlation_id,
+    );
+
+    expect(
+      retried_resolution.rejected_at_unix_ms,
+      resolution.rejected_at_unix_ms,
+    );
+  });
+
   test('repeated stop reports an expected workflow conflict', () async {
     expect(
       await create_cli(StringBuffer()).run(['workflow', 'start']),
@@ -224,8 +266,16 @@ void main() {
 
     expect(original, isNotNull);
 
-    // Simulate another frontend ending the displayed workflow.
-    await workflow_composition.stop();
+    // Simulate another frontend ending the explicitly selected workflow.
+    final original_stop = await workflow_composition.stop(
+      workflow_id: original!.identity.workflow_id,
+      idempotency_key: 'stop-original',
+    );
+
+    expect(
+      (original_stop as WorkflowOperationResolved).resolution.state,
+      WorkflowSubmissionState.completed,
+    );
 
     // Another explicit action establishes a replacement workflow.
     expect(
@@ -238,22 +288,26 @@ void main() {
     expect(replacement, isNotNull);
     expect(
       replacement!.identity.workflow_id,
-      isNot(original!.identity.workflow_id),
+      isNot(original.identity.workflow_id),
     );
 
     // Explorer still displays the original workflow ID.
     // It must not silently stop the replacement.
-    await expectLater(
-      workflow_composition.stop(
-        expected_workflow_id: original.identity.workflow_id,
-      ),
-      throwsA(
-        isA<WorkflowStopRejectedException>().having(
-          (error) => error.code,
-          'code',
-          WorkflowRejectionCode.workflow_id_mismatch,
-        ),
-      ),
+    final stale_stop = await workflow_composition.stop(
+      workflow_id: original.identity.workflow_id,
+      idempotency_key: 'stale-stop',
+    );
+
+    expect(stale_stop, isA<WorkflowOperationResolved>());
+
+    final stale_resolution =
+        (stale_stop as WorkflowOperationResolved).resolution;
+
+    expect(stale_resolution.state, WorkflowSubmissionState.rejected);
+
+    expect(
+      stale_resolution.rejection_code,
+      WorkflowRejectionCode.workflow_id_mismatch,
     );
 
     final restored = await workflow_composition.current();

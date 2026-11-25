@@ -43,14 +43,13 @@ enum RudraExitCode {
   /// The command was invoked with invalid arguments or options.
   invalid_usage(64),
 
-  /// A requested workflow transition conflicts with the
-  /// current durable lifecycle state.
+  /// A requested workflow operation conflicts with durable application
+  /// execution or cannot be bound to an intended workflow.
   ///
-  /// Examples include starting when a workflow is already
-  /// active or stopping when no active workflow exists.
+  /// Includes lifecycle rejections, conflicting idempotency keys,
+  /// and attempts to select a workflow when none exists.
   ///
-  /// Exit 73 follows BSD EX_CANTCREAT and is retained as
-  /// Rudra's existing workflow-conflict exit status.
+  /// Exit 73 follows BSD EX_CANTCREAT.
   workflow_conflict(73),
 
   /// Another host instance owns the requested persistence scope.

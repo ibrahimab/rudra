@@ -155,10 +155,18 @@ final class HostStartCommand extends Command<int> {
       );
 
       return RudraExitCode.host_conflict.value;
-    } on WorkflowAlreadyActiveException catch (error) {
-      _error_output.writeln('Workflow already active: $error');
+    } on HostStartupWorkflowException catch (error) {
+      final outcome = error.outcome;
 
-      return RudraExitCode.workflow_conflict.value;
+      _error_output.writeln(error);
+
+      if (outcome is WorkflowOperationIdempotencyConflict ||
+          (outcome is WorkflowOperationResolved &&
+              outcome.resolution.state == WorkflowSubmissionState.rejected)) {
+        return RudraExitCode.workflow_conflict.value;
+      }
+
+      return RudraExitCode.software_error.value;
     } on UnsupportedError catch (error) {
       _error_output.writeln('Host unavailable: $error');
 

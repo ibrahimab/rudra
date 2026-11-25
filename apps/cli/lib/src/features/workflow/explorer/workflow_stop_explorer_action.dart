@@ -1,38 +1,34 @@
-import 'package:rudra_sdk/rudra_sdk.dart' show WorkflowSnapshot;
+import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../explorer/application/explorer_action_registry.dart';
 import '../../explorer/application/explorer_model.dart';
 
-/// Explorer action for stopping the displayed workflow.
+import 'workflow_explorer_operation_exception.dart';
+
+/// Explorer action requesting termination of the displayed workflow.
 ///
-/// The X shortcut requests termination of the workflow currently
-/// represented by Explorer's presentation state.
+/// The X shortcut captures the intended workflow identity before
+/// dispatching the identified application operation.
 ///
-/// The expected workflow identifier is captured before invoking
-/// the asynchronous application operation.
-///
-/// The confirmed result must reference the same workflow, ensuring
-/// that a concurrent state change cannot cause a different workflow
-/// to be accepted as the completed operation.
+/// Subsequent presentation changes cannot retarget that operation.
 ///
 /// Example:
 /// ```dart
 /// final action = WorkflowStopExplorerAction(
 ///   displayed_workflow: () => current_workflow,
-///   stop_workflow: (expected_id) => workflows.stop(
-///     expected_workflow_id: expected_id,
+///   stop_workflow: (id, key) => workflows.stop(
+///     workflow_id: id,
+///     idempotency_key: key,
 ///   ),
 /// );
 /// ```
 final class WorkflowStopExplorerAction implements ExplorerAction {
-  /// Creates a workflow Stop action.
+  /// Creates a Stop action using the supplied application capabilities.
   ///
-  /// [displayed_workflow] returns the workflow currently represented
-  /// by Explorer's presentation state. It returns null when no
-  /// workflow is displayed.
-  ///
-  /// [stop_workflow] terminates the workflow identified by its
-  /// expected ID and returns the confirmed workflow identifier.
+  /// [displayed_workflow] supplies the workflow represented by Explorer.
+  /// [stop_workflow] executes termination for an explicit workflow ID
+  /// and idempotency key.
   ///
   /// Construction does not invoke either function.
   const WorkflowStopExplorerAction({
@@ -40,47 +36,37 @@ final class WorkflowStopExplorerAction implements ExplorerAction {
     required this.stop_workflow,
   });
 
-  /// Supplies the workflow currently displayed by Explorer.
-  ///
-  /// Returns the current [WorkflowSnapshot] or null when
-  /// no workflow is represented by the view.
-  ///
-  /// The returned workflow identity is used as the expected
-  /// identifier for the termination request.
+  /// Supplies the current displayed workflow or null when none exists.
   final WorkflowSnapshot? Function() displayed_workflow;
 
-  /// Application operation used to terminate a workflow.
-  ///
-  /// Receives the exact workflow identifier expected to be
-  /// terminated.
-  ///
-  /// Returns the identifier of the workflow whose termination
-  /// has been successfully committed.
-  ///
-  /// Validation, persistence, and processing exceptions propagate
-  /// through the returned future.
-  final Future<String> Function(String expected_workflow_id) stop_workflow;
+  /// Application operation receiving the intended workflow and operation key.
+  final Future<WorkflowOperationOutcome> Function(
+    String workflow_id,
+    String idempotency_key,
+  )
+  stop_workflow;
 
   /// Stable identifier for workflow termination.
   @override
   String get id => 'workflow.stop';
 
-  /// Keyboard shortcut used to stop a workflow.
+  /// Keyboard shortcut used to request Stop.
   @override
   String get shortcut => 'x';
 
-  /// Terminates the workflow currently displayed by Explorer.
+  /// Requests termination of the workflow displayed at dispatch time.
   ///
-  /// [model] is the Explorer navigation snapshot at dispatch time.
-  /// Workflow identity is obtained through [displayed_workflow].
+  /// [model] identifies the current Explorer navigation snapshot.
+  /// Workflow selection originates from [displayed_workflow].
   ///
-  /// Returns a future that completes after the termination result
-  /// has been verified.
+  /// Completes only after the intended workflow's terminal outcome
+  /// has been confirmed.
   ///
-  /// Throws [StateError] when no workflow is displayed or when
-  /// the confirmed identifier differs from the requested one.
+  /// Throws [StateError] when no workflow is displayed or commitment
+  /// evidence contradicts the request.
   ///
-  /// Errors from [stop_workflow] propagate to the caller.
+  /// Throws [WorkflowExplorerOperationException] for unsuccessful
+  /// application outcomes. Unexpected application failures propagate.
   @override
   Future<void> execute(ExplorerModel model) async {
     final workflow = displayed_workflow();
@@ -89,18 +75,23 @@ final class WorkflowStopExplorerAction implements ExplorerAction {
       throw StateError('No displayed workflow is available to stop.');
     }
 
-    // Capture the workflow ID before awaiting the application
-    // operation. Subsequent UI updates cannot retarget the request.
-    final expected_workflow_id = workflow.identity.workflow_id;
+    // Capture both operation identifiers before dispatching Stop.
+    final workflow_id = workflow.identity.workflow_id;
+    final idempotency_key = Uuid().v4();
 
-    final stopped_workflow_id = await stop_workflow(expected_workflow_id);
+    final outcome = await stop_workflow(workflow_id, idempotency_key);
 
-    // Verify that the confirmed result belongs to the workflow
-    // originally selected for termination.
-    if (stopped_workflow_id != expected_workflow_id) {
+    if (outcome is! WorkflowOperationResolved ||
+        outcome.resolution.state != WorkflowSubmissionState.completed) {
+      throw WorkflowExplorerOperationException(outcome: outcome);
+    }
+
+    final committed = outcome.resolution.committed_outcome!;
+
+    if (committed.workflow_id != workflow_id ||
+        committed.event_type != WorkflowEndedEvent.type_id) {
       throw StateError(
-        'Confirmed Stop result does not match '
-        'the requested workflow.',
+        'Confirmed Stop result does not match the requested workflow.',
       );
     }
   }

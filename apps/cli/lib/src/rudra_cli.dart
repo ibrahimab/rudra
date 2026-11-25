@@ -223,11 +223,16 @@ final class RudraCli {
         cli.register_module(
           WorkflowCliModule(
             working_directory: composition.working_directory,
-            start_workflow: (root) => workflows.start(
+            current_workflow: workflows.current,
+            start_workflow: (root, idempotency_key) => workflows.start(
               target_id: composition.sdk.target_id,
               root: root,
+              idempotency_key: idempotency_key,
             ),
-            stop_workflow: workflows.stop,
+            stop_workflow: (workflow_id, idempotency_key) => workflows.stop(
+              workflow_id: workflow_id,
+              idempotency_key: idempotency_key,
+            ),
             output: presentation_output,
             error_output: diagnostic_output,
           ),
@@ -302,18 +307,22 @@ final class RudraCli {
                 actions: [
                   if (workflows != null)
                     WorkflowStartExplorerAction(
-                      start_workflow: (root) => workflows.start(
-                        target_id: composition.sdk.target_id,
-                        root: root,
-                      ),
+                      start_workflow: (root, idempotency_key) =>
+                          workflows.start(
+                            target_id: composition.sdk.target_id,
+                            root: root,
+                            idempotency_key: idempotency_key,
+                          ),
                     ),
                   if (workflows != null)
                     WorkflowStopExplorerAction(
                       displayed_workflow: () =>
                           workflow_view_model?.current_workflow,
-                      stop_workflow: (expected_workflow_id) => workflows.stop(
-                        expected_workflow_id: expected_workflow_id,
-                      ),
+                      stop_workflow: (workflow_id, idempotency_key) =>
+                          workflows.stop(
+                            workflow_id: workflow_id,
+                            idempotency_key: idempotency_key,
+                          ),
                     ),
                 ],
               ),
