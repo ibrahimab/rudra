@@ -1,5 +1,6 @@
 import 'message.dart';
 import 'message_codec.dart';
+import 'message_type_id.dart';
 
 /// Maintains typed message registrations and their stable wire identities.
 ///
@@ -39,12 +40,6 @@ final class MessageCodecRegistry {
   /// Construction does not initialize communication resources.
   MessageCodecRegistry();
 
-  /// Maximum permitted length of a stable wire identifier.
-  static const int _maximum_type_id_length = 128;
-
-  /// Permitted syntax for stable wire identifiers.
-  static final RegExp _type_id_pattern = RegExp(r'^[a-z][a-z0-9_.-]*$');
-
   /// Registrations indexed by their concrete Dart message type.
   final Map<Type, _CodecRegistration> _registrations_by_type = {};
 
@@ -68,7 +63,7 @@ final class MessageCodecRegistry {
   /// The corresponding response codec must be registered before
   /// configuration is frozen.
   ///
-  /// Throws [ArgumentError] for an invalid wire identifier.
+  /// Throws [ArgumentError] for an invalid or reserved wire identifier.
   /// Throws [StateError] for duplicate registrations or when
   /// configuration has already been frozen.
   void register_request<R extends Response, Q extends Request<R>>(
@@ -82,7 +77,7 @@ final class MessageCodecRegistry {
   /// [codec] provides the response's structured representation
   /// and stable wire identifier.
   ///
-  /// Throws [ArgumentError] for an invalid wire identifier.
+  /// Throws [ArgumentError] for an invalid or reserved wire identifier.
   /// Throws [StateError] for duplicate registrations or when
   /// configuration has already been frozen.
   void register_response<R extends Response>(MessageCodec<R> codec) {
@@ -213,8 +208,8 @@ final class MessageCodecRegistry {
   /// Both indexes are validated before either is modified, preventing
   /// failed registrations from leaving inconsistent configuration.
   ///
-  /// Throws [ArgumentError] for an invalid identifier and
-  /// [StateError] for duplicate or frozen registrations.
+  /// Throws [ArgumentError] for an invalid or reserved identifier
+  /// and [StateError] for duplicate or frozen registrations.
   void _register<M extends Message>(
     MessageCodec<M> codec, {
     Type? response_type,
@@ -224,15 +219,12 @@ final class MessageCodecRegistry {
     }
 
     final type_id = codec.type_id;
-    final match = _type_id_pattern.firstMatch(type_id);
 
-    if (type_id.length > _maximum_type_id_length ||
-        match == null ||
-        match.end != type_id.length) {
+    if (!is_application_message_type_id(type_id)) {
       throw ArgumentError.value(
         type_id,
         'type_id',
-        'Invalid message type identifier.',
+        'Invalid or reserved application message type identifier.',
       );
     }
 

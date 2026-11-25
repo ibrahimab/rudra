@@ -30,6 +30,9 @@ export 'src/messaging/message.dart';
 export 'src/messaging/message_codec.dart';
 export 'src/messaging/message_codec_registry.dart';
 
+/// Communication protocol failure classification.
+export 'src/messaging/protocol/protocol_exception.dart';
+
 /// Portable transport capability contracts.
 export 'src/transport/contracts/transport.dart';
 export 'src/transport/contracts/transport_connection.dart';

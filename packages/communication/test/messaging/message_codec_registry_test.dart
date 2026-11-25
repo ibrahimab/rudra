@@ -61,6 +61,24 @@ void main() {
       );
     });
 
+    test('rejects reserved communication message identifiers', () {
+      final registry = MessageCodecRegistry();
+
+      expect(
+        () => registry.register_response<_EchoResponse>(
+          const _EchoResponseCodec(type_id: 'communication.error.v1'),
+        ),
+        throwsArgumentError,
+      );
+
+      // Rejected registration must leave both indexes unchanged.
+      registry.register_response<_EchoResponse>(const _EchoResponseCodec());
+
+      registry.freeze();
+
+      expect(registry.is_frozen, isTrue);
+    });
+
     test('rejects invalid wire identifiers', () {
       final invalid_identifiers = [
         '',
