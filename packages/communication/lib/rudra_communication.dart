@@ -1,6 +1,7 @@
 /// Authenticated local communication infrastructure.
 ///
-/// Provides a communication facade, portable transport contracts,
+/// Provides a communication facade, typed application messaging,
+/// message codec registration, portable transport contracts,
 /// native transport implementations and concurrent session management.
 ///
 /// Consumers supply trusted endpoint configuration and retain
@@ -23,6 +24,11 @@ library;
 
 /// Application-facing communication API.
 export 'src/communication.dart';
+
+/// Typed application messaging contracts and codec registration.
+export 'src/messaging/message.dart';
+export 'src/messaging/message_codec.dart';
+export 'src/messaging/message_codec_registry.dart';
 
 /// Portable transport capability contracts.
 export 'src/transport/contracts/transport.dart';
