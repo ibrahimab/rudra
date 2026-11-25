@@ -25,10 +25,11 @@ library;
 /// Application-facing communication API.
 export 'src/communication.dart';
 
-/// Typed application messaging contracts and codec registration.
+/// Typed application messaging and handler registration.
 export 'src/messaging/message.dart';
 export 'src/messaging/message_codec.dart';
 export 'src/messaging/message_codec_registry.dart';
+export 'src/messaging/request_handler_registry.dart';
 
 /// Communication protocol failure classification.
 export 'src/messaging/protocol/protocol_exception.dart';
@@ -37,6 +38,9 @@ export 'src/messaging/protocol/protocol_exception.dart';
 export 'src/transport/contracts/transport.dart';
 export 'src/transport/contracts/transport_connection.dart';
 export 'src/transport/contracts/transport_listener.dart';
+
+/// Object-level communication session contract.
+export 'src/sessions/message_session.dart';
 
 /// Concurrent connection lifecycle coordination.
 export 'src/sessions/connection_service.dart';

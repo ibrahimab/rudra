@@ -125,24 +125,51 @@ final class MessageCodecRegistry {
   /// The result identifies the configured concrete response type
   /// independently of generic type widening by a request caller.
   ///
-  /// Throws [StateError] if configuration has not been frozen.
+  /// Throws [StateError] if configuration has not been frozen or
+  /// the supplied request violates its registered message contract.
   /// Throws [ArgumentError] if the request is not registered.
   Type response_type_for(Request<Response> request) {
-    _require_frozen();
-
-    final registration = _registrations_by_type[request.runtimeType];
-
-    if (registration == null || registration.response_type == null) {
-      throw ArgumentError.value(
-        request.runtimeType,
-        'request',
-        'Unregistered request type.',
-      );
-    }
+    final registration = _request_registration_for(request.runtimeType);
 
     _validate_message(registration, request);
 
     return registration.response_type!;
+  }
+
+  /// Returns the configured response type for [request_type].
+  ///
+  /// Supports validation of dependent messaging configuration
+  /// without constructing an application request instance.
+  ///
+  /// Throws [StateError] if configuration has not been frozen.
+  /// Throws [ArgumentError] if the supplied type is not registered
+  /// as a request.
+  Type response_type_for_request_type(Type request_type) {
+    return _request_registration_for(request_type).response_type!;
+  }
+
+  /// Resolves the frozen registration for [request_type].
+  ///
+  /// Returns the registration containing its codec and expected
+  /// concrete response type.
+  ///
+  /// Throws [StateError] if configuration has not been frozen.
+  /// Throws [ArgumentError] when no request registration exists
+  /// for the supplied concrete type.
+  _CodecRegistration _request_registration_for(Type request_type) {
+    _require_frozen();
+
+    final registration = _registrations_by_type[request_type];
+
+    if (registration == null || registration.response_type == null) {
+      throw ArgumentError.value(
+        request_type,
+        'request_type',
+        'Unregistered request type.',
+      );
+    }
+
+    return registration;
   }
 
   /// Encodes [message] through its registered codec.
