@@ -39,8 +39,9 @@ export 'src/transport/contracts/transport.dart';
 export 'src/transport/contracts/transport_connection.dart';
 export 'src/transport/contracts/transport_listener.dart';
 
-/// Object-level communication session contract.
+/// Object-level communication session contract and execution failures.
 export 'src/sessions/message_session.dart';
+export 'src/sessions/message_session_exception.dart';
 
 /// Concurrent connection lifecycle coordination.
 export 'src/sessions/connection_service.dart';

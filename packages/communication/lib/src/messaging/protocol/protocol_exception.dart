@@ -22,6 +22,15 @@ enum ProtocolErrorCode {
 
   /// The envelope declares an unsupported protocol version.
   unsupported_version,
+
+  /// The message violates the session's correlation requirements.
+  invalid_correlation,
+
+  /// The message violates its registered application message contract.
+  invalid_message,
+
+  /// Incoming requests exceed the configured session capacity.
+  capacity_exceeded,
 }
 
 /// Reports a violation of the communication protocol.
