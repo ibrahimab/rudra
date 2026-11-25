@@ -137,9 +137,12 @@ final class WorkflowSubmissionResolution {
   /// Reason the submission was quarantined.
   final WorkflowQuarantineCode? quarantine_code;
 
-  /// Diagnostic recorded when quarantine was committed.
+  /// Internal diagnostic recorded when quarantine was committed.
   ///
   /// This must not contain the original serialized payload.
+  /// Application messaging excludes this diagnostic from its
+  /// serialized representation, so remotely reconstructed
+  /// resolutions do not contain this value.
   final String? quarantine_diagnostic;
 
   /// UTC quarantine timestamp in Unix milliseconds.
