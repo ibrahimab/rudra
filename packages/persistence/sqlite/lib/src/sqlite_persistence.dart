@@ -13,6 +13,7 @@ import 'features/workflow/submissions/drift_workflow_inbox.dart';
 import 'features/workflow/submissions/drift_workflow_rejection_store.dart';
 import 'features/workflow/submissions/drift_workflow_status_reader.dart';
 import 'features/workflow/submissions/drift_workflow_quarantine_store.dart';
+import 'features/workflow/submissions/non_initializing_workflow_submission_status_reader.dart';
 
 import 'features/workflow/observation/publishing_workflow_committer.dart';
 
@@ -168,22 +169,26 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   late final WorkflowSubmissionQuarantiner workflow_quarantiner =
       DriftWorkflowQuarantineStore(database: _database, scope_id: _scope_id);
 
-  /// Creates a durable submission-resolution reader for [os_user_id].
+  /// Creates a non-initializing submission-resolution reader for [os_user_id].
   ///
-  /// Shares the trusted submission scope, database connection and
-  /// immutable workflow runtime with the other persistence adapters.
+  /// Shares the trusted submission scope, database connection and immutable
+  /// workflow runtime with the other persistence adapters.
   ///
-  /// The authenticated owner is used to validate committed historical
-  /// outcomes. Creating the reader performs no persistence operations.
+  /// Missing storage is not initialized by a resolution query.
+  /// Historical committed outcomes are validated against the authenticated
+  /// owner supplied by trusted application composition.
   @override
   WorkflowSubmissionStatusReader workflow_status_reader_for({
     required String os_user_id,
   }) {
-    return DriftWorkflowStatusReader(
-      database: _database,
-      scope_id: _scope_id,
-      os_user_id: os_user_id,
-      runtime: _runtime,
+    return NonInitializingWorkflowSubmissionStatusReader(
+      database_file: _database_file,
+      delegate: DriftWorkflowStatusReader(
+        database: _database,
+        scope_id: _scope_id,
+        os_user_id: os_user_id,
+        runtime: _runtime,
+      ),
     );
   }
 

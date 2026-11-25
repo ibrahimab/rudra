@@ -30,19 +30,20 @@ void main() {
 
   /// Constructs a host composition with controlled communication.
   ///
-  /// [communication] supplies the subsystem whose lifecycle will
-  /// be owned by the constructed host.
+  /// [communication_factory] supplies the communication implementation
+  /// using the host's validated application messaging configuration.
   ///
   /// Returns a composition sharing the fixture's exclusive ownership
   /// provider and isolated persistence directory.
-  HostComposition create_composition(Communication communication) =>
-      HostComposition(
-        identity_provider: const _TestIdentityProvider(),
-        ownership_provider: ownership,
-        data_directory: directory,
-        target_id: 'test-target',
-        communication: communication,
-      );
+  HostComposition create_composition(
+    HostCommunicationFactory communication_factory,
+  ) => HostComposition(
+    identity_provider: const _TestIdentityProvider(),
+    ownership_provider: ownership,
+    data_directory: directory,
+    target_id: 'test-target',
+    communication_factory: communication_factory,
+  );
 
   test('communication disposes before ownership is released', () async {
     final transport = TestHostTransport(
@@ -52,9 +53,20 @@ void main() {
       },
     );
 
-    final communication = Communication(transport: transport);
+    late final Communication communication;
 
-    final composition = create_composition(communication);
+    final composition = create_composition(({
+      required codecs,
+      required handlers,
+    }) {
+      communication = Communication(
+        transport: transport,
+        codecs: codecs,
+        handlers: handlers,
+      );
+
+      return communication;
+    });
 
     await composition.run(
       shutdown: Future<void>.value(),
@@ -83,9 +95,20 @@ void main() {
       },
     );
 
-    final communication = Communication(transport: transport);
+    late final Communication communication;
 
-    final composition = create_composition(communication);
+    final composition = create_composition(({
+      required codecs,
+      required handlers,
+    }) {
+      communication = Communication(
+        transport: transport,
+        codecs: codecs,
+        handlers: handlers,
+      );
+
+      return communication;
+    });
 
     await expectLater(
       composition.run(shutdown: Future<void>.value(), on_ready: (_, _) {}),
@@ -100,7 +123,11 @@ void main() {
     final competing_transport = TestHostTransport();
 
     final competing = create_composition(
-      Communication(transport: competing_transport),
+      ({required codecs, required handlers}) => Communication(
+        transport: competing_transport,
+        codecs: codecs,
+        handlers: handlers,
+      ),
     );
 
     // Unconfirmed communication disposal must prevent a competing

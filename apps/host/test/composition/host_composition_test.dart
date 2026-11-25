@@ -30,7 +30,13 @@ void main() {
   HostComposition create_composition() => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: TestHostOwnershipProvider(),
-    communication: Communication(transport: TestHostTransport()),
+    communication_factory: ({required codecs, required handlers}) {
+      return Communication(
+        transport: TestHostTransport(),
+        codecs: codecs,
+        handlers: handlers,
+      );
+    },
     data_directory: directory,
     target_id: 'test-target',
   );

@@ -34,7 +34,13 @@ void main() {
   HostComposition create_composition({Directory? scope}) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: ownership,
-    communication: Communication(transport: TestHostTransport()),
+    communication_factory: ({required codecs, required handlers}) {
+      return Communication(
+        transport: TestHostTransport(),
+        codecs: codecs,
+        handlers: handlers,
+      );
+    },
     data_directory: scope ?? directory,
     target_id: 'test-target',
   );

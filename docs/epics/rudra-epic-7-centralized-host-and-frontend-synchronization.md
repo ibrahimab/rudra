@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A complete; 7B.1, 7B.2 and 7B.3.1 complete; 7B.3.2 next
+**Status:** In progress — 7A complete; 7B.1, 7B.2, 7B.3.1 and 7B.3.2 complete; 7B.3.3 next
 **Created:** 24 November 2026
 **Updated:** 25 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -424,7 +424,7 @@ Established one authoritative execution contract for explicit workflow Start and
 - 7B.3.1B — Serialized idempotent application execution: `53b24b35348c5cd15957640c6f7dba1657a5b4ce`
 - 7B.3.1C — Real SQLite recovery and concurrency verification.
 
-#### 7B.3.2 — Authoritative host application request handlers (next)
+#### 7B.3.2 — Authoritative host application request handlers (complete)
 
 Bind registered application request contracts to the single WorkflowApplication retained by RudraHost.
 
@@ -436,6 +436,22 @@ Bind registered application request contracts to the single WorkflowApplication 
 - Introduce no additional workflow processor, persistence owner or domain execution path.
 
 **Gate:** Authenticated request dispatch invokes the retained application and returns its verified application outcomes.
+
+**Implementation and verification:**
+
+- Workflow and State messaging modules contribute local request handlers alongside their existing codec registrations.
+- RudraHost assembles and freezes the application messaging configuration before communication resource acquisition.
+- State serialization uses the immutable workflow runtime retained by the authoritative application.
+- Communication authorization derives its trusted owner from that application.
+- Explicit communication substitution receives the host-owned configuration through a factory.
+- Application handlers verify authenticated peer ownership before accessing execution or persistence.
+- Target-specific establishment validation remains the responsibility of trusted host composition.
+- Submission-resolution queries preserve the non-initializing storage guarantee.
+- Independent client codec configurations exchange typed requests and responses through real communication sessions, the retained application and actual SQLite persistence.
+
+**Boundary:** Verification uses portable loopback transport connectivity. Native transport security remains independently tested. Competing client connections and interrupted response delivery are verified in 7B.3.3.
+
+No changes to the generic communication infrastructure, workflow processing rules, state machine or database schema were required.
 
 #### 7B.3.3 — Competing host clients
 

@@ -1,6 +1,7 @@
 import 'package:rudra_communication/rudra_communication.dart';
 
-import '../../messaging/application_messaging_module.dart';
+import '../../messaging/application_request_context.dart';
+import '../../messaging/application_request_handler_module.dart';
 
 import 'start/workflow_start_request.dart';
 import 'start/workflow_start_response.dart';
@@ -20,7 +21,10 @@ import 'submission/codecs/workflow_submission_response_codec.dart';
 /// Contributes the messaging capabilities owned by the workflow feature.
 ///
 /// Registers workflow establishment, termination and durable submission
-/// resolution message contracts for use by host and client configurations.
+/// resolution codecs together with their local application handlers.
+///
+/// Clients consume the codecs independently of handler registration.
+/// Hosts bind the handlers to their authoritative application.
 ///
 /// Example:
 /// ```dart
@@ -28,7 +32,7 @@ import 'submission/codecs/workflow_submission_response_codec.dart';
 ///   modules: [const WorkflowMessagingModule()],
 /// );
 /// ```
-final class WorkflowMessagingModule implements ApplicationMessagingModule {
+final class WorkflowMessagingModule implements ApplicationRequestHandlerModule {
   /// Creates the stateless workflow messaging module.
   const WorkflowMessagingModule();
 
@@ -64,5 +68,64 @@ final class WorkflowMessagingModule implements ApplicationMessagingModule {
       ..register_response<WorkflowSubmissionResponse>(
         const WorkflowSubmissionResponseCodec(),
       );
+  }
+
+  /// Contributes authoritative workflow request handlers to [registry].
+  ///
+  /// [context] supplies the retained application and trusted target
+  /// validation capability.
+  ///
+  /// Every request verifies its authenticated peer before accessing
+  /// application operations. Expected application outcomes are returned
+  /// as typed responses; infrastructure failures propagate.
+  ///
+  /// Registration does not execute workflow operations.
+  @override
+  void register_handlers(
+    RequestHandlerRegistry registry,
+    ApplicationRequestContext context,
+  ) {
+    registry
+      ..register<WorkflowStartResponse, WorkflowStartRequest>((
+        request,
+        session,
+      ) async {
+        context.require_authorized_peer(session);
+
+        context.validate_start(request.target_id, request.root);
+
+        final outcome = await context.application.start(
+          target_id: request.target_id,
+          root: request.root,
+          idempotency_key: request.idempotency_key,
+        );
+
+        return WorkflowStartResponse(outcome: outcome);
+      })
+      ..register<WorkflowStopResponse, WorkflowStopRequest>((
+        request,
+        session,
+      ) async {
+        context.require_authorized_peer(session);
+
+        final outcome = await context.application.stop(
+          workflow_id: request.workflow_id,
+          idempotency_key: request.idempotency_key,
+        );
+
+        return WorkflowStopResponse(outcome: outcome);
+      })
+      ..register<WorkflowSubmissionResponse, WorkflowSubmissionRequest>((
+        request,
+        session,
+      ) async {
+        context.require_authorized_peer(session);
+
+        final resolution = await context.application.status_for(
+          request.receipt,
+        );
+
+        return WorkflowSubmissionResponse(resolution: resolution);
+      });
   }
 }

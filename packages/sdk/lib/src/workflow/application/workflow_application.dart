@@ -64,6 +64,7 @@ final class WorkflowApplication {
     final trusted_os_user_id = _require_os_user_id(os_user_id);
 
     return WorkflowApplication._(
+      runtime: runtime,
       events: EventManager(store: persistence.event_submission_store),
       reader: WorkflowStateReader(
         runtime: runtime,
@@ -90,6 +91,8 @@ final class WorkflowApplication {
 
   /// Stores the SDK services prepared by trusted application composition.
   ///
+  /// [runtime] supplies the immutable workflow configuration shared
+  /// by processing, restoration and application state serialization.
   /// [events] accepts explicit commands into durable persistence.
   /// [reader] restores validated committed workflow state.
   /// [processor] processes accepted commands through registered behaviors.
@@ -100,6 +103,7 @@ final class WorkflowApplication {
   /// Construction retains these dependencies without performing I/O.
   /// The caller owns persistence and notification-source lifetimes.
   WorkflowApplication._({
+    required this.runtime,
     required EventManager events,
     required WorkflowStateReader reader,
     required WorkflowProcessor processor,
@@ -112,6 +116,12 @@ final class WorkflowApplication {
        _statuses = statuses,
        _commits = commits,
        _os_user_id = os_user_id;
+
+  /// Immutable workflow configuration retained by this application.
+  ///
+  /// Application-facing state serialization must use the same runtime
+  /// as authoritative processing and restoration.
+  final WorkflowRuntime runtime;
 
   /// Durable explicit command submission service.
   final EventManager _events;
@@ -137,6 +147,12 @@ final class WorkflowApplication {
 
   /// Authenticated workflow owner established by trusted composition.
   final String _os_user_id;
+
+  /// Authenticated operating-system owner of this application.
+  ///
+  /// Host communication uses this identity to configure peer authorization.
+  /// Frontend request payloads cannot supply or replace it.
+  String get os_user_id => _os_user_id;
 
   /// SDK coordinator for authoritative state subscriptions.
   late final WorkflowStateObserver _observer = WorkflowStateObserver(

@@ -1,6 +1,7 @@
 import 'package:rudra_communication/rudra_communication.dart';
 
-import '../../messaging/application_messaging_module.dart';
+import '../../messaging/application_request_context.dart';
+import '../../messaging/application_request_handler_module.dart';
 
 import '../../workflow/workflow_runtime.dart';
 
@@ -17,13 +18,16 @@ import 'read/codecs/state_read_response_codec.dart';
 /// Standard construction selects the standard Rudra workflow runtime.
 /// Explicit composition may supply an independently configured runtime.
 ///
+/// Hosts additionally register the authoritative read handler using
+/// their retained application context.
+///
 /// Example:
 /// ```dart
 /// final codecs = create_application_message_codecs(
 ///   modules: [StateMessagingModule(runtime: runtime)],
 /// );
 /// ```
-final class StateMessagingModule implements ApplicationMessagingModule {
+final class StateMessagingModule implements ApplicationRequestHandlerModule {
   /// Creates a composite application state messaging module.
   ///
   /// [runtime] supplies the immutable workflow configuration.
@@ -61,5 +65,31 @@ final class StateMessagingModule implements ApplicationMessagingModule {
         const StateReadRequestCodec(),
       )
       ..register_response<StateReadResponse>(response_codec);
+  }
+
+  /// Contributes the authoritative state-read handler to [registry].
+  ///
+  /// [context] supplies the retained application and authenticated owner.
+  ///
+  /// Returns verified composite state through the existing response
+  /// contract. Restoration and integrity failures propagate rather
+  /// than being represented as verified absence.
+  ///
+  /// Registration performs no state reads.
+  @override
+  void register_handlers(
+    RequestHandlerRegistry registry,
+    ApplicationRequestContext context,
+  ) {
+    registry.register<StateReadResponse, StateReadRequest>((
+      request,
+      session,
+    ) async {
+      context.require_authorized_peer(session);
+
+      final state = await context.application.read_state();
+
+      return StateReadResponse(state: state);
+    });
   }
 }

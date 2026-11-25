@@ -56,6 +56,10 @@ export 'src/state/messaging/state_messaging.dart';
 
 /// Application messaging contribution and composition contracts.
 export 'src/messaging/application_messaging_module.dart';
+
+/// Trusted application request execution and feature contributions.
+export 'src/messaging/application_request_context.dart';
+export 'src/messaging/application_request_handler_module.dart';
 export 'src/messaging/application_message_codecs.dart';
 export 'src/messaging/standard_messaging_modules.dart';
 

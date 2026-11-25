@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 
-import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
@@ -85,9 +84,9 @@ final class HostComposition {
   /// [data_directory] identifies an existing, dedicated development
   /// persistence directory.
   /// [target_id] identifies the configured filesystem target.
-  /// [communication] optionally substitutes the host's communication
-  /// implementation. A supplied instance must be unused and its
-  /// execution lifecycle transfers to the constructed host.
+  /// [communication_factory] optionally substitutes the host-owned
+  /// communication implementation using its assembled messaging
+  /// configuration.
   ///
   /// Construction retains configuration without acquiring ownership,
   /// opening persistence or binding communication endpoints.
@@ -96,7 +95,7 @@ final class HostComposition {
     required this.ownership_provider,
     required this.data_directory,
     required this.target_id,
-    this.communication,
+    this.communication_factory,
   });
 
   /// Platform implementation responsible for trusted identity resolution.
@@ -112,10 +111,11 @@ final class HostComposition {
   /// Configured filesystem target used by explicit startup operations.
   final String target_id;
 
-  /// Optional substitute for the host-owned communication subsystem.
+  /// Optional factory substituting the host-owned communication subsystem.
   ///
-  /// When absent, the host constructs its default implementation.
-  final Communication? communication;
+  /// The constructed host supplies its validated application messaging
+  /// configuration to this factory.
+  final HostCommunicationFactory? communication_factory;
 
   /// Filename reserved for the standalone development host.
   static const String database_filename = 'rudra-host-dev.sqlite';
@@ -216,17 +216,19 @@ final class HostComposition {
 
         host = RudraHost(
           application: application,
-          communication: communication,
+          validate_start: _validate_start,
+          communication_factory: communication_factory,
         );
 
         await host.run(
           scope_directory: scope_directory,
-          os_user_id: os_user_id,
           shutdown: shutdown,
           on_startup: (application) async {
             // Explicit startup is a new user intention, identified once before
             // invoking the authoritative application operation.
             if (startup_root != null) {
+              _validate_start(target_id, startup_root);
+
               final idempotency_key = Uuid().v4();
 
               final outcome = await application.start(
@@ -266,6 +268,35 @@ final class HostComposition {
       if (communication_released && persistence_closed) {
         await ownership.release();
       }
+    }
+  }
+
+  /// Validates workflow establishment against the configured local target.
+  ///
+  /// [requested_target_id] must identify this host's configured target.
+  /// [root] must be absolute using the local target's native path syntax.
+  ///
+  /// Throws [ArgumentError] for an unsupported target or relative root.
+  ///
+  /// Validation preserves the original path and performs no filesystem
+  /// inspection or persistence operation.
+  void _validate_start(String requested_target_id, TargetPath root) {
+    if (requested_target_id != target_id) {
+      throw ArgumentError.value(
+        requested_target_id,
+        'target_id',
+        'The requested target is not configured on this host.',
+      );
+    }
+
+    // This composition currently represents a local filesystem target.
+    // Native path interpretation belongs here rather than in the SDK.
+    if (!Directory(root.value).isAbsolute) {
+      throw ArgumentError.value(
+        root.value,
+        'root',
+        'A local workflow requires an absolute root.',
+      );
     }
   }
 }
