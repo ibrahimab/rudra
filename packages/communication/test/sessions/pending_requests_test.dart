@@ -129,6 +129,26 @@ void main() {
     expect(await request.response, same(expected));
   });
 
+  test('rejects responses incompatible with the caller contract', () {
+    final request = pending.register<_EchoResponse>(
+      expected_response_type: _OtherResponse,
+    );
+
+    expect(
+      () =>
+          pending.complete_response(request.request_id, const _OtherResponse()),
+      throwsA(
+        isA<ProtocolException>().having(
+          (error) => error.code,
+          'code',
+          ProtocolErrorCode.invalid_message,
+        ),
+      ),
+    );
+
+    expect(pending.count, 1);
+  });
+
   test('completes sanitized remote failures independently', () async {
     final first = pending.register<_EchoResponse>(
       expected_response_type: _EchoResponse,

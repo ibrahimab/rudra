@@ -137,6 +137,7 @@ final class PendingRequests {
 
     _pending[request_id] = _PendingRequest(
       expected_response_type: expected_response_type,
+      accepts_response: (response) => response is R,
       completion: completion,
       deadline: deadline,
     );
@@ -158,7 +159,8 @@ final class PendingRequests {
     final pending = _require_pending(request_id);
 
     if (response.runtimeType != pending.expected_response_type ||
-        response is Request<Response>) {
+        response is Request<Response> ||
+        !pending.accepts_response(response)) {
       throw const ProtocolException(
         ProtocolErrorCode.invalid_message,
         'Response violates the registered message contract.',
@@ -275,14 +277,21 @@ final class _PendingRequest {
   ///
   /// [expected_response_type] identifies the exact response type
   /// permitted to complete this registration.
+  ///
+  /// [accepts_response] validates the caller's generic response
+  /// contract independently of the configured concrete type.
   const _PendingRequest({
     required this.expected_response_type,
+    required this.accepts_response,
     required this.completion,
     required this.deadline,
   });
 
   /// Concrete application response type expected by this request.
   final Type expected_response_type;
+
+  /// Runtime validation of the caller's generic response contract.
+  final bool Function(Response) accepts_response;
 
   /// Completion source for the outstanding application response.
   final Completer<Response> completion;
