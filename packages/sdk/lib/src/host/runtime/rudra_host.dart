@@ -1,4 +1,11 @@
+import 'dart:async';
+
+import 'package:uuid/uuid.dart';
+
 import 'package:rudra_communication/rudra_communication.dart';
+
+import '../../state/publication/state_publication.dart';
+import '../../state/rudra_state.dart';
 
 import '../../messaging/application_message_codecs.dart';
 import '../../messaging/application_request_context.dart';
@@ -24,7 +31,8 @@ typedef HostCommunicationFactory = Communication Function({
 
 /// Coordinates one authoritative Rudra host execution lifecycle.
 ///
-/// Retains one workflow application and one communication subsystem.
+/// Retains one workflow application, authoritative state publication
+/// and communication subsystem.
 ///
 /// The application supplies authoritative operations, trusted ownership
 /// and workflow runtime configuration. Feature-owned messaging modules
@@ -70,8 +78,14 @@ final class RudraHost {
 
     final codecs = create_application_message_codecs(modules: modules);
 
+    final publication = StatePublication(
+      generation: Uuid().v4(),
+      observe_state: application.observe_state,
+    );
+
     final context = ApplicationRequestContext(
       application: application,
+      publication: publication,
       validate_start: validate_start,
     );
 
@@ -96,25 +110,53 @@ final class RudraHost {
         ? Communication(codecs: codecs, handlers: handlers)
         : communication_factory(codecs: codecs, handlers: handlers);
 
-    return RudraHost._(application: application, communication: communication);
+    return RudraHost._(
+      application: application,
+      publication: publication,
+      communication: communication,
+    );
   }
 
-  /// Retains the configured [application] and owned [communication].
+  /// Retains the configured application and owned host resources.
   ///
-  /// Configuration has been validated before this constructor is invoked.
+  /// [application] supplies authoritative application execution.
+  /// [publication] owns verified application-state observation.
+  /// [communication] owns authenticated communication execution.
+  ///
+  /// Configuration has been validated before construction.
   RudraHost._({
     required WorkflowApplication application,
+    required StatePublication publication,
     required this.communication,
-  }) : _application = application;
+  }) : _application = application,
+       _publication = publication;
 
   /// Authoritative application retained throughout host execution.
   final WorkflowApplication _application;
+
+  /// Authoritative state publication owned by this host lifecycle.
+  final StatePublication _publication;
+
+  /// Whether publication resource disposal has been confirmed.
+  ///
+  /// False during execution and following unconfirmed disposal.
+  bool _publication_released = true;
 
   /// Configured communication subsystem owned by this host.
   ///
   /// Exposes lifecycle information to trusted application composition.
   /// Communication execution and disposal remain host responsibilities.
   final Communication communication;
+
+  /// Whether all host-owned resources have been successfully released.
+  ///
+  /// Returns true before execution and after confirmed communication
+  /// and publication disposal.
+  ///
+  /// Trusted composition uses this boundary before releasing
+  /// exclusive host ownership.
+  bool get resources_released =>
+      communication.resources_released && _publication_released;
 
   /// Whether this host has entered its execution lifecycle.
   bool _has_run = false;
@@ -127,32 +169,72 @@ final class RudraHost {
   /// [shutdown] supplies the external termination notification.
   ///
   /// [on_startup] optionally initializes the retained application
-  /// before accepting client sessions.
+  /// before initial authoritative state publication.
+  ///
+  /// [on_ready] receives the first available verified application
+  /// state before client sessions are admitted.
   ///
   /// Communication authorization uses the application's authenticated
   /// operating-system owner.
   ///
-  /// Returns after communication resource disposal and completion
-  /// of previously admitted application handlers.
+  /// Returns after communication disposal, admitted-handler draining
+  /// and authoritative publication disposal.
   ///
   /// Throws [StateError] if this host has already been executed.
-  /// Application initialization and communication failures propagate.
+  /// Application initialization, observation, communication and
+  /// resource disposal failures propagate.
   Future<void> run({
     required String scope_directory,
     required Future<void> shutdown,
     Future<void> Function(WorkflowApplication)? on_startup,
+    void Function(RudraState)? on_ready,
   }) async {
     if (_has_run) {
       throw StateError('Host has already been run.');
     }
 
     _has_run = true;
+    _publication_released = false;
 
-    await communication.run(
-      scope_directory: scope_directory,
-      os_user_id: _application.os_user_id,
-      shutdown: shutdown,
-      on_startup: on_startup == null ? null : () => on_startup(_application),
-    );
+    // Authoritative observation failure terminates the host rather
+    // than allowing a generation with unavailable state to persist.
+    final termination = Future.any<void>([shutdown, _publication.done]);
+
+    termination.ignore();
+
+    try {
+      await communication.run(
+        scope_directory: scope_directory,
+        os_user_id: _application.os_user_id,
+        shutdown: termination,
+        on_startup: () async {
+          await on_startup?.call(_application);
+
+          await _publication.start();
+
+          final initial = _publication.latest;
+
+          if (initial == null) {
+            // Readiness may have been followed immediately by source
+            // failure. Preserve its authoritative failure result.
+            await _publication.done;
+
+            throw StateError('Authoritative publication is unavailable.');
+          }
+
+          on_ready?.call(initial.state);
+        },
+      );
+    } finally {
+      // Communication termination settles outstanding delivery
+      // requests before publication drains its owned resources.
+      await _publication.close();
+
+      _publication_released = true;
+    }
+
+    // Preserve an authoritative failure even when external shutdown
+    // completed concurrently with publication invalidation.
+    await _publication.done;
   }
 }

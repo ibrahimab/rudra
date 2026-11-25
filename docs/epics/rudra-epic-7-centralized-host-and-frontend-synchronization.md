@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A and 7B complete; 7C next
+**Status:** In progress — 7A, 7B and 7C.1 complete; 7C.2 in progress
 **Created:** 24 November 2026
 **Updated:** 25 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -514,13 +514,39 @@ Establish a transport-independent SDK publication capability over one authoritat
 
 **Boundary:** Publication remains independent of communication sessions, native adapters and concrete persistence implementations. Host integration and remote delivery are introduced in 7C.2.
 
-#### 7C.2 — Authenticated state subscription messaging (planned)
+**Verification:** Completed and verified at
+`b4ae44ee432c4c5bcbf4182fe4f66ed9f40d0caa`.
 
-Expose authoritative publication through registered application messaging contributions and existing bidirectional communication sessions.
+SDK and SQLite verification establish bounded publication,
+independent subscriber lifecycles, authoritative observation draining
+and silence following real transactional rollback.
 
-Introduce typed subscription establishment, acknowledged state delivery and cancellation contracts. Bind subscription ownership to authenticated sessions and coordinate publication disposal with host execution.
+#### 7C.2 — Authenticated state subscription messaging
+
+Expose authoritative state publication through the existing bidirectional typed communication protocol.
+
+- `StateSubscriptionMessagingModule` contributes independent subscription establishment, delivery acknowledgment and cancellation message contracts.
+- Subscription serialization reuses the configured composite application-state codec and registered workflow slice serialization.
+- `StateSubscriptionHandlers` binds publication subscriptions to authenticated communication sessions.
+- Each session retains at most one active or draining subscription.
+- Subscription identifiers are client-assigned and scoped to the authenticated session.
+- Initial delivery and subscription acceptance may overlap.
+- The receiving client acknowledges the exact subscription identifier, publication generation and revision.
+- Explicit cancellation drains admitted deliveries before permitting replacement admission.
+- Session termination automatically cancels its retained subscription.
+- Invalid acknowledgments and delivery failures terminate the affected session without invalidating healthy subscribers.
+- `RudraHost` owns one authoritative state publication with a unique UUID generation.
+- Initial publication follows explicit application startup operations and precedes session admission.
+- Host readiness reports the initial verified publication without an independent restoration path.
+- Authoritative observation failure terminates host execution.
+- Communication termination and admitted-handler draining precede publication disposal.
+- Exclusive host ownership is released only after communication, publication and persistence disposal have been confirmed.
 
 **Gate:** Independent authenticated connections receive verified publications through the existing communication protocol. Subscription establishment, cancellation, disconnection and host shutdown preserve bounded delivery and hierarchical resource ownership.
+
+**Boundary:** Integration tests use independently configured clients over real communication sessions and authoritative SQLite persistence. Production client-side state consumption, explicit reconnection and generation replacement are introduced in 7C.3.
+
+No communication protocol, transport, workflow transition or persistence schema changes are required.
 
 #### 7C.3 — Client synchronization and reconnection (planned)
 

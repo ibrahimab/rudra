@@ -243,29 +243,25 @@ final class HostComposition {
                 throw HostStartupWorkflowException(outcome: outcome);
               }
             }
-
-            // Restore authoritative application state before
-            // reporting successful host initialization.
-            final state = await application.read_state();
-
+          },
+          on_ready: (state) {
             on_ready(os_user_id, state.workflows.current_workflow);
           },
         );
       } finally {
-        // Host execution has terminated before persistence disposal,
-        // ensuring session handlers no longer use the application.
+        // Host execution drains admitted handlers and authoritative
+        // observation before persistence disposal.
         await persistence.close();
 
         persistence_closed = true;
       }
     } finally {
-      final communication_released =
-          host?.communication.resources_released ?? true;
+      final host_released = host?.resources_released ?? true;
 
       // Fail closed when either resource owner cannot confirm disposal.
       // Process termination releases native exclusive ownership rather
       // than admitting another host while resources may remain active.
-      if (communication_released && persistence_closed) {
+      if (host_released && persistence_closed) {
         await ownership.release();
       }
     }

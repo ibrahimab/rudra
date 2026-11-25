@@ -9,5 +9,6 @@ dependencies:
     path: ../targets/contracts
   rudra_communication:
     path: ../communication
+  uuid: ^4.6.0
 dev_dependencies:
   test: ^1.33.0

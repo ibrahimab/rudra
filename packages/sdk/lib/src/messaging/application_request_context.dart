@@ -3,6 +3,8 @@ import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
 import '../workflow/application/workflow_application.dart';
 
+import '../state/publication/state_publication.dart';
+
 /// Validates a requested workflow establishment against trusted
 /// target configuration.
 ///
@@ -26,17 +28,26 @@ typedef WorkflowStartValidator = void Function(
 ///
 /// The context performs no application execution during construction.
 final class ApplicationRequestContext {
-  /// Binds request handlers to the retained [application].
+  /// Binds request handlers to trusted application capabilities.
   ///
+  /// [application] supplies authoritative application execution.
+  /// [publication] supplies verified composite state subscriptions
+  /// backed by the same application.
   /// [validate_start] supplies trusted target-specific validation
   /// before an explicit workflow establishment is accepted.
   const ApplicationRequestContext({
     required this.application,
+    required this.publication,
     required this.validate_start,
   });
 
   /// Authoritative owner-scoped workflow application.
   final WorkflowApplication application;
+
+  /// Host-owned publication of verified composite application state.
+  ///
+  /// Shares the retained application's observation and owner scope.
+  final StatePublication publication;
 
   /// Trusted target and root validation capability.
   final WorkflowStartValidator validate_start;

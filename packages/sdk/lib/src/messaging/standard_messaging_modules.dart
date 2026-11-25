@@ -1,6 +1,7 @@
 import 'application_messaging_module.dart';
 
 import '../state/messaging/state_messaging_module.dart';
+import '../state/messaging/subscription/state_subscription_messaging_module.dart';
 
 import '../workflow/messaging/workflow_messaging_module.dart';
 import '../workflow/workflow_runtime.dart';
@@ -10,7 +11,7 @@ import '../workflow/workflow_runtime.dart';
 /// [workflow_runtime] optionally supplies the immutable workflow
 /// configuration used for application state serialization.
 ///
-/// When omitted, the state messaging module selects the
+/// When omitted, the state messaging modules select the
 /// standard workflow runtime.
 ///
 /// Feature composition is explicit and deterministic.
@@ -35,5 +36,6 @@ List<ApplicationMessagingModule> standard_messaging_modules({
   return [
     const WorkflowMessagingModule(),
     StateMessagingModule(runtime: workflow_runtime),
+    StateSubscriptionMessagingModule(runtime: workflow_runtime),
   ];
 }
