@@ -1,202 +1,344 @@
 import 'package:drift/drift.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-import '../../../database/rudra_database.dart';
+import '../../../database/rudra_database.dart' as sqlite;
 
-/// Reads durable submission status within one trusted scope.
+/// Reads and validates durable submission resolutions.
 ///
-/// Completed submissions are linked to their committed journal outcomes
-/// through the already persisted causation identifier. The journal sequence
-/// provides a global order that is distinct from workflow-local versions.
+/// Submission metadata and causally linked journal evidence are retrieved
+/// from one consistent persistence snapshot.
+///
+/// Completed submissions are validated against their original commands
+/// and committed historical workflow identities, independently of the
+/// current unfinished-workflow projection.
 ///
 /// Example:
 /// ```dart
 /// final reader = DriftWorkflowStatusReader(
 ///   database: database,
 ///   scope_id: trusted_scope_id,
+///   os_user_id: trusted_os_user_id,
+///   runtime: runtime,
 /// );
-/// final status = await reader.status_for(receipt);
+///
+/// final resolution = await reader.status_for(receipt);
 /// ```
 final class DriftWorkflowStatusReader
     implements WorkflowSubmissionStatusReader {
-  /// Creates a status reader bound to [database] and [scope_id].
+  /// Creates a reader bound to trusted application ownership.
   ///
-  /// The caller owns the database connection. A blank [scope_id] throws
-  /// [ArgumentError]; construction performs no persistence operations.
+  /// [database] supplies the durable submission inbox and journal.
+  /// [scope_id] restricts access to accepted submissions.
+  /// [os_user_id] identifies the authenticated historical workflow owner.
+  /// [runtime] supplies the shared event serialization and replay rules.
+  ///
+  /// The caller must supply a scope and OS-user identity belonging to
+  /// the same trusted application owner.
+  ///
+  /// Throws [ArgumentError] if either identifier is blank.
   DriftWorkflowStatusReader({
-    required RudraDatabase database,
+    required sqlite.RudraDatabase database,
     required String scope_id,
+    required String os_user_id,
+    required WorkflowRuntime runtime,
   }) : _database = database,
-       _scope_id = _require_scope(scope_id);
+       _scope_id = _require_identifier(scope_id, 'scope_id'),
+       _os_user_id = _require_identifier(os_user_id, 'os_user_id'),
+       _codec = runtime.codec,
+       _machine = WorkflowStateMachine(runtime: runtime);
 
   /// Shared persistence owner containing submissions and outcomes.
-  final RudraDatabase _database;
+  final sqlite.RudraDatabase _database;
 
-  /// Trusted durable submission scope, separate from OS-user identity.
+  /// Trusted durable submission namespace.
   final String _scope_id;
+
+  /// Authenticated owner used to validate historical workflow identities.
+  final String _os_user_id;
+
+  /// Registry-driven serializer shared with submission and commitment.
+  final WorkflowEventCodec _codec;
+
+  /// Authoritative outcome-only historical replay engine.
+  final WorkflowStateMachine _machine;
 
   /// Finds the durable resolution for an exact [receipt].
   ///
-  /// Both event and correlation IDs must match the trusted scope. Completed
-  /// submissions must have a causally linked committed outcome. Unknown
-  /// receipts return null; invalid resolution metadata throws [FormatException].
-  /// Reading never processes a command or changes persistent state.
+  /// Returns null when the receipt is unknown or inaccessible within
+  /// the trusted submission scope.
+  ///
+  /// Throws [FormatException] when persisted resolution metadata,
+  /// journal causation or historical ownership is inconsistent.
+  /// Infrastructure failures propagate.
+  ///
+  /// Reading never processes submissions or modifies workflow history.
   @override
   Future<WorkflowSubmissionResolution?> status_for(
     EventSubmissionReceipt receipt,
-  ) async {
-    final stored =
-        await (_database.select(_database.workflowSubmissions)..where(
-              (row) =>
-                  row.event_id.equals(receipt.event_id) &
-                  row.correlation_id.equals(receipt.correlation_id) &
-                  row.scope_id.equals(_scope_id),
-            ))
-            .getSingleOrNull();
+  ) {
+    return _database.transaction(() async {
+      final stored =
+          await (_database.select(_database.workflowSubmissions)..where(
+                (row) =>
+                    row.event_id.equals(receipt.event_id) &
+                    row.correlation_id.equals(receipt.correlation_id) &
+                    row.scope_id.equals(_scope_id),
+              ))
+              .getSingleOrNull();
 
-    if (stored == null) {
-      return null;
-    }
+      if (stored == null) {
+        return null;
+      }
 
-    final state = switch (stored.processing_state) {
-      'pending' => WorkflowSubmissionState.pending,
-      'completed' => WorkflowSubmissionState.completed,
-      'rejected' => WorkflowSubmissionState.rejected,
-      'quarantined' => WorkflowSubmissionState.quarantined,
-      _ => throw FormatException(
-        'Unknown submission processing state: ${stored.processing_state}',
-      ),
-    };
+      final state = switch (stored.processing_state) {
+        'pending' => WorkflowSubmissionState.pending,
+        'completed' => WorkflowSubmissionState.completed,
+        'rejected' => WorkflowSubmissionState.rejected,
+        'quarantined' => WorkflowSubmissionState.quarantined,
+        _ => throw const FormatException(
+          'Unknown submission processing state.',
+        ),
+      };
 
-    if (state == WorkflowSubmissionState.quarantined) {
-      // Quarantine and business rejection are mutually exclusive.
-      if (stored.rejection_code != null || stored.rejected_at_unix_ms != null) {
+      // All processing states must agree with the journal, including
+      // states that are not expected to have committed outcomes.
+      final outcomes =
+          await (_database.select(_database.workflowEvents)
+                ..where((row) => row.causation_id.equals(stored.event_id))
+                ..orderBy([(row) => OrderingTerm.asc(row.sequence)]))
+              .get();
+
+      final is_completed = state == WorkflowSubmissionState.completed;
+
+      if (outcomes.isNotEmpty != is_completed) {
         throw const FormatException(
-          'Quarantined submission contains rejection metadata.',
+          'Submission processing state disagrees with journal causation.',
         );
       }
 
-      final code_name = stored.quarantine_code;
-      final diagnostic = stored.quarantine_diagnostic;
-      final quarantined_at = stored.quarantined_at_unix_ms;
+      final committed_outcome = is_completed
+          ? await _validate_completed_outcome(stored, outcomes)
+          : null;
 
-      if (code_name == null || diagnostic == null || quarantined_at == null) {
-        throw const FormatException(
-          'Quarantined submission is missing resolution metadata.',
-        );
-      }
-
-      final WorkflowQuarantineCode code;
-      try {
-        code = WorkflowQuarantineCode.values.byName(code_name);
-      } on ArgumentError {
-        throw FormatException('Unsupported quarantine code: $code_name');
-      }
-
-      return WorkflowSubmissionResolution(
-        receipt: receipt,
-        state: state,
-        quarantine_code: code,
-        quarantine_diagnostic: diagnostic,
-        quarantined_at_unix_ms: quarantined_at,
-      );
-    }
-
-    // Non-quarantined statuses cannot contain quarantine metadata.
-    if (stored.quarantine_code != null ||
-        stored.quarantine_diagnostic != null ||
-        stored.quarantined_at_unix_ms != null) {
-      throw const FormatException(
-        'Non-quarantined submission contains quarantine metadata.',
-      );
-    }
-
-    if (state != WorkflowSubmissionState.rejected) {
-      if (stored.rejection_code != null || stored.rejected_at_unix_ms != null) {
-        throw const FormatException(
-          'Non-rejected submission contains rejection metadata.',
-        );
-      }
-
-      WorkflowCommittedOutcome? committed_outcome;
-      if (state == WorkflowSubmissionState.completed) {
-        // The committer atomically writes outcomes and completion. Looking up
-        // causation checks the exact submission, even after workflow replacement.
-        final outcomes =
-            await (_database.select(_database.workflowEvents)
-                  ..where((row) => row.causation_id.equals(receipt.event_id))
-                  ..orderBy([(row) => OrderingTerm.asc(row.sequence)]))
-                .get();
-
-        if (outcomes.isEmpty) {
-          throw const FormatException(
-            'Completed submission is missing its committed outcome.',
-          );
-        }
-
-        // All outcomes caused by one accepted command must belong to the
-        // same workflow and retain the submission's correlation identity.
-        final workflow_id = outcomes.first.workflow_id;
-        for (final outcome in outcomes) {
-          if (outcome.workflow_id != workflow_id ||
-              outcome.correlation_id != receipt.correlation_id) {
-            throw const FormatException(
-              'Completed submission has inconsistent journal causation.',
-            );
-          }
-        }
-        final outcome = outcomes.last;
-
-        committed_outcome = WorkflowCommittedOutcome(
-          workflow_id: outcome.workflow_id,
-          event_type: outcome.event_type,
-          version: outcome.version,
-          sequence: outcome.sequence,
-        );
-      }
-
-      return WorkflowSubmissionResolution(
+      return _restore_resolution(
+        stored: stored,
         receipt: receipt,
         state: state,
         committed_outcome: committed_outcome,
       );
-    }
+    });
+  }
 
-    final code = stored.rejection_code;
-    final rejected_at = stored.rejected_at_unix_ms;
-    if (code == null || rejected_at == null) {
+  /// Reconstructs state-specific metadata from [stored].
+  ///
+  /// [receipt] identifies the exact accepted submission.
+  /// [state] is the decoded durable processing state.
+  /// [committed_outcome] is the validated historical journal reference,
+  /// present exclusively for completed submissions.
+  ///
+  /// Returns a validated application resolution. Invalid persisted
+  /// classifications or contradictory metadata throw [FormatException].
+  WorkflowSubmissionResolution _restore_resolution({
+    required sqlite.WorkflowSubmission stored,
+    required EventSubmissionReceipt receipt,
+    required WorkflowSubmissionState state,
+    required WorkflowCommittedOutcome? committed_outcome,
+  }) {
+    final rejection_name = stored.rejection_code;
+    final quarantine_name = stored.quarantine_code;
+
+    // Persisted quarantine records must preserve their internal diagnostic.
+    // The public model permits its absence after messaging serialization.
+    if (state == WorkflowSubmissionState.quarantined &&
+        stored.quarantine_diagnostic == null) {
       throw const FormatException(
-        'Rejected submission is missing resolution metadata.',
+        'Quarantined submission is missing its diagnostic.',
       );
     }
 
-    // Persisted identifiers must be recognized without silently coercing them.
-    WorkflowRejectionCode? resolved_code;
-    for (final candidate in WorkflowRejectionCode.values) {
-      if (candidate.name == code) {
-        resolved_code = candidate;
-        break;
-      }
+    try {
+      return WorkflowSubmissionResolution(
+        receipt: receipt,
+        state: state,
+        committed_outcome: committed_outcome,
+        rejection_code: rejection_name == null
+            ? null
+            : WorkflowRejectionCode.values.byName(rejection_name),
+        rejected_at_unix_ms: stored.rejected_at_unix_ms,
+        quarantine_code: quarantine_name == null
+            ? null
+            : WorkflowQuarantineCode.values.byName(quarantine_name),
+        quarantine_diagnostic: stored.quarantine_diagnostic,
+        quarantined_at_unix_ms: stored.quarantined_at_unix_ms,
+      );
+    } on ArgumentError {
+      throw const FormatException(
+        'Invalid persisted submission resolution metadata.',
+      );
     }
-    if (resolved_code == null) {
-      throw FormatException('Unsupported submission rejection code: $code');
+  }
+
+  /// Validates the committed outcome caused by [stored].
+  ///
+  /// [outcomes] contains the journal entries causally linked to the
+  /// accepted command. Start and Stop each establish exactly one outcome.
+  ///
+  /// Returns the original committed journal reference after verifying
+  /// correlation, command compatibility and historical ownership.
+  ///
+  /// Throws [FormatException] when durable evidence is inconsistent.
+  Future<WorkflowCommittedOutcome> _validate_completed_outcome(
+    sqlite.WorkflowSubmission stored,
+    List<sqlite.WorkflowEvent> outcomes,
+  ) async {
+    // The current persistence committer supports Start and Stop,
+    // each of which commits exactly one domain outcome.
+    if (outcomes.length != 1) {
+      throw const FormatException(
+        'Invalid number of committed outcomes for a workflow command.',
+      );
     }
 
-    return WorkflowSubmissionResolution(
-      receipt: receipt,
-      state: state,
-      rejection_code: resolved_code,
-      rejected_at_unix_ms: rejected_at,
+    final outcome = outcomes.single;
+
+    if (outcome.correlation_id != stored.correlation_id) {
+      throw const FormatException(
+        'Committed outcome has inconsistent submission correlation.',
+      );
+    }
+
+    final command = _codec.decode(
+      event_type: stored.event_type,
+      payload_json: stored.payload_json,
+    );
+
+    // Restore only the historical prefix belonging to this operation.
+    // Subsequent workflow changes cannot alter its original resolution.
+    final journal =
+        await (_database.select(_database.workflowEvents)
+              ..where(
+                (row) =>
+                    row.workflow_id.equals(outcome.workflow_id) &
+                    row.version.isSmallerOrEqualValue(outcome.version),
+              )
+              ..orderBy([(row) => OrderingTerm.asc(row.version)]))
+            .get();
+
+    if (journal.isEmpty || journal.last.sequence != outcome.sequence) {
+      throw const FormatException(
+        'Committed outcome is missing from its historical journal.',
+      );
+    }
+
+    final decoded = <WorkflowOutcomeEvent>[];
+    var previous_sequence = 0;
+
+    for (var index = 0; index < journal.length; index++) {
+      final entry = journal[index];
+
+      if (entry.version != index + 1 ||
+          entry.sequence <= previous_sequence ||
+          entry.event_id.trim().isEmpty) {
+        throw const FormatException(
+          'Invalid historical journal ordering or identity.',
+        );
+      }
+
+      final event = _codec.decode(
+        event_type: entry.event_type,
+        payload_json: entry.payload_json,
+      );
+
+      if (event is! WorkflowOutcomeEvent) {
+        throw const FormatException(
+          'Historical journal contains a non-outcome event.',
+        );
+      }
+
+      // The establishment outcome must agree with independently
+      // persisted owner metadata and authenticated application ownership.
+      if (index == 0) {
+        if (event is! WorkflowEstablishmentOutcomeEvent ||
+            event.identity.workflow_id != outcome.workflow_id ||
+            event.identity.os_user_id != _os_user_id ||
+            entry.os_user_id != _os_user_id) {
+          throw const FormatException(
+            'Historical workflow ownership is inconsistent.',
+          );
+        }
+      } else if (entry.os_user_id != null) {
+        throw const FormatException(
+          'Unexpected ownership metadata on a later journal outcome.',
+        );
+      }
+
+      decoded.add(event);
+      previous_sequence = entry.sequence;
+    }
+
+    final WorkflowSnapshot? snapshot;
+
+    try {
+      snapshot = _machine.replay(decoded);
+    } on WorkflowReplayException {
+      throw const FormatException(
+        'Historical journal violates workflow transition rules.',
+      );
+    }
+
+    if (snapshot == null ||
+        snapshot.identity.workflow_id != outcome.workflow_id ||
+        snapshot.identity.os_user_id != _os_user_id ||
+        snapshot.version != outcome.version) {
+      throw const FormatException(
+        'Replayed history disagrees with its committed outcome.',
+      );
+    }
+
+    final final_event = decoded.last;
+
+    // Verify the exact accepted operation rather than inferring
+    // success solely from a matching journal causation identifier.
+    if (command is WorkflowStartEvent) {
+      if (final_event is! WorkflowStartedEvent ||
+          outcome.version != 1 ||
+          snapshot.is_terminal ||
+          snapshot.identity.target_id != command.target_id ||
+          snapshot.identity.root.value != command.root.value) {
+        throw const FormatException(
+          'Committed Start disagrees with its accepted command.',
+        );
+      }
+    } else if (command is WorkflowStopEvent) {
+      if (final_event is! WorkflowEndedEvent ||
+          !snapshot.is_terminal ||
+          final_event.workflow_id != command.workflow_id ||
+          outcome.workflow_id != command.workflow_id) {
+        throw const FormatException(
+          'Committed Stop disagrees with its accepted command.',
+        );
+      }
+    } else {
+      throw const FormatException('Unsupported completed workflow command.');
+    }
+
+    return WorkflowCommittedOutcome(
+      workflow_id: outcome.workflow_id,
+      event_type: outcome.event_type,
+      version: outcome.version,
+      sequence: outcome.sequence,
     );
   }
 
-  /// Validates trusted [scope_id] without normalizing the original value.
+  /// Validates a trusted identifier without changing its spelling.
   ///
-  /// Returns the original identifier or throws [ArgumentError] if blank.
-  static String _require_scope(String scope_id) {
-    if (scope_id.trim().isEmpty) {
-      throw ArgumentError.value(scope_id, 'scope_id');
+  /// Returns [value] or throws [ArgumentError] associated with [name]
+  /// when the identifier is blank.
+  static String _require_identifier(String value, String name) {
+    if (value.trim().isEmpty) {
+      throw ArgumentError.value(value, name);
     }
-    return scope_id;
+
+    return value;
   }
 }

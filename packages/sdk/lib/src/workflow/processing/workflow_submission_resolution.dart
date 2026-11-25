@@ -83,29 +83,40 @@ final class WorkflowCommittedOutcome {
 
 /// Queryable resolution of a previously accepted submission.
 ///
-/// This represents submission processing, not the workflow's
-/// event-sourced lifecycle state. A completed resolution references the
-/// submission's own committed journal outcome; it never supplies a substitute
-/// current-workflow snapshot.
+/// Represents submission processing independently of the workflow's
+/// event-sourced lifecycle. A completed resolution references the
+/// submission's own committed journal outcome.
+///
+/// Each processing state requires its corresponding resolution metadata
+/// and excludes metadata belonging to other states.
 ///
 /// Example:
 /// ```dart
-/// final status = WorkflowSubmissionResolution(
+/// final resolution = WorkflowSubmissionResolution(
 ///   receipt: receipt,
 ///   state: WorkflowSubmissionState.pending,
 /// );
-/// print(status.state);
+///
+/// print(resolution.state);
 /// ```
 final class WorkflowSubmissionResolution {
-  /// Creates an immutable view of submission processing.
+  /// Creates a validated immutable submission resolution.
   ///
-  /// [receipt] identifies the accepted request and [state] its durable
-  /// processing condition. [committed_outcome] identifies confirmed journal
-  /// evidence for a completed request. [rejection_code] and
-  /// [rejected_at_unix_ms] describe an expected business rejection.
-  /// [quarantine_code], [quarantine_diagnostic] and
-  /// [quarantined_at_unix_ms] describe a preserved unreadable submission.
-  const WorkflowSubmissionResolution({
+  /// [receipt] identifies the original accepted command.
+  /// [state] identifies its durable processing condition.
+  ///
+  /// Completed resolutions require [committed_outcome].
+  /// Rejected resolutions require [rejection_code] and
+  /// [rejected_at_unix_ms].
+  /// Quarantined resolutions require [quarantine_code] and
+  /// [quarantined_at_unix_ms], with an optional internal
+  /// [quarantine_diagnostic].
+  ///
+  /// Pending resolutions contain no terminal resolution metadata.
+  ///
+  /// Throws [ArgumentError] when required metadata is missing
+  /// or metadata contradicts the declared processing state.
+  WorkflowSubmissionResolution({
     required this.receipt,
     required this.state,
     this.committed_outcome,
@@ -114,35 +125,47 @@ final class WorkflowSubmissionResolution {
     this.quarantine_code,
     this.quarantine_diagnostic,
     this.quarantined_at_unix_ms,
-  });
+  }) {
+    final is_completed = state == WorkflowSubmissionState.completed;
+    final is_rejected = state == WorkflowSubmissionState.rejected;
+    final is_quarantined = state == WorkflowSubmissionState.quarantined;
+
+    // Terminal metadata must belong exclusively to its declared state.
+    if ((committed_outcome != null) != is_completed ||
+        (rejection_code != null) != is_rejected ||
+        (rejected_at_unix_ms != null) != is_rejected ||
+        (quarantine_code != null) != is_quarantined ||
+        (quarantined_at_unix_ms != null) != is_quarantined ||
+        (!is_quarantined && quarantine_diagnostic != null)) {
+      throw ArgumentError(
+        'Resolution metadata contradicts its processing state.',
+      );
+    }
+  }
 
   /// Original accepted submission receipt.
   final EventSubmissionReceipt receipt;
 
-  /// Current durable processing state.
+  /// Durable processing state of the accepted submission.
   final WorkflowSubmissionState state;
 
-  /// Journal outcome linked to a successfully completed submission.
-  ///
-  /// Must be supplied by a trustworthy persistence adapter for completion.
-  /// A missing value is an integrity failure for confirmed SDK operations.
+  /// Final committed journal outcome, present exclusively on completion.
   final WorkflowCommittedOutcome? committed_outcome;
 
-  /// Business rejection reason, if rejected.
+  /// Business rejection classification, present exclusively on rejection.
   final WorkflowRejectionCode? rejection_code;
 
   /// UTC rejection timestamp in Unix milliseconds.
   final int? rejected_at_unix_ms;
 
-  /// Reason the submission was quarantined.
+  /// Quarantine classification, present exclusively on quarantine.
   final WorkflowQuarantineCode? quarantine_code;
 
-  /// Internal diagnostic recorded when quarantine was committed.
+  /// Optional internal diagnostic associated with quarantine.
   ///
-  /// This must not contain the original serialized payload.
+  /// Must not contain the original serialized payload.
   /// Application messaging excludes this diagnostic from its
-  /// serialized representation, so remotely reconstructed
-  /// resolutions do not contain this value.
+  /// serialized representation.
   final String? quarantine_diagnostic;
 
   /// UTC quarantine timestamp in Unix milliseconds.

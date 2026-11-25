@@ -193,17 +193,22 @@ void main() {
     expect(replayed.version, 2);
 
     expect(await database.select(database.unfinishedWorkflows).get(), isEmpty);
+
     final current = await WorkflowStateReader(
       runtime: runtime,
       history_store: DriftWorkflowHistoryStore(database: database),
       os_user_id: os_user_id,
     ).current();
+
     expect(current, isNull);
 
     final status = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(stop_receipt);
+
     expect(status!.state, WorkflowSubmissionState.completed);
     expect(await inbox.next_pending(), isNull);
   });
@@ -274,6 +279,8 @@ void main() {
     final status = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(receipt);
 
     expect(status, isNotNull);
@@ -361,6 +368,8 @@ void main() {
     final status_reader = DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     );
 
     final before = await status_reader.status_for(second_receipt);
@@ -431,6 +440,8 @@ void main() {
     final reader = DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     );
 
     final resolution = await reader.status_for(receipt);
@@ -454,6 +465,8 @@ void main() {
     final restored = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(receipt);
 
     expect(restored, isNotNull);
@@ -491,6 +504,8 @@ void main() {
     final resolution = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(receipt);
 
     expect(resolution, isNotNull);
@@ -546,6 +561,8 @@ void main() {
     final reader = DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     );
 
     final first_status = await reader.status_for(first);
@@ -604,6 +621,8 @@ void main() {
     final reader = DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     );
 
     final resolved = await reader.status_for(rejected_receipt);
@@ -629,6 +648,8 @@ void main() {
     final foreign_reader = DriftWorkflowStatusReader(
       database: database,
       scope_id: 'another-scope',
+      os_user_id: 'another-owner',
+      runtime: runtime,
     );
 
     expect(await foreign_reader.status_for(rejected_receipt), isNull);
@@ -819,6 +840,8 @@ void main() {
       final status = await DriftWorkflowStatusReader(
         database: database,
         scope_id: scope_id,
+        os_user_id: os_user_id,
+        runtime: runtime,
       ).status_for(second);
 
       expect(status, isNotNull);
@@ -846,6 +869,8 @@ void main() {
     final stop_status = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(stop_receipt);
 
     expect(stop_status!.state, WorkflowSubmissionState.completed);

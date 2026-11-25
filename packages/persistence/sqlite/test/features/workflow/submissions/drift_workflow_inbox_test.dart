@@ -315,6 +315,8 @@ void main() {
     final status_reader = DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     );
 
     final status = await status_reader.status_for(issue.receipt);
@@ -347,6 +349,8 @@ void main() {
     final recovered_status = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(issue.receipt);
 
     expect(recovered_status, isNotNull);
@@ -402,6 +406,8 @@ void main() {
     final status = await DriftWorkflowStatusReader(
       database: database,
       scope_id: scope_id,
+      os_user_id: os_user_id,
+      runtime: runtime,
     ).status_for(issue.receipt);
 
     expect(status!.state, WorkflowSubmissionState.quarantined);

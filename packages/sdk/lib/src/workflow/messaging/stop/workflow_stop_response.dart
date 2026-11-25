@@ -1,6 +1,6 @@
 import 'package:rudra_communication/rudra_communication.dart';
 
-import '../outcomes/workflow_operation_outcome.dart';
+import '../../application/outcomes/workflow_operation_outcome.dart';
 
 /// Application response to a workflow termination request.
 ///

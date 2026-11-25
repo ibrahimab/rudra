@@ -4,9 +4,6 @@ library;
 /// Workflow messaging contribution.
 export 'workflow_messaging_module.dart';
 
-/// Typed workflow operation outcomes.
-export 'outcomes/workflow_operation_outcome.dart';
-
 /// Workflow establishment messaging.
 export 'start/workflow_start_request.dart';
 export 'start/workflow_start_response.dart';

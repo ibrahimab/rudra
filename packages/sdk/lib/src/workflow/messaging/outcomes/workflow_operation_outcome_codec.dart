@@ -1,6 +1,6 @@
-import '../serialization/workflow_submission_resolution_codec.dart';
+import '../../application/outcomes/workflow_operation_outcome.dart';
 
-import 'workflow_operation_outcome.dart';
+import '../serialization/workflow_submission_resolution_codec.dart';
 
 /// Serializes application outcomes of workflow operations.
 ///
@@ -30,9 +30,7 @@ final class WorkflowOperationOutcomeCodec {
   /// Converts [outcome] into its structured representation.
   ///
   /// Returns the outcome discriminator and, when applicable,
-  /// the associated durable submission resolution.
-  ///
-  /// Throws [ArgumentError] for invalid resolution metadata.
+  /// the associated validated durable submission resolution.
   Map<String, Object?> encode(WorkflowOperationOutcome outcome) {
     return switch (outcome) {
       WorkflowOperationResolved(:final resolution) => {

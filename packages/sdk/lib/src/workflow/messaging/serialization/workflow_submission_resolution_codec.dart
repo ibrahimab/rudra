@@ -30,15 +30,10 @@ final class WorkflowSubmissionResolutionCodec {
   /// Converts [resolution] into its structured representation.
   ///
   /// Returns the submission receipt, processing state and
-  /// metadata belonging exclusively to that state.
+  /// validated metadata belonging exclusively to that state.
   ///
   /// Internal quarantine diagnostics are deliberately omitted.
-  ///
-  /// Throws [ArgumentError] when resolution metadata is
-  /// incomplete or contradicts the declared processing state.
   Map<String, Object?> encode(WorkflowSubmissionResolution resolution) {
-    _validate_resolution(resolution);
-
     final outcome = resolution.committed_outcome;
 
     return {
@@ -158,33 +153,6 @@ final class WorkflowSubmissionResolutionCodec {
     } on ArgumentError {
       throw const FormatException(
         'Invalid workflow submission resolution metadata.',
-      );
-    }
-  }
-
-  /// Validates the state-specific metadata of [resolution].
-  ///
-  /// Each processing state requires its own metadata and
-  /// excludes metadata belonging to other processing states.
-  ///
-  /// Throws [ArgumentError] when these invariants are violated.
-  static void _validate_resolution(WorkflowSubmissionResolution resolution) {
-    final is_completed = resolution.state == WorkflowSubmissionState.completed;
-    final is_rejected = resolution.state == WorkflowSubmissionState.rejected;
-    final is_quarantined =
-        resolution.state == WorkflowSubmissionState.quarantined;
-
-    // Validate both the required presence and required absence
-    // of metadata. A valid field belonging to another state
-    // must never be silently discarded during serialization.
-    if ((resolution.committed_outcome != null) != is_completed ||
-        (resolution.rejection_code != null) != is_rejected ||
-        (resolution.rejected_at_unix_ms != null) != is_rejected ||
-        (resolution.quarantine_code != null) != is_quarantined ||
-        (resolution.quarantined_at_unix_ms != null) != is_quarantined ||
-        (!is_quarantined && resolution.quarantine_diagnostic != null)) {
-      throw ArgumentError(
-        'Resolution metadata contradicts its processing state.',
       );
     }
   }

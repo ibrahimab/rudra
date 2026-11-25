@@ -292,9 +292,11 @@ final class _FakePersistence implements WorkflowApplicationPersistence {
   @override
   EventSubmissionStore get event_submission_store => submissions;
 
-  /// Supplies durable receipt status lookups.
+  /// Supplies durable receipt status lookups for [os_user_id].
   @override
-  WorkflowSubmissionStatusReader get workflow_status_reader => statuses;
+  WorkflowSubmissionStatusReader workflow_status_reader_for({
+    required String os_user_id,
+  }) => statuses;
 
   /// Supplies a rejection writer unused by these boundary tests.
   @override

@@ -23,8 +23,6 @@ final class WorkflowStartResponseCodec
   /// Converts [message] into its operation outcome representation.
   ///
   /// Returns the structured application response payload.
-  ///
-  /// Throws [ArgumentError] for invalid resolution metadata.
   @override
   Map<String, Object?> encode(WorkflowStartResponse message) {
     return _outcome_codec.encode(message.outcome);

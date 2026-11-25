@@ -66,6 +66,9 @@ export 'processing/workflow_quarantine.dart';
 export 'application/workflow_application.dart';
 export 'application/workflow_application_persistence.dart';
 
+/// Durable application operation outcomes.
+export 'application/outcomes/workflow_operation_outcome.dart';
+
 /// Committed-change publication and observation contracts.
 export 'observation/workflow_commit_channel.dart';
 

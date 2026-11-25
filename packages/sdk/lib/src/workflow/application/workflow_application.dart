@@ -112,7 +112,9 @@ final class WorkflowApplication {
         rejector: persistence.workflow_rejector,
         quarantiner: persistence.workflow_quarantiner,
       ),
-      statuses: persistence.workflow_status_reader,
+      statuses: persistence.workflow_status_reader_for(
+        os_user_id: trusted_os_user_id,
+      ),
       commits: persistence.workflow_commit_subscriber,
       os_user_id: trusted_os_user_id,
     );

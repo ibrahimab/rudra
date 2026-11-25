@@ -23,8 +23,6 @@ final class WorkflowStopResponseCodec
   /// Converts [message] into its operation outcome representation.
   ///
   /// Returns the structured application response payload.
-  ///
-  /// Throws [ArgumentError] for invalid resolution metadata.
   @override
   Map<String, Object?> encode(WorkflowStopResponse message) {
     return _outcome_codec.encode(message.outcome);

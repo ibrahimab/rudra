@@ -200,16 +200,5 @@ void main() {
         );
       }
     });
-
-    test('rejects invalid nested resolutions during encoding', () {
-      final response = WorkflowSubmissionResponse(
-        resolution: WorkflowSubmissionResolution(
-          receipt: receipt,
-          state: WorkflowSubmissionState.completed,
-        ),
-      );
-
-      expect(() => response_codec.encode(response), throwsArgumentError);
-    });
   });
 }

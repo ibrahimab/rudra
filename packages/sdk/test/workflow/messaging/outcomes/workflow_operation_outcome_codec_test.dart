@@ -114,17 +114,6 @@ void main() {
   });
 
   group('representation integrity', () {
-    test('rejects invalid nested resolution metadata during encoding', () {
-      final outcome = WorkflowOperationResolved(
-        resolution: WorkflowSubmissionResolution(
-          receipt: receipt,
-          state: WorkflowSubmissionState.completed,
-        ),
-      );
-
-      expect(() => codec.encode(outcome), throwsArgumentError);
-    });
-
     test('rejects unknown or malformed operation outcomes', () {
       final invalid_payloads = <Object?>[
         null,

@@ -60,7 +60,8 @@ void main() {
         );
 
         // Acceptance must not imply completed processing.
-        final initial_status = await persistence.workflow_status_reader
+        final initial_status = await persistence
+            .workflow_status_reader_for(os_user_id: os_user_id)
             .status_for(first);
 
         expect(initial_status!.state, WorkflowSubmissionState.pending);
@@ -111,10 +112,12 @@ void main() {
 
         // Verify persisted status rather than relying on
         // the processor's immediate return values.
-        final completed_status = await persistence.workflow_status_reader
+        final completed_status = await persistence
+            .workflow_status_reader_for(os_user_id: os_user_id)
             .status_for(first);
 
-        final rejected_status = await persistence.workflow_status_reader
+        final rejected_status = await persistence
+            .workflow_status_reader_for(os_user_id: os_user_id)
             .status_for(second);
 
         expect(completed_status!.state, WorkflowSubmissionState.completed);
@@ -167,13 +170,13 @@ void main() {
         );
         expect(restored_workflow.state.identity.root.value, '/first');
 
-        final first_status = await reopened.workflow_status_reader.status_for(
-          first,
-        );
+        final first_status = await reopened
+            .workflow_status_reader_for(os_user_id: os_user_id)
+            .status_for(first);
 
-        final second_status = await reopened.workflow_status_reader.status_for(
-          second,
-        );
+        final second_status = await reopened
+            .workflow_status_reader_for(os_user_id: os_user_id)
+            .status_for(second);
 
         expect(first_status!.state, WorkflowSubmissionState.completed);
         expect(

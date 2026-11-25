@@ -23,8 +23,6 @@ final class WorkflowSubmissionResponseCodec
   /// Converts [message] into its structured query result.
   ///
   /// Returns an explicit found or not-found representation.
-  ///
-  /// Throws [ArgumentError] for invalid resolution metadata.
   @override
   Map<String, Object?> encode(WorkflowSubmissionResponse message) {
     final resolution = message.resolution;

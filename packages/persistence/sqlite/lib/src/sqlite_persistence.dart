@@ -168,12 +168,24 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   late final WorkflowSubmissionQuarantiner workflow_quarantiner =
       DriftWorkflowQuarantineStore(database: _database, scope_id: _scope_id);
 
-  /// Read-only, durable submission status lookup.
+  /// Creates a durable submission-resolution reader for [os_user_id].
   ///
-  /// Applications can query a previously accepted request
-  /// without subscribing to transient processing events.
-  late final WorkflowSubmissionStatusReader workflow_status_reader =
-      DriftWorkflowStatusReader(database: _database, scope_id: _scope_id);
+  /// Shares the trusted submission scope, database connection and
+  /// immutable workflow runtime with the other persistence adapters.
+  ///
+  /// The authenticated owner is used to validate committed historical
+  /// outcomes. Creating the reader performs no persistence operations.
+  @override
+  WorkflowSubmissionStatusReader workflow_status_reader_for({
+    required String os_user_id,
+  }) {
+    return DriftWorkflowStatusReader(
+      database: _database,
+      scope_id: _scope_id,
+      os_user_id: os_user_id,
+      runtime: _runtime,
+    );
+  }
 
   /// Releases the database connection and its resources.
   ///

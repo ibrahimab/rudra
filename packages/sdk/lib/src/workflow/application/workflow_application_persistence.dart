@@ -46,8 +46,16 @@ abstract interface class WorkflowApplicationPersistence {
   /// this persistence owner. Watching never modifies durable state.
   WorkflowCommitSubscriber get workflow_commit_subscriber;
 
-  /// Reader for durable acceptance, completion and failure statuses.
-  WorkflowSubmissionStatusReader get workflow_status_reader;
+  /// Creates a durable submission-resolution reader for [os_user_id].
+  ///
+  /// The authenticated identity originates from trusted application
+  /// composition and must correspond to the persistence submission scope.
+  ///
+  /// The returned reader validates historical outcome ownership
+  /// independently of the current workflow.
+  WorkflowSubmissionStatusReader workflow_status_reader_for({
+    required String os_user_id,
+  });
 
   /// Writer for recognized business rejections.
   WorkflowSubmissionRejector get workflow_rejector;
