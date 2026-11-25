@@ -178,6 +178,21 @@ final class _TestTransport implements Transport {
 
     return listener;
   }
+
+  /// Rejects outbound connection establishment for this fixture.
+  ///
+  /// [scope_directory] and [os_user_id] identify the requested
+  /// connection configuration.
+  ///
+  /// Throws [UnsupportedError] because this fixture exclusively
+  /// exercises listener lifecycle ownership.
+  @override
+  Future<TransportConnection> connect({
+    required String scope_directory,
+    required String os_user_id,
+  }) async {
+    throw UnsupportedError('Outbound connectivity is outside this fixture.');
+  }
 }
 
 /// Supplies an idle listener with observable disposal behavior.

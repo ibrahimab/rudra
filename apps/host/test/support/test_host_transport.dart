@@ -56,6 +56,21 @@ final class TestHostTransport implements Transport {
       close_count++;
     });
   }
+
+  /// Rejects outbound connection establishment for this fixture.
+  ///
+  /// [scope_directory] and [os_user_id] identify the requested
+  /// connection configuration.
+  ///
+  /// Throws [UnsupportedError] because host composition tests
+  /// exercise listener and exclusive ownership lifecycles.
+  @override
+  Future<TransportConnection> connect({
+    required String scope_directory,
+    required String os_user_id,
+  }) async {
+    throw UnsupportedError('Outbound connectivity is outside this fixture.');
+  }
 }
 
 /// Represents an idle listener owned by a composition test.

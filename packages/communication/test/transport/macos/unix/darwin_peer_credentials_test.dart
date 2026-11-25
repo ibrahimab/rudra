@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:rudra_communication/src/transport/macos/unix/darwin_peer_credentials.dart';
@@ -59,9 +60,27 @@ void main() {
         FileSystemEntityType.unixDomainSock,
       );
 
-      final fixture = File(
-        'test/transport/macos/unix/fixtures/peer_client.dart',
-      ).absolute;
+      // Resolve the fixture relative to the communication package
+      // rather than the current process working directory.
+      final package_uri = await Isolate.resolvePackageUri(
+        Uri.parse('package:rudra_communication/rudra_communication.dart'),
+      );
+
+      if (package_uri == null) {
+        throw StateError('Unable to resolve communication package.');
+      }
+
+      final fixture = File.fromUri(
+        package_uri.resolve(
+          '../test/transport/macos/unix/fixtures/peer_client.dart',
+        ),
+      );
+
+      expect(
+        await fixture.exists(),
+        isTrue,
+        reason: 'Missing native peer client fixture: ${fixture.path}',
+      );
 
       // Launch a genuinely independent operating-system
       // process rather than another isolate.

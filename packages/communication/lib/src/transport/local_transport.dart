@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'contracts/transport.dart';
+import 'contracts/transport_connection.dart';
 import 'contracts/transport_listener.dart';
 import 'macos/unix/macos_unix_transport.dart';
 
@@ -10,7 +11,8 @@ import 'macos/unix/macos_unix_transport.dart';
 /// subsystem and delegates endpoint establishment to the
 /// appropriate native transport implementation.
 ///
-/// Native resources are acquired only when [listen] is invoked.
+/// Native resources are acquired only when [listen] or [connect]
+/// is invoked.
 ///
 /// Example:
 /// ```dart
@@ -47,6 +49,33 @@ final class LocalTransport implements Transport {
     final transport = _select_transport();
 
     return transport.listen(
+      scope_directory: scope_directory,
+      os_user_id: os_user_id,
+    );
+  }
+
+  /// Connects to an existing authenticated local endpoint.
+  ///
+  /// [scope_directory] identifies the trusted canonical directory
+  /// containing the remote communication endpoint.
+  ///
+  /// [os_user_id] identifies the expected remote peer identity.
+  ///
+  /// Returns the authenticated connection created by the selected
+  /// native transport, transferring its ownership to the caller.
+  ///
+  /// Throws [UnsupportedError] when the current operating system
+  /// has no supported local transport implementation.
+  ///
+  /// Native connection and authentication failures propagate.
+  @override
+  Future<TransportConnection> connect({
+    required String scope_directory,
+    required String os_user_id,
+  }) {
+    final transport = _select_transport();
+
+    return transport.connect(
       scope_directory: scope_directory,
       os_user_id: os_user_id,
     );
