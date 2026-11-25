@@ -46,6 +46,10 @@ export 'modules/lifecycle_workflow_module.dart';
 export 'serialization/workflow_event_serializer.dart';
 export 'serialization/workflow_event_codec.dart';
 
+/// Feature-owned typed slice serialization.
+export 'serialization/slices/workflow_slice_codec.dart';
+export 'serialization/slices/registered_workflow_slice_codec.dart';
+
 /// Durable workflow processing contracts.
 /// Workflow processing contracts and orchestration.
 export 'processing/workflow_processing_models.dart';

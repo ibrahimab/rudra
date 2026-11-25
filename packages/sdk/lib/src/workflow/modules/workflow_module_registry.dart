@@ -1,6 +1,8 @@
 import '../behaviors/workflow_behavior.dart';
 
 import '../serialization/workflow_event_serializer.dart';
+import '../serialization/slices/workflow_slice_codec.dart';
+import '../serialization/slices/registered_workflow_slice_codec.dart';
 
 import '../states/workflow_lifecycle.dart';
 import '../states/workflow_slice.dart';
@@ -13,7 +15,8 @@ import 'workflow_module.dart';
 /// Collects and validates workflow capabilities contributed by SDK modules.
 ///
 /// Each [WorkflowModule] contributes command behaviors, outcome transitions,
-/// serializers, lifecycle definitions, and typed domain-slice identities.
+/// event serializers, lifecycle definitions, typed domain-slice identities,
+/// and feature-owned slice serialization codecs.
 ///
 /// Module registration is staged before validation. A failed registration
 /// leaves previously accepted capabilities unchanged and does not reserve
@@ -68,6 +71,13 @@ final class WorkflowModuleRegistry {
   /// under different identifiers.
   final Map<Type, String> _slice_ids_by_type = {};
 
+  /// Feature-owned serialization codecs indexed by stable slice identifiers.
+  ///
+  /// Each registered slice may have one configured codec.
+  /// Registrations retain their concrete typed invocation boundaries.
+  final Map<String, RegisteredWorkflowSliceCodec<WorkflowSlice>> _slice_codecs =
+      {};
+
   /// Outcome-driven lifecycle transitions contributed by modules.
   ///
   /// The runtime validates referenced lifecycle definitions
@@ -108,13 +118,14 @@ final class WorkflowModuleRegistry {
   /// complete before any contribution becomes visible in this registry.
   ///
   /// Throws [ArgumentError] for an empty module identifier or invalid
-  /// serializer metadata.
+  /// event serializer or slice codec schema metadata.
   ///
   /// Throws [StateError] for duplicate module identifiers, command
   /// handlers, lifecycle identifiers, slice identifiers or slice types,
-  /// conflicting serializer identities, duplicate outcome-transition
-  /// pairs, duplicate slice-reducer pairs and reducers referencing slices
-  /// not owned by the contributing module.
+  /// conflicting serializer identities, duplicate slice codecs,
+  /// incompatible slice codec types, duplicate outcome-transition pairs,
+  /// duplicate slice-reducer pairs, or codecs and reducers referencing
+  /// slices not owned by the contributing module.
   ///
   /// Exceptions raised by the module during registration propagate
   /// without modifying previously accepted registrations.
@@ -237,6 +248,31 @@ final class WorkflowModuleRegistry {
       pending_slice_types[key.slice_type] = key.id;
     }
 
+    // A serialization codec belongs exclusively to the module
+    // declaring ownership of its corresponding domain slice.
+    // Validate against all staged keys, independent of call order.
+    final pending_slice_codecs =
+        <String, RegisteredWorkflowSliceCodec<WorkflowSlice>>{};
+
+    for (final codec in staging.slice_codecs) {
+      final key = codec.key;
+      final owned_key = pending_slice_keys[key.id];
+
+      if (owned_key == null || owned_key != key) {
+        throw StateError(
+          'Workflow module $module_id does not own '
+          'codec slice ${key.id}.',
+        );
+      }
+
+      if (_slice_codecs.containsKey(key.id) ||
+          pending_slice_codecs.containsKey(key.id)) {
+        throw StateError('Duplicate workflow slice codec: ${key.id}');
+      }
+
+      pending_slice_codecs[key.id] = codec;
+    }
+
     // An exact lifecycle/event pair must have one transition.
     // The same event may have different transitions from
     // different source lifecycles.
@@ -285,6 +321,7 @@ final class WorkflowModuleRegistry {
     _lifecycles.addAll(pending_lifecycles);
     _slice_keys.addAll(pending_slice_keys);
     _slice_ids_by_type.addAll(pending_slice_types);
+    _slice_codecs.addAll(pending_slice_codecs);
 
     _outcome_transitions.addAll(staging.outcome_transitions);
     _outcome_transition_pairs.addAll(pending_outcome_pairs);
@@ -331,6 +368,15 @@ final class WorkflowModuleRegistry {
   /// Subsequent registrations do not modify the returned map.
   Map<String, WorkflowSliceKey<WorkflowSlice>> get slice_keys =>
       Map.unmodifiable(_slice_keys);
+
+  /// Returns an immutable snapshot of registered slice codecs.
+  ///
+  /// Keys are stable domain-slice identifiers. Each registration
+  /// preserves its concrete slice type and supported schema version.
+  ///
+  /// Subsequent registrations do not modify the returned map.
+  Map<String, RegisteredWorkflowSliceCodec<WorkflowSlice>> get slice_codecs =>
+      Map.unmodifiable(_slice_codecs);
 
   /// Returns an immutable snapshot of outcome lifecycle transitions.
   ///
@@ -403,6 +449,12 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   /// including their concrete slice-type information.
   final List<WorkflowSliceKey<WorkflowSlice>> slice_keys = [];
 
+  /// Typed slice codecs awaiting module ownership validation.
+  ///
+  /// Each registration retains the concrete codec type and
+  /// captured serialization metadata.
+  final List<RegisteredWorkflowSliceCodec<WorkflowSlice>> slice_codecs = [];
+
   /// Outcome lifecycle transitions staged by this module.
   ///
   /// Duplicate pairs are validated before publication.
@@ -456,6 +508,21 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   @override
   void add_slice<T extends WorkflowSlice>(WorkflowSliceKey<T> key) {
     slice_keys.add(key);
+  }
+
+  /// Stages a feature-owned serialization [codec].
+  ///
+  /// [T] preserves the concrete slice contract when the codec
+  /// is placed into the heterogeneous staging collection.
+  ///
+  /// Invalid codec metadata throws during registration construction.
+  /// Module ownership and duplicate registrations are validated
+  /// by the enclosing registry before publication.
+  ///
+  /// This method does not invoke encoding or decoding.
+  @override
+  void add_slice_codec<T extends WorkflowSlice>(WorkflowSliceCodec<T> codec) {
+    slice_codecs.add(RegisteredWorkflowSliceCodec<T>(codec: codec));
   }
 
   /// Stages an outcome-driven lifecycle transition.

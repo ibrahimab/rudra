@@ -1,6 +1,7 @@
 import '../behaviors/workflow_behavior.dart';
 
 import '../serialization/workflow_event_serializer.dart';
+import '../serialization/slices/workflow_slice_codec.dart';
 
 import '../states/workflow_lifecycle.dart';
 import '../states/workflow_slice.dart';
@@ -47,6 +48,21 @@ abstract interface class WorkflowModuleRegistration {
   /// Both the stable identifier and the concrete slice type
   /// must be unique within the runtime.
   void add_slice<T extends WorkflowSlice>(WorkflowSliceKey<T> key);
+
+  /// Registers a feature-owned serialization codec.
+  ///
+  /// [T] identifies the concrete domain slice represented by [codec].
+  /// The contributing module must also declare ownership of the
+  /// corresponding typed key through [add_slice].
+  ///
+  /// A slice may have one configured codec with a positive
+  /// schema version.
+  ///
+  /// Ownership and duplicate registrations are validated before
+  /// the module's contributions become visible.
+  ///
+  /// Registration does not invoke serialization.
+  void add_slice_codec<T extends WorkflowSlice>(WorkflowSliceCodec<T> codec);
 
   /// Registers a lifecycle transition driven by a committed outcome.
   ///

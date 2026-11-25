@@ -4,6 +4,7 @@ import 'modules/standard_workflow_modules.dart';
 import 'modules/workflow_module_registry.dart';
 
 import 'serialization/workflow_event_codec.dart';
+import 'serialization/slices/registered_workflow_slice_codec.dart';
 
 import 'states/workflow_lifecycle.dart';
 import 'states/workflow_slice.dart';
@@ -14,7 +15,8 @@ import 'transitions/workflow_slice_reducer.dart';
 /// Immutable configuration for a Rudra workflow runtime.
 ///
 /// Captures a consistent snapshot of registered command behaviors,
-/// outcome transitions, and event serializers.
+/// outcome transitions, event serializers, lifecycle definitions,
+/// typed domain slices, and slice serialization codecs.
 ///
 /// The same instance should be supplied to workflow processing
 /// and persistence composition. This prevents those components
@@ -48,6 +50,7 @@ final class WorkflowRuntime {
   factory WorkflowRuntime.from_registry(WorkflowModuleRegistry registry) {
     final lifecycles = registry.lifecycles;
     final slice_keys = registry.slice_keys;
+    final slice_codecs = registry.slice_codecs;
     final outcome_transitions = registry.outcome_transitions;
     final slice_reducers = registry.slice_reducers;
 
@@ -110,6 +113,7 @@ final class WorkflowRuntime {
       command_behaviors: registry.command_behaviors,
       lifecycles: lifecycles,
       slice_keys: slice_keys,
+      slice_codecs: slice_codecs,
       outcome_transitions: outcome_transitions,
       slice_reducers: slice_reducers,
     );
@@ -120,6 +124,15 @@ final class WorkflowRuntime {
 
   /// Immutable typed slice ownership enabled in this runtime.
   final Map<String, WorkflowSliceKey<WorkflowSlice>> slice_keys;
+
+  /// Immutable slice serialization configuration enabled in this runtime.
+  ///
+  /// Keys identify registered domain slices. Each value retains
+  /// its concrete codec contract and supported schema version.
+  ///
+  /// Domain execution may use registered slices without codecs.
+  /// State serialization requires complete codec coverage.
+  final Map<String, RegisteredWorkflowSliceCodec<WorkflowSlice>> slice_codecs;
 
   /// Creates the standard Rudra workflow configuration.
   ///
@@ -140,6 +153,8 @@ final class WorkflowRuntime {
   /// [codec] serializes and restores registered event types.
   /// [command_behaviors] contains the exact-type command handlers.
   /// [lifecycles] and [slice_keys] define registered domain ownership.
+  /// [slice_codecs] contains the validated serialization capabilities
+  /// contributed by the owning domain modules.
   /// [outcome_transitions] contains the registered lifecycle rules.
   /// [slice_reducers] contains the feature-owned projection functions.
   ///
@@ -153,11 +168,14 @@ final class WorkflowRuntime {
     required Map<Type, WorkflowCommandBehavior<dynamic>> command_behaviors,
     required Map<String, WorkflowLifecycle> lifecycles,
     required Map<String, WorkflowSliceKey<WorkflowSlice>> slice_keys,
+    required Map<String, RegisteredWorkflowSliceCodec<WorkflowSlice>>
+    slice_codecs,
     required List<WorkflowOutcomeTransitionDefinition> outcome_transitions,
     required List<WorkflowSliceReducerDefinition> slice_reducers,
   }) : command_behaviors = Map.unmodifiable(command_behaviors),
        lifecycles = Map.unmodifiable(lifecycles),
        slice_keys = Map.unmodifiable(slice_keys),
+       slice_codecs = Map.unmodifiable(slice_codecs),
        outcome_transitions = List.unmodifiable(outcome_transitions),
        slice_reducers = List.unmodifiable(slice_reducers);
 
