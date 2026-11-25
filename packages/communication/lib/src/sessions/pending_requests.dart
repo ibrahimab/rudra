@@ -19,6 +19,7 @@ import 'message_session_exception.dart';
 ///   expected_response_type: EchoResponse,
 /// );
 ///
+/// pending.mark_transmission_started(request.request_id);
 /// pending.complete_response(
 ///   request.request_id,
 ///   const EchoResponse('Hello'),
@@ -145,13 +146,31 @@ final class PendingRequests {
     return (request_id: request_id, response: response);
   }
 
+  /// Marks the beginning of transmission for [request_id].
+  ///
+  /// Enables remote completion of an outstanding registration.
+  /// Registration alone does not authorize incoming responses.
+  ///
+  /// Throws [StateError] for unknown registrations or repeated
+  /// transmission admission.
+  void mark_transmission_started(String request_id) {
+    final pending = _pending[request_id];
+
+    if (pending == null || pending.transmission_started) {
+      throw StateError('Invalid request transmission admission.');
+    }
+
+    pending.transmission_started = true;
+  }
+
   /// Resolves [request_id] with the supplied application [response].
   ///
   /// Validates the exact concrete response type before removing
   /// the pending registration and completing its response future.
   ///
-  /// Throws [ProtocolException] for an unknown identifier or
-  /// an incompatible response type.
+  /// Throws [ProtocolException] when the identifier is unknown,
+  /// already completed or awaiting transmission, or when the
+  /// supplied response violates the registered response contract.
   ///
   /// Invalid responses leave the request pending so that the owner
   /// can terminate all outstanding requests consistently.
@@ -175,7 +194,8 @@ final class PendingRequests {
   /// Resolves [request_id] with a sanitized remote [failure].
   ///
   /// Removes the registration and cancels its deadline.
-  /// Throws [ProtocolException] for an unknown request identifier.
+  /// Throws [ProtocolException] when the request identifier is
+  /// unknown, already completed or awaiting transmission.
   void complete_failure(String request_id, MessageSessionException failure) {
     final pending = _require_pending(request_id);
 
@@ -222,16 +242,22 @@ final class PendingRequests {
     }
   }
 
-  /// Resolves an outstanding registration for [request_id].
+  /// Resolves an outstanding request eligible for remote completion.
   ///
-  /// Throws [ProtocolException] for unknown or completed identifiers.
+  /// [request_id] identifies the outstanding request registration.
+  ///
+  /// Returns the registration whose transmission has already started.
+  ///
+  /// Throws [ProtocolException] with
+  /// [ProtocolErrorCode.invalid_correlation] when the identifier
+  /// is unknown, already completed or awaiting transmission.
   _PendingRequest _require_pending(String request_id) {
     final pending = _pending[request_id];
 
-    if (pending == null) {
+    if (pending == null || !pending.transmission_started) {
       throw const ProtocolException(
         ProtocolErrorCode.invalid_correlation,
-        'Response does not identify an outstanding request.',
+        'Response does not identify a transmitted request.',
       );
     }
 
@@ -280,7 +306,7 @@ final class _PendingRequest {
   ///
   /// [accepts_response] validates the caller's generic response
   /// contract independently of the configured concrete type.
-  const _PendingRequest({
+  _PendingRequest({
     required this.expected_response_type,
     required this.accepts_response,
     required this.completion,
@@ -298,4 +324,7 @@ final class _PendingRequest {
 
   /// Deadline timer owned by this registration.
   final Timer deadline;
+
+  /// Whether the serialized writer has begun transmitting this request.
+  bool transmission_started = false;
 }

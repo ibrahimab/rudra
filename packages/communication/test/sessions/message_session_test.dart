@@ -458,6 +458,66 @@ void main() {
       });
     }
 
+    test(
+      'rejects responses for requests still awaiting transmission',
+      () async {
+        final connection = _MemoryConnection(os_user_id: 'test-peer');
+
+        final transmitting = Completer<void>();
+
+        connection.send_hook = (_) async {
+          transmitting.complete();
+
+          // Keep the first transmission active until the owning
+          // session terminates its transport connection.
+          await connection.closed;
+        };
+
+        final session = open_session(connection);
+
+        final first = session.request(const _EchoRequest('first'));
+
+        final first_failed = expectLater(
+          first,
+          throwsA(_protocol_failure(ProtocolErrorCode.invalid_correlation)),
+        );
+
+        await transmitting.future;
+
+        final second = session.request(const _EchoRequest('second'));
+
+        final second_failed = expectLater(
+          second,
+          throwsA(_protocol_failure(ProtocolErrorCode.invalid_correlation)),
+        );
+
+        final session_failed = expectLater(
+          session.done,
+          throwsA(_protocol_failure(ProtocolErrorCode.invalid_correlation)),
+        );
+
+        expect(connection.sent.length, 1);
+
+        // The second request is registered but cannot have started
+        // transmission while the first write remains outstanding.
+        connection.inject(
+          _frame(
+            kind: MessageKind.response,
+            request_id: '2',
+            message_type: _echo_response_id,
+            payload: 'premature',
+          ),
+        );
+
+        await Future.wait([first_failed, second_failed, session_failed]);
+
+        await session.close();
+
+        expect(connection.sent.length, 1);
+        expect(connection.close_calls, 1);
+      },
+    );
+
     test('rejects duplicate responses', () async {
       final connection = _MemoryConnection(os_user_id: 'test-peer');
 
@@ -820,6 +880,65 @@ void main() {
         session.request(const _EchoRequest('closed')),
         throwsA(_session_failure(MessageSessionErrorCode.session_closed)),
       );
+    });
+
+    test('failed transport disposal does not await a stalled writer', () async {
+      const operation_timeout = Duration(seconds: 5);
+
+      final failure = StateError('Controlled transport disposal failure.');
+
+      final connection = _MemoryConnection(
+        os_user_id: 'test-peer',
+        close_failure: failure,
+      );
+
+      final transmitting = Completer<void>();
+      final release = Completer<void>();
+      final write_finished = Completer<void>();
+
+      connection.send_hook = (_) async {
+        transmitting.complete();
+
+        await release.future;
+
+        write_finished.complete();
+      };
+
+      final session = open_session(connection);
+
+      // Failed disposal is explicitly verified by this test
+      // rather than the successful-disposal teardown.
+      sessions.remove(session);
+
+      final request_failed = expectLater(
+        session.request(const _EchoRequest('stalled')),
+        throwsA(_session_failure(MessageSessionErrorCode.session_closed)),
+      );
+
+      final session_failed = expectLater(session.done, throwsA(same(failure)));
+
+      try {
+        await transmitting.future.timeout(operation_timeout);
+
+        // The transport reports unsuccessful disposal while its
+        // outstanding write remains deliberately unresolved.
+        await expectLater(
+          session.close().timeout(operation_timeout),
+          throwsA(same(failure)),
+        );
+
+        await session_failed;
+        await request_failed;
+
+        expect(write_finished.isCompleted, isFalse);
+        expect(connection.close_calls, 1);
+      } finally {
+        // Release the synthetic stalled write after verifying
+        // that failed disposal was already reported.
+        release.complete();
+
+        await write_finished.future.timeout(operation_timeout);
+      }
     });
 
     test(

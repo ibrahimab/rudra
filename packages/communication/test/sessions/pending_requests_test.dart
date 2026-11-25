@@ -32,6 +32,9 @@ void main() {
       expected_response_type: _EchoResponse,
     );
 
+    pending.mark_transmission_started(first.request_id);
+    pending.mark_transmission_started(second.request_id);
+
     expect(first.request_id, '1');
     expect(second.request_id, '2');
     expect(pending.count, 2);
@@ -54,6 +57,9 @@ void main() {
       expected_response_type: _EchoResponse,
     );
 
+    pending.mark_transmission_started(first.request_id);
+    pending.mark_transmission_started(second.request_id);
+
     pending.complete_response(second.request_id, const _EchoResponse('second'));
 
     expect((await second.response).value, 'second');
@@ -62,6 +68,50 @@ void main() {
     pending.complete_response(first.request_id, const _EchoResponse('first'));
 
     expect((await first.response).value, 'first');
+    expect(pending.count, 0);
+  });
+
+  test('rejects remote completion before transmission starts', () async {
+    final request = pending.register<_EchoResponse>(
+      expected_response_type: _EchoResponse,
+    );
+
+    const response = _EchoResponse('Hello');
+
+    const failure = MessageSessionException(
+      MessageSessionErrorCode.handler_failed,
+    );
+
+    final invalid_correlation = throwsA(
+      isA<ProtocolException>().having(
+        (error) => error.code,
+        'code',
+        ProtocolErrorCode.invalid_correlation,
+      ),
+    );
+
+    expect(
+      () => pending.complete_response(request.request_id, response),
+      invalid_correlation,
+    );
+
+    expect(
+      () => pending.complete_failure(request.request_id, failure),
+      invalid_correlation,
+    );
+
+    expect(pending.count, 1);
+
+    pending.mark_transmission_started(request.request_id);
+
+    expect(
+      () => pending.mark_transmission_started(request.request_id),
+      throwsStateError,
+    );
+
+    pending.complete_response(request.request_id, response);
+
+    expect(await request.response, same(response));
     expect(pending.count, 0);
   });
 
@@ -82,6 +132,8 @@ void main() {
     final request = pending.register<_EchoResponse>(
       expected_response_type: _EchoResponse,
     );
+
+    pending.mark_transmission_started(request.request_id);
 
     const response = _EchoResponse('Hello');
 
@@ -107,6 +159,8 @@ void main() {
     final request = pending.register<Response>(
       expected_response_type: _EchoResponse,
     );
+
+    pending.mark_transmission_started(request.request_id);
 
     expect(
       () =>
@@ -134,6 +188,8 @@ void main() {
       expected_response_type: _OtherResponse,
     );
 
+    pending.mark_transmission_started(request.request_id);
+
     expect(
       () =>
           pending.complete_response(request.request_id, const _OtherResponse()),
@@ -157,6 +213,9 @@ void main() {
     final second = pending.register<_EchoResponse>(
       expected_response_type: _EchoResponse,
     );
+
+    pending.mark_transmission_started(first.request_id);
+    pending.mark_transmission_started(second.request_id);
 
     const failure = MessageSessionException(
       MessageSessionErrorCode.handler_failed,
@@ -230,6 +289,8 @@ void main() {
     final first = pending.register<_EchoResponse>(
       expected_response_type: _EchoResponse,
     );
+
+    pending.mark_transmission_started(first.request_id);
 
     expect(
       () => pending.register<_EchoResponse>(
@@ -357,6 +418,8 @@ void main() {
         },
       ),
     );
+
+    pending.mark_transmission_started(request.request_id);
 
     const response = _EchoResponse('Hello');
 

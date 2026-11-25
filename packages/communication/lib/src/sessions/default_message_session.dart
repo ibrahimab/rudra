@@ -250,7 +250,14 @@ final class DefaultMessageSession implements MessageSession {
 
       // Observe transmission independently so a stalled write cannot
       // prevent the request deadline from completing its caller.
-      unawaited(_observe_write(frame));
+      unawaited(
+        _observe_write(
+          frame,
+          on_start: () {
+            _pending.mark_transmission_started(pending.request_id);
+          },
+        ),
+      );
     } catch (error, stack) {
       // Local submission failed before admission to the writer.
       // No remote response is expected for this identifier.
@@ -339,9 +346,14 @@ final class DefaultMessageSession implements MessageSession {
   /// cannot replace the original termination cause.
   ///
   /// Returns after the accepted write settles or admission fails.
-  Future<void> _observe_write(Uint8List frame) async {
+  ///
+  /// [on_start] optionally observes admission to native transmission.
+  Future<void> _observe_write(
+    Uint8List frame, {
+    void Function()? on_start,
+  }) async {
     try {
-      await _writer.write(frame);
+      await _writer.write(frame, on_start: on_start);
     } catch (error, stack) {
       _terminate(error, stack).ignore();
     }
@@ -662,16 +674,15 @@ final class DefaultMessageSession implements MessageSession {
     StackTrace? stack,
   ) async {
     try {
-      try {
-        await Future.wait<void>([
-          Future<void>.sync(_connection.close),
-          Future<void>.sync(_incoming.cancel),
-        ]);
-      } finally {
-        // Native connection termination must settle any active
-        // transmission before writer disposal can be confirmed.
-        await _writer.done;
-      }
+      await Future.wait<void>([
+        Future<void>.sync(_connection.close),
+        Future<void>.sync(_incoming.cancel),
+      ], eagerError: true);
+
+      // Successful transport disposal must settle active writes.
+      // Failed disposal cannot establish that writer draining
+      // remains possible, so report the failure without awaiting it.
+      await _writer.done;
     } catch (error, disposal_stack) {
       disposal.completeError(error, disposal_stack);
       _completion.completeError(error, disposal_stack);

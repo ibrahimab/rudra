@@ -94,7 +94,11 @@ final class SerializedWriter {
   ///
   /// Transport failures propagate to the returned future and stop
   /// subsequent transport writes.
-  Future<void> write(Uint8List frame) {
+  ///
+  /// [on_start] optionally observes transmission admission immediately
+  /// before the underlying sending capability is invoked.
+  /// A failing admission callback stops writer execution.
+  Future<void> write(Uint8List frame, {void Function()? on_start}) {
     if (_is_stopped) {
       return Future<void>.error(
         _failure ??
@@ -133,6 +137,8 @@ final class SerializedWriter {
 
           return;
         }
+
+        on_start?.call();
 
         await _send(frame);
 
