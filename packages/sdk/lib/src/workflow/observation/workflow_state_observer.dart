@@ -62,35 +62,55 @@ final class WorkflowStateObserver {
   /// Each listener owns its subscription and reconciliation lifecycle.
   /// Rapid changes may be coalesced into the latest verified snapshot.
   ///
-  /// Restoration or notification-source failures are emitted as stream
-  /// errors and terminate that subscription. Cancellation stops listening
-  /// without submitting commands or modifying persistence.
+  /// Restoration or notification-source failures terminate observation
+  /// with a stream error.
+  ///
+  /// Cancellation prohibits further publication immediately and completes
+  /// after notification cancellation and outstanding restoration have
+  /// both settled.
   Stream<RudraState> observe() {
     return Stream<RudraState>.multi((controller) {
       var active = true;
       var change_number = 0;
-      var reconciling = false;
 
-      late final StreamSubscription<void> commit_subscription;
+      StreamSubscription<void>? commit_subscription;
+      Future<void>? reconciliation;
+      Future<void>? stopping;
 
-      Future<void> fail(Object error, StackTrace stack_trace) async {
+      Future<void> stop() {
+        active = false;
+
+        // Schedule disposal independently of reconciliation so a failure
+        // originating inside restoration cannot await its own completion.
+        return stopping ??= Future<void>.microtask(() async {
+          try {
+            await commit_subscription?.cancel();
+          } finally {
+            await reconciliation;
+          }
+        });
+      }
+
+      void fail(Object error, StackTrace stack_trace) {
         if (!active) return;
 
         active = false;
         controller.addError(error, stack_trace);
 
-        try {
-          await commit_subscription.cancel();
-        } finally {
-          controller.close();
-        }
+        unawaited(
+          stop().then<void>(
+            (_) {
+              controller.close();
+            },
+            onError: (Object error, StackTrace stack_trace) {
+              controller.addError(error, stack_trace);
+              controller.close();
+            },
+          ),
+        );
       }
 
       Future<void> reconcile() async {
-        if (!active || reconciling) return;
-
-        reconciling = true;
-
         try {
           while (active) {
             final observed_change_number = change_number;
@@ -98,8 +118,7 @@ final class WorkflowStateObserver {
 
             if (!active) return;
 
-            // A commit overlapped restoration. Discard this potentially
-            // stale result and reconstruct from authoritative evidence.
+            // Discard restoration results that overlap an observed commit.
             if (observed_change_number != change_number) {
               continue;
             }
@@ -108,47 +127,45 @@ final class WorkflowStateObserver {
             return;
           }
         } catch (error, stack_trace) {
-          await fail(error, stack_trace);
+          fail(error, stack_trace);
         } finally {
-          reconciling = false;
+          reconciliation = null;
         }
       }
 
+      void schedule_reconciliation() {
+        if (!active || reconciliation != null) return;
+
+        // Retain the operation before restoration begins, making it
+        // available to the cancellation and disposal boundary.
+        reconciliation = Future<void>.microtask(reconcile);
+      }
+
+      controller.onCancel = stop;
+
       try {
-        // Register before the initial read to close the startup race.
+        // Establish notification observation before initial restoration.
         commit_subscription = _commits
             .watch(os_user_id: _os_user_id)
             .listen(
               (_) {
                 change_number++;
-                unawaited(reconcile());
+                schedule_reconciliation();
               },
-              onError: (Object error, StackTrace stack_trace) {
-                unawaited(fail(error, stack_trace));
-              },
+              onError: fail,
               onDone: () {
-                unawaited(
-                  fail(
-                    StateError(
-                      'Workflow commit observation became unavailable.',
-                    ),
-                    StackTrace.current,
-                  ),
+                fail(
+                  StateError('Workflow commit observation became unavailable.'),
+                  StackTrace.current,
                 );
               },
             );
       } catch (error, stack_trace) {
-        controller.addError(error, stack_trace);
-        controller.close();
+        fail(error, stack_trace);
         return;
       }
 
-      controller.onCancel = () async {
-        active = false;
-        await commit_subscription.cancel();
-      };
-
-      unawaited(reconcile());
+      schedule_reconciliation();
     });
   }
 }

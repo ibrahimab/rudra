@@ -8,7 +8,11 @@ abstract interface class WorkflowCommitPublisher {
   /// Publishes a committed change for trusted [os_user_id].
   ///
   /// Persistence invokes this only after a successful transaction.
+  ///
   /// Normal delivery and subscriber failures must not throw.
+  /// An implementation unable to report a committed change must
+  /// invalidate its corresponding observation source rather than
+  /// silently lose the notification.
   void publish({required String os_user_id});
 }
 
@@ -20,7 +24,12 @@ abstract interface class WorkflowCommitSubscriber {
   /// Watches committed changes for trusted [os_user_id].
   ///
   /// Returns an in-order stream of change signals provided by the
-  /// implementation. Watching performs no persistence writes.
+  /// implementation.
+  ///
+  /// Loss of the notification capability must terminate observation
+  /// through a stream error or closure.
+  ///
+  /// Watching performs no persistence writes.
   Stream<void> watch({required String os_user_id});
 }
 

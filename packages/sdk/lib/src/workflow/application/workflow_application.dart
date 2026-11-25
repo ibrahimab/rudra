@@ -173,8 +173,11 @@ final class WorkflowApplication {
   /// a stream error; they are never represented as verified absence.
   ///
   /// Subscribing performs no command submission, processing or target
-  /// filesystem modification. The caller must cancel subscriptions before
-  /// disposing the supplied persistence owner.
+  /// filesystem modification.
+  ///
+  /// The caller must await subscription cancellation before disposing
+  /// the supplied persistence owner. Cancellation suppresses further
+  /// publication and drains outstanding authoritative restoration.
   ///
   /// Example:
   /// ```dart

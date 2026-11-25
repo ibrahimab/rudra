@@ -355,7 +355,7 @@ void main() {
   });
 
   test(
-    'cancellation during restoration suppresses the pending state',
+    'cancellation drains restoration and suppresses the pending state',
     () async {
       final commits = LocalWorkflowCommitChannel();
 
@@ -383,10 +383,27 @@ void main() {
       final subscription = observer.observe().listen(values.add);
 
       await read_started.future;
-      await subscription.cancel();
 
-      release_read.complete();
-      await read_finished.future;
+      var cancellation_completed = false;
+
+      final cancellation = subscription.cancel().then<void>((_) {
+        cancellation_completed = true;
+      });
+
+      try {
+        await Future<void>.value();
+
+        // Cancellation must retain the outstanding restoration.
+        expect(cancellation_completed, isFalse);
+        expect(read_finished.isCompleted, isFalse);
+      } finally {
+        release_read.complete();
+        await cancellation;
+      }
+
+      expect(read_finished.isCompleted, isTrue);
+      expect(cancellation_completed, isTrue);
+
       await flush();
 
       // The completed read must not publish into a cancelled subscription.

@@ -493,6 +493,43 @@ Actual cross-process application acceptance, native endpoint integration, reacti
 
 **Gate:** Multiple independent client connections observe committed Start/Stop without manual refresh, including overlap with initial subscription and a reconnect after host restart.
 
+#### 7C.1 — Authoritative bounded state publication
+
+Establish a transport-independent SDK publication capability over one authoritative application observation.
+
+- `StatePublicationSnapshot` associates immutable composite application state with a transient publication generation and positive revision.
+- Publication revisions increase independently of domain workflow versions and durable journal sequences.
+- `StatePublication` owns one authoritative observation and retains its latest verified publication.
+- Subscription registration and initial publication admission share a synchronous coordination boundary.
+- Each subscriber retains at most one admitted delivery and one pending latest publication.
+- Intermediate publications may be coalesced while acknowledgment remains outstanding.
+- Subscriber delivery failures terminate only the affected subscription.
+- Configurable subscription capacity includes terminated subscribers whose admitted deliveries have not drained.
+- Authoritative observation failure invalidates the entire publication generation and terminates its subscriptions.
+- Termination notification remains independent of resource disposal completion.
+- `WorkflowStateObserver` cancellation drains outstanding authoritative restoration before releasing its persistence dependency.
+- Commit notification implementations must invalidate observation when they cannot report a committed change.
+
+**Gate:** Independent subscribers consume ordered verified state from one authoritative observation. Slow consumers remain bounded, cancellation drains outstanding operations, missing storage remains uninitialized, and failed transactions produce no committed-change notification.
+
+**Boundary:** Publication remains independent of communication sessions, native adapters and concrete persistence implementations. Host integration and remote delivery are introduced in 7C.2.
+
+#### 7C.2 — Authenticated state subscription messaging (planned)
+
+Expose authoritative publication through registered application messaging contributions and existing bidirectional communication sessions.
+
+Introduce typed subscription establishment, acknowledged state delivery and cancellation contracts. Bind subscription ownership to authenticated sessions and coordinate publication disposal with host execution.
+
+**Gate:** Independent authenticated connections receive verified publications through the existing communication protocol. Subscription establishment, cancellation, disconnection and host shutdown preserve bounded delivery and hierarchical resource ownership.
+
+#### 7C.3 — Client synchronization and reconnection (planned)
+
+Introduce reusable SDK client-side subscription consumption, bounded local state acceptance, synchronization status and explicit reconnection.
+
+Reconnection establishes a new communication session and subscription. Host recreation establishes a new publication generation restored from authoritative committed evidence.
+
+**Gate:** Independent clients observe committed Start and Stop operations, including overlapping subscription establishment, communication interruption and host recreation. Reconnection never implicitly repeats an application operation.
+
 ### 7D — CLI and Explorer host-client cutover
 
 **Goal:** Official frontend entry points all use the host as the sole workflow application/persistence owner.
