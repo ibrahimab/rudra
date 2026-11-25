@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
+import '../../contracts/transport_connection.dart';
 
 /// Adapts an authenticated Unix-domain socket to the SDK contract.
 ///
@@ -13,7 +13,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 /// await connection.send(Uint8List.fromList([0x01]));
 /// await connection.close();
 /// ```
-final class MacOsUnixConnection implements HostConnection {
+final class MacOsUnixConnection implements TransportConnection {
   /// Takes ownership of an authenticated [socket].
   ///
   /// [os_user_id] contains the kernel-verified peer identity.

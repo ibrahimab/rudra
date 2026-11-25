@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:rudra_host_macos/rudra_host_macos.dart';
-import 'package:rudra_host_macos/src/transports/unix/darwin_peer_credentials.dart';
+import 'package:rudra_communication/src/transport/macos/unix/darwin_peer_credentials.dart';
+
+import '../../../support/macos_test_identity.dart';
+
 import 'package:test/test.dart';
 
 /// Verifies native Unix-domain transport and peer authentication.
@@ -40,7 +42,7 @@ void main() {
         type: InternetAddressType.unix,
       );
 
-      final expected_owner = await const MacOsHostIdentity().resolve();
+      final expected_owner = await resolve_macos_test_identity();
 
       final server = await ServerSocket.bind(address, 0);
 
@@ -57,8 +59,9 @@ void main() {
         FileSystemEntityType.unixDomainSock,
       );
 
-      final fixture = File('test/transports/unix/fixtures/peer_client.dart')
-          .absolute;
+      final fixture = File(
+        'test/transport/macos/unix/fixtures/peer_client.dart',
+      ).absolute;
 
       // Launch a genuinely independent operating-system
       // process rather than another isolate.

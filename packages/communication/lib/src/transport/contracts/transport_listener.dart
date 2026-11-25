@@ -1,9 +1,9 @@
-import 'host_connection.dart';
+import 'transport_connection.dart';
 
-/// Accepts authenticated connections within a host execution scope.
+/// Accepts authenticated connections within a communication scope.
 ///
 /// Retains the native listener and its outstanding connections
-/// until the host releases the listener.
+/// until the owning consumer releases the listener.
 ///
 /// Example:
 /// ```dart
@@ -16,19 +16,19 @@ import 'host_connection.dart';
 /// await listener.close();
 /// await subscription.cancel();
 /// ```
-abstract interface class HostListener {
+abstract interface class TransportListener {
   /// Single-subscription stream of authorized connections.
   ///
-  /// Rejected peers must never be exposed through this stream.
+  /// Rejected peers are excluded from this stream.
   /// Listener-level failures are delivered as stream errors.
-  Stream<HostConnection> get connections;
+  Stream<TransportConnection> get connections;
 
-  /// Stops accepting connections and closes outstanding sessions.
+  /// Stops acceptance and closes outstanding connections.
   ///
-  /// Returns after releasing the native listener, its connections
-  /// and any transport-owned endpoint resources.
+  /// Returns after releasing native listener, connection and
+  /// endpoint resources.
   ///
-  /// Closing must be supported before or after stream subscription.
+  /// Disposal is supported before or after stream subscription.
   /// Repeated calls must be safe.
   ///
   /// Resource disposal failures propagate to the caller.

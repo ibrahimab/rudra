@@ -1,18 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
+import '../../contracts/transport.dart';
+import '../../contracts/transport_listener.dart';
 
 import 'macos_unix_listener.dart';
 
 /// Provides authenticated local Unix-domain IPC on macOS.
 ///
-/// Prepares a stable socket endpoint inside the exclusively owned
-/// persistence directory and restricts accepted peers to the
+/// Prepares a stable socket endpoint inside an exclusively owned
+/// communication directory and restricts accepted peers to the
 /// configured trusted operating-system owner.
 ///
-/// The caller must retain exclusive host ownership throughout
-/// endpoint preparation, execution and disposal.
+/// The caller must retain exclusive ownership of the communication
+/// scope throughout endpoint preparation, execution and disposal.
 ///
 /// Example:
 /// ```dart
@@ -25,11 +26,11 @@ import 'macos_unix_listener.dart';
 ///
 /// await listener.close();
 /// ```
-final class MacOsUnixTransport implements HostTransport {
+final class MacOsUnixTransport implements Transport {
   /// Creates a native transport without acquiring resources.
   const MacOsUnixTransport();
 
-  /// Stable endpoint filename within the persistence scope.
+  /// Stable endpoint filename within the communication scope.
   static const String socket_filename = 'rudra-host.sock';
 
   /// Darwin sockaddr_un pathname capacity, including termination.
@@ -47,7 +48,11 @@ final class MacOsUnixTransport implements HostTransport {
   /// Opens an authenticated local host listener.
   ///
   /// [scope_directory] must identify an existing canonical private
-  /// persistence directory under exclusive host ownership.
+  /// communication directory under the caller's exclusive ownership.
+  ///
+  /// Exclusive ownership must remain established until the returned
+  /// listener and its outstanding connections have been disposed of.
+  ///
   /// [os_user_id] identifies the trusted owner authorized to connect.
   ///
   /// Returns a bound listener.
@@ -58,7 +63,7 @@ final class MacOsUnixTransport implements HostTransport {
   ///
   /// Native socket failures propagate to the caller.
   @override
-  Future<HostListener> listen({
+  Future<TransportListener> listen({
     required String scope_directory,
     required String os_user_id,
   }) async {
@@ -145,8 +150,9 @@ final class MacOsUnixTransport implements HostTransport {
       existing.done.ignore();
       existing.destroy();
 
-      // A reachable endpoint must never be displaced, even if
-      // the caller currently holds the cooperative host lock.
+      // Exclusive scope ownership alone does not establish that an
+      // existing endpoint is abandoned. Preserve reachable endpoints
+      // to avoid disrupting an active communication listener.
       throw FileSystemException(
         'Host socket endpoint is already listening.',
         socket_path,

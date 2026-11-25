@@ -1,0 +1,10 @@
+name: rudra_communication
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dev_dependencies:
+  test: ^1.33.0

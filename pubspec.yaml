@@ -10,3 +10,4 @@ workspace:
   - packages/targets/macos
   - packages/persistence/sqlite
   - packages/host/macos
+  - packages/communication

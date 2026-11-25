@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import '../platform/contracts/host_connection.dart';
-import '../platform/contracts/host_listener.dart';
+import '../transport/contracts/transport_connection.dart';
+import '../transport/contracts/transport_listener.dart';
 
-/// Coordinates concurrent connections during a host lifecycle.
+/// Coordinates concurrent connections during a communication lifecycle.
 ///
 /// Accepts authenticated connections from a configured listener
 /// and executes each connection handler independently.
@@ -13,7 +13,7 @@ import '../platform/contracts/host_listener.dart';
 ///
 /// Example:
 /// ```dart
-/// const service = HostConnectionService();
+/// const service = ConnectionService();
 ///
 /// await service.run(
 ///   listener: listener,
@@ -21,9 +21,9 @@ import '../platform/contracts/host_listener.dart';
 ///   handle_connection: handle_connection,
 /// );
 /// ```
-final class HostConnectionService {
+final class ConnectionService {
   /// Creates a portable connection lifecycle coordinator.
-  const HostConnectionService();
+  const ConnectionService();
 
   /// Executes authenticated sessions until shutdown.
   ///
@@ -40,15 +40,15 @@ final class HostConnectionService {
   /// Startup, listener and resource disposal failures propagate.
   /// Individual handler failures remain isolated to their sessions.
   Future<void> run({
-    required HostListener listener,
+    required TransportListener listener,
     required Future<void> shutdown,
-    required Future<void> Function(HostConnection) handle_connection,
+    required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function()? on_startup,
   }) async {
     final failure = Completer<void>();
     final active = <Future<void>>{};
 
-    StreamSubscription<HostConnection>? subscription;
+    StreamSubscription<TransportConnection>? subscription;
 
     var stopping = false;
 
@@ -137,8 +137,8 @@ final class HostConnectionService {
   ///
   /// Connection disposal failures propagate to the coordinator.
   Future<void> _serve_connection(
-    HostConnection connection,
-    Future<void> Function(HostConnection) handler,
+    TransportConnection connection,
+    Future<void> Function(TransportConnection) handler,
   ) async {
     try {
       await handler(connection);

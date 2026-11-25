@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 
 /// Provides an isolated transport for host composition tests.
 ///
@@ -18,7 +18,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 ///
 /// await listener.close();
 /// ```
-final class TestHostTransport implements HostTransport {
+final class TestHostTransport implements Transport {
   /// Creates an initially inactive transport fixture.
   TestHostTransport();
 
@@ -35,13 +35,13 @@ final class TestHostTransport implements HostTransport {
   ///
   /// Returns an idle listener with no incoming connections.
   @override
-  Future<HostListener> listen({
+  Future<TransportListener> listen({
     required String scope_directory,
     required String os_user_id,
   }) async {
     listen_count++;
 
-    return _TestHostListener(() {
+    return _TestTransportListener(() {
       close_count++;
     });
   }
@@ -51,26 +51,26 @@ final class TestHostTransport implements HostTransport {
 ///
 /// Example:
 /// ```dart
-/// final listener = _TestHostListener(() {});
+/// final listener = _TestTransportListener(() {});
 /// await listener.close();
 /// ```
-final class _TestHostListener implements HostListener {
+final class _TestTransportListener implements TransportListener {
   /// Creates a listener with its disposal callback.
-  _TestHostListener(this._on_close);
+  _TestTransportListener(this._on_close);
 
   /// Callback recording listener disposal.
   final void Function() _on_close;
 
   /// Controlled connection stream without native resources.
-  final StreamController<HostConnection> _controller =
-      StreamController<HostConnection>.broadcast();
+  final StreamController<TransportConnection> _controller =
+      StreamController<TransportConnection>.broadcast();
 
   /// Retained result of listener disposal.
   Future<void>? _closing;
 
   /// Exposes the controlled test connection stream.
   @override
-  Stream<HostConnection> get connections => _controller.stream;
+  Stream<TransportConnection> get connections => _controller.stream;
 
   /// Disposes of the controlled listener exactly once.
   @override

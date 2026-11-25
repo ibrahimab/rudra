@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
-/// Represents an authenticated bidirectional host connection.
+/// Represents an authenticated bidirectional transport connection.
 ///
 /// Exposes the operating-system identity established by the native
 /// transport and an ordered stream of incoming bytes.
 ///
-/// Stream events are transport chunks rather than application
-/// messages. Application protocols must define their own framing.
+/// Stream events represent transport chunks rather than application
+/// messages. Higher-level protocols define message boundaries.
 ///
 /// Example:
 /// ```dart
@@ -14,13 +14,13 @@ import 'dart:typed_data';
 ///   await connection.send(bytes);
 /// }
 /// ```
-abstract interface class HostConnection {
+abstract interface class TransportConnection {
   /// Trusted operating-system identity of the remote peer.
   String get os_user_id;
 
   /// Single-subscription stream of incoming transport bytes.
   ///
-  /// The stream completes when the connection closes.
+  /// Completes when the connection closes.
   /// Transport failures may be delivered as stream errors.
   Stream<Uint8List> get incoming;
 

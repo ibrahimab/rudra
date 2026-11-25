@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:rudra_host_macos/rudra_host_macos.dart';
-import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_communication/rudra_communication.dart';
+
+import '../../../support/macos_test_identity.dart';
+
 import 'package:test/test.dart';
 
 /// Verifies authenticated local transport on macOS.
@@ -18,21 +20,18 @@ void main() {
   late Directory directory;
   late String scope;
   late String owner;
-  late HostOwnershipLease ownership;
 
   late String socket_path;
   late InternetAddress address;
 
   group('MacOsUnixTransport', () {
     setUp(() async {
+      // A newly created private directory gives each test its
+      // own exclusively controlled communication scope.
       directory = await Directory('/tmp').createTemp('rudra-transport-');
 
       scope = await directory.resolveSymbolicLinks();
-      owner = await const MacOsHostIdentity().resolve();
-
-      ownership = await const MacOsHostOwnershipProvider().acquire(
-        scope_directory: scope,
-      );
+      owner = await resolve_macos_test_identity();
 
       socket_path = '$scope/${MacOsUnixTransport.socket_filename}';
 
@@ -40,7 +39,6 @@ void main() {
     });
 
     tearDown(() async {
-      await ownership.release();
       await directory.delete(recursive: true);
     });
 
@@ -48,10 +46,8 @@ void main() {
     ///
     /// [authorized_owner] optionally overrides authorization
     /// to exercise rejection of a kernel-authenticated peer.
-    Future<HostListener> listen({String? authorized_owner}) => transport.listen(
-      scope_directory: scope,
-      os_user_id: authorized_owner ?? owner,
-    );
+    Future<TransportListener> listen({String? authorized_owner}) => transport
+        .listen(scope_directory: scope, os_user_id: authorized_owner ?? owner);
 
     /// Establishes a native client connection.
     ///
@@ -72,7 +68,9 @@ void main() {
     test('accepts multiple authenticated connections', () async {
       final listener = await listen();
 
-      final connections = StreamIterator<HostConnection>(listener.connections);
+      final connections = StreamIterator<TransportConnection>(
+        listener.connections,
+      );
 
       Socket? first_client;
       Socket? second_client;
@@ -121,7 +119,9 @@ void main() {
     test('transfers bytes in both directions', () async {
       final listener = await listen();
 
-      final connections = StreamIterator<HostConnection>(listener.connections);
+      final connections = StreamIterator<TransportConnection>(
+        listener.connections,
+      );
 
       Socket? client;
 
@@ -162,7 +162,7 @@ void main() {
     test('rejects a peer outside the authorized owner scope', () async {
       final listener = await listen(authorized_owner: 'different-owner');
 
-      final accepted = <HostConnection>[];
+      final accepted = <TransportConnection>[];
 
       final subscription = listener.connections.listen(accepted.add);
 
@@ -236,7 +236,9 @@ void main() {
     test('close terminates accepted connections', () async {
       final listener = await listen();
 
-      final connections = StreamIterator<HostConnection>(listener.connections);
+      final connections = StreamIterator<TransportConnection>(
+        listener.connections,
+      );
 
       Socket? client;
 

@@ -36,9 +36,9 @@ const int _invalid_uid = 0xffffffff;
 /// established by the kernel during Unix-domain connection
 /// establishment.
 ///
-/// The resulting identity uses the same namespace as
-/// MacOsHostIdentity, allowing host composition to compare
-/// authenticated peers against its trusted owner.
+/// The resulting identity uses the macOS effective-UID namespace,
+/// allowing consumers to compare authenticated peers against
+/// an independently established trusted owner.
 ///
 /// Socket ownership remains with the caller.
 ///

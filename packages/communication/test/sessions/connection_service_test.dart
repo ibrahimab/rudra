@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_sdk/src/host/runtime/host_connection_service.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
 /// Verifies portable host connection lifecycle coordination.
 void main() {
-  const service = HostConnectionService();
+  const service = ConnectionService();
   const operation_timeout = Duration(seconds: 5);
 
   test('executes independent sessions concurrently', () async {
@@ -129,13 +128,13 @@ void main() {
 /// listener.accept(_TestConnection());
 /// await listener.close();
 /// ```
-final class _TestListener implements HostListener {
+final class _TestListener implements TransportListener {
   /// Creates an isolated in-memory listener.
   _TestListener();
 
   /// Stream delivering controlled accepted connections.
-  final StreamController<HostConnection> _controller =
-      StreamController<HostConnection>();
+  final StreamController<TransportConnection> _controller =
+      StreamController<TransportConnection>();
 
   /// Connections retained until listener disposal.
   final Set<_TestConnection> _active = {};
@@ -145,7 +144,7 @@ final class _TestListener implements HostListener {
 
   /// Supplies the controlled connection stream.
   @override
-  Stream<HostConnection> get connections => _controller.stream;
+  Stream<TransportConnection> get connections => _controller.stream;
 
   /// Delivers [connection] as an authenticated accepted session.
   void accept(_TestConnection connection) {
@@ -182,7 +181,7 @@ final class _TestListener implements HostListener {
 /// final connection = _TestConnection();
 /// await connection.close();
 /// ```
-final class _TestConnection implements HostConnection {
+final class _TestConnection implements TransportConnection {
   /// Creates an isolated in-memory connection.
   _TestConnection();
 

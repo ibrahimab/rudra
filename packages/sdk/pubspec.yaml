@@ -7,5 +7,7 @@ environment:
 dependencies:
   rudra_target_contracts:
     path: ../targets/contracts
+  rudra_communication:
+    path: ../communication
 dev_dependencies:
   test: ^1.33.0

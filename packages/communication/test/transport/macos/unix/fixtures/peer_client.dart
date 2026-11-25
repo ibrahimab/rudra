@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:rudra_host_macos/src/transports/unix/darwin_peer_credentials.dart';
+import 'package:rudra_communication/src/transport/macos/unix/darwin_peer_credentials.dart';
 
 /// Single-byte request used by the native transport fixture.
 const int _ping = 0x01;
@@ -20,7 +20,7 @@ const Duration _socket_timeout = Duration(seconds: 15);
 ///
 /// Example:
 /// ```sh
-/// dart test/transports/unix/fixtures/peer_client.dart /tmp/rudra.sock
+/// dart test/transport/macos/unix/fixtures/peer_client.dart /tmp/rudra.sock
 /// ```
 Future<void> main(List<String> arguments) async {
   final address = InternetAddress(

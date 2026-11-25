@@ -1,9 +1,6 @@
+import 'package:rudra_communication/rudra_communication.dart';
+
 import '../../workflow/application/workflow_application.dart';
-
-import '../platform/contracts/host_connection.dart';
-import '../platform/contracts/host_listener.dart';
-
-import 'host_connection_service.dart';
 
 /// Coordinates the lifecycle of a configured Rudra host.
 ///
@@ -69,9 +66,9 @@ final class RudraHost {
   /// Throws [StateError] if this host has already been executed.
   /// Startup and connection-service failures propagate.
   Future<void> run({
-    required HostListener listener,
+    required TransportListener listener,
     required Future<void> shutdown,
-    required Future<void> Function(HostConnection) handle_connection,
+    required Future<void> Function(TransportConnection) handle_connection,
     Future<void> Function(WorkflowApplication)? on_startup,
   }) async {
     if (_has_run) {
@@ -81,7 +78,7 @@ final class RudraHost {
     // Claim the lifecycle before starting asynchronous work.
     _has_run = true;
 
-    const service = HostConnectionService();
+    const service = ConnectionService();
 
     await service.run(
       listener: listener,

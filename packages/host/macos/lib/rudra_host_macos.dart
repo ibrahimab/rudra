@@ -12,6 +12,3 @@ export 'src/macos_host_shutdown.dart';
 
 /// Native macOS host ownership acquisition.
 export 'src/ownership/macos_host_ownership_provider.dart';
-
-/// Authenticated macOS Unix-domain transport.
-export 'src/transports/unix/macos_unix_transport.dart';

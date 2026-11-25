@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
+import '../../contracts/transport_connection.dart';
+import '../../contracts/transport_listener.dart';
 
 import 'darwin_peer_credentials.dart';
 import 'macos_unix_connection.dart';
@@ -8,7 +9,7 @@ import 'macos_unix_connection.dart';
 /// Owns a local Unix-domain listener and its authorized connections.
 ///
 /// Verifies each peer's native credentials before exposing the
-/// connection through the portable SDK transport contract.
+/// connection through the portable transport contract.
 ///
 /// Example:
 /// ```dart
@@ -17,7 +18,7 @@ import 'macos_unix_connection.dart';
 /// await listener.close();
 /// await subscription.cancel();
 /// ```
-final class MacOsUnixListener implements HostListener {
+final class MacOsUnixListener implements TransportListener {
   /// Takes ownership of an already bound [server].
   ///
   /// [socket_path] identifies the transport-owned endpoint.
@@ -51,15 +52,18 @@ final class MacOsUnixListener implements HostListener {
   /// Retained disposal result shared by repeated close requests.
   Future<void>? _closing;
 
-  /// Exposes authorized native connections through the SDK contract.
+  /// Exposes authenticated and authorized transport connections.
+  ///
+  /// Each emitted connection has a kernel-verified peer identity
+  /// matching the configured trusted operating-system owner.
   ///
   /// Authentication failures and unauthorized peers are disconnected
   /// without terminating the listening socket.
   @override
-  late final Stream<HostConnection> connections = _server
+  late final Stream<TransportConnection> connections = _server
       .map(_authorize)
       .where((connection) => connection != null)
-      .cast<HostConnection>();
+      .cast<TransportConnection>();
 
   /// Authenticates and authorizes an accepted [socket].
   ///
@@ -80,7 +84,8 @@ final class MacOsUnixListener implements HostListener {
     try {
       peer_owner = _credentials.read_os_user_id(socket);
     } catch (_) {
-      // Unverifiable identity must never reach the SDK.
+      // Reject unverifiable peers before exposing their connections
+      // to consumers of the authenticated connection stream.
       socket.destroy();
       return null;
     }

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
 import '../development/host_transport_probe.dart';
@@ -63,7 +64,7 @@ final class HostComposition {
   final HostOwnershipProvider ownership_provider;
 
   /// Platform transport establishing authenticated client connections.
-  final HostTransport transport;
+  final Transport transport;
 
   /// Dedicated directory containing host development persistence.
   final Directory data_directory;

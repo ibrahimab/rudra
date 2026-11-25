@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 
 /// Request byte recognized by the development transport probe.
 const int _ping = 0x01;
@@ -23,7 +23,7 @@ const int _pong = 0x02;
 /// ```dart
 /// await run_host_transport_probe(connection);
 /// ```
-Future<void> run_host_transport_probe(HostConnection connection) async {
+Future<void> run_host_transport_probe(TransportConnection connection) async {
   await for (final chunk in connection.incoming) {
     for (final byte in chunk) {
       // Interpret individual bytes rather than assuming that
