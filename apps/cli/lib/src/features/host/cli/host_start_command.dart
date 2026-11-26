@@ -39,21 +39,11 @@ final class HostStartCommand extends Command<int> {
   }) : _run_host = run_host,
        _output = output,
        _error_output = error_output {
-    argParser
-      ..addOption(
-        'data-dir',
-        help: 'Existing dedicated development persistence directory.',
-      )
-      ..addFlag(
-        'foreground',
-        negatable: false,
-        help: 'Run the host in the current process.',
-      )
-      ..addFlag(
-        'start-workflow',
-        negatable: false,
-        help: 'Explicitly start a workflow at the working directory.',
-      );
+    argParser.addFlag(
+      'foreground',
+      negatable: false,
+      help: 'Run the host in the current process.',
+    );
   }
 
   /// Application operation responsible for executing the host lifecycle.
@@ -73,41 +63,32 @@ final class HostStartCommand extends Command<int> {
   @override
   String get description => 'Start the Rudra host.';
 
-  /// Supported invocation during standalone host development.
+  /// Supported invocation for a provisioned foreground host.
   @override
-  String get invocation =>
-      'rudra host start --foreground --data-dir <directory>'
-      ' [--start-workflow]';
+  String get invocation => 'rudra host start --foreground';
 
   /// Validates and executes an explicit host start request.
   ///
   /// Returns [RudraExitCode.success] after graceful termination.
-  /// An existing workflow conflicting with explicit startup returns
-  /// [RudraExitCode.workflow_conflict].
   ///
   /// Unsupported platform configuration returns
   /// [RudraExitCode.configuration_error]. Other host execution
   /// failures return [RudraExitCode.software_error].
   ///
-  /// An occupied host persistence scope returns
+  /// An existing Rudra host for this operating-system user returns
   /// [RudraExitCode.host_conflict].
   ///
   /// Throws [UsageException] for unsupported arguments or missing
-  /// required development configuration.
+  /// foreground selection.
   @override
   Future<int> run() async {
     final options = argResults!;
-    final data_dir = options['data-dir'] as String?;
 
     if (options.rest.isNotEmpty) {
       throw UsageException(
         'Host start does not accept positional arguments.',
         usage,
       );
-    }
-
-    if (data_dir == null || data_dir.trim().isEmpty) {
-      throw UsageException('A development data directory is required.', usage);
     }
 
     // Reserve managed background startup for the process ownership
@@ -120,14 +101,10 @@ final class HostStartCommand extends Command<int> {
       );
     }
 
-    final start_workflow = options['start-workflow'] as bool;
-
     _output.writeln('Rudra Host starting');
 
     try {
       await _run_host(
-        data_directory: Directory(data_dir),
-        start_workflow: start_workflow,
         on_ready: (os_user_id, workflow) {
           // Readiness is reported only after the application has
           // completed initialization and restored committed state.
@@ -136,9 +113,7 @@ final class HostStartCommand extends Command<int> {
           if (workflow == null) {
             _output.writeln('Workflow: NONE');
           } else {
-            _output.writeln(
-              start_workflow ? 'Workflow started' : 'Workflow restored',
-            );
+            _output.writeln('Workflow restored');
 
             _output.writeln('Workflow ID: ${workflow.identity.workflow_id}');
 
@@ -150,23 +125,10 @@ final class HostStartCommand extends Command<int> {
       );
     } on HostAlreadyOwnedException catch (error) {
       _error_output.writeln(
-        'Rudra Host already running for scope: '
-        '${error.scope_directory}',
+        'Rudra Host already running for user ${error.os_user_id}.',
       );
 
       return RudraExitCode.host_conflict.value;
-    } on HostStartupWorkflowException catch (error) {
-      final outcome = error.outcome;
-
-      _error_output.writeln(error);
-
-      if (outcome is WorkflowOperationIdempotencyConflict ||
-          (outcome is WorkflowOperationResolved &&
-              outcome.resolution.state == WorkflowSubmissionState.rejected)) {
-        return RudraExitCode.workflow_conflict.value;
-      }
-
-      return RudraExitCode.software_error.value;
     } on UnsupportedError catch (error) {
       _error_output.writeln('Host unavailable: $error');
 

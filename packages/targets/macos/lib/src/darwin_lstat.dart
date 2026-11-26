@@ -16,9 +16,8 @@ const int _maximum_date_seconds =
 
 /// A native Darwin timestamp relative to the Unix epoch.
 ///
-/// [seconds] is the whole-second component. [nanoseconds]
-/// represents the fractional second and is expected to be
-/// within the range 0 through 999999999.
+/// [seconds] is the whole-second component.
+/// [nanoseconds] is the fractional component in the range 0 through 999999999.
 ///
 /// The original native precision is preserved in this object.
 /// Converting to Dart DateTime loses sub-microsecond precision.

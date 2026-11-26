@@ -58,13 +58,13 @@ typedef _ErrnoDart = Pointer<Int32> Function();
 /// ```dart
 /// final native = DarwinFlock();
 /// final descriptor = native.try_acquire(
-///   '/workspace/rudra/rudra-host.lock',
+///   '/workspace/rudra/rudra.lock',
 /// );
 ///
 /// if (descriptor != null) {
 ///   native.release(
 ///     descriptor: descriptor,
-///     path: '/workspace/rudra/rudra-host.lock',
+///     path: '/workspace/rudra/rudra.lock',
 ///   );
 /// }
 /// ```

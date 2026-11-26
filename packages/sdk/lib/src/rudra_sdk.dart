@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:rudra_communication/rudra_communication.dart'
+    show ConnectionParams;
+
 import 'client/client_connection.dart';
-import 'client/contracts/client_connection_setup.dart';
 
 import 'filesystem/filesystem_service.dart';
 
@@ -18,18 +20,14 @@ import 'workflow/workflow_runtime.dart';
 /// All application operations execute through one authenticated
 /// host connection owned by this SDK.
 ///
-/// Trusted application composition supplies the selected target
-/// and configured host transport resolution capability.
+/// The selected target identifies a filesystem environment on the host.
 ///
 /// Construction retains configuration without acquiring external
 /// resources or executing application operations.
 ///
 /// Example:
 /// ```dart
-/// final sdk = RudraSdk(
-///   target_id: 'local-macos',
-///   connection_setup: resolve_host_connection,
-/// );
+/// final sdk = RudraSdk();
 ///
 /// try {
 ///   await sdk.connect();
@@ -49,10 +47,8 @@ import 'workflow/workflow_runtime.dart';
 final class RudraSdk {
   /// Creates an SDK configured for one filesystem target.
   ///
-  /// [target_id] identifies the selected filesystem environment.
-  ///
-  /// [connection_setup] resolves a configured authenticated transport
-  /// for each host connection attempt.
+  /// [target_id] identifies the selected filesystem environment. The host
+  /// validates it on application operations.
   ///
   /// [workflow_runtime] optionally supplies application messaging
   /// serialization configuration. The standard runtime is selected
@@ -66,8 +62,7 @@ final class RudraSdk {
   ///
   /// Construction does not acquire external resources.
   RudraSdk({
-    required this.target_id,
-    required ClientConnectionSetup connection_setup,
+    this.target_id = local_macos_target_id,
     WorkflowRuntime? workflow_runtime,
     ClientCommunicationFactory? communication_factory,
   }) {
@@ -80,7 +75,6 @@ final class RudraSdk {
     }
 
     _connection = ClientConnection(
-      setup: connection_setup,
       runtime: workflow_runtime ?? WorkflowRuntime.standard(),
       communication_factory: communication_factory,
       register_handlers: _state_observer.register_handlers,
@@ -126,7 +120,8 @@ final class RudraSdk {
   /// Whether owned communication resources have been released.
   bool get resources_released => _connection.resources_released;
 
-  /// Establishes the configured authenticated host connection.
+  /// Establishes an authenticated host connection using [params].
+  /// Omitting parameters selects the native local transport.
   ///
   /// Returns after successful connection establishment.
   ///
@@ -135,11 +130,23 @@ final class RudraSdk {
   ///
   /// Configuration, authentication and connection failures propagate.
   /// Connecting does not start or install a host service.
-  Future<void> connect() async {
-    await _connection.connect();
+  ///
+  /// Example:
+  /// ```dart
+  /// await sdk.connect(const ConnectionParams(
+  ///   transport: MacOsUnixTransport(socket_path: '/private/tmp/example/rudra.sock'),
+  /// ));
+  /// ```
+  Future<void> connect([
+    ConnectionParams params = const ConnectionParams(),
+  ]) async {
+    await _connection.connect(params);
   }
 
   /// Replaces the current host communication lifecycle.
+  ///
+  /// Omitted [params] reuse the previous attempt's selection. An explicit
+  /// empty [ConnectionParams] restores native local connectivity.
   ///
   /// Returns after previous resources have been released and an
   /// independent authenticated connection has been established.
@@ -149,8 +156,8 @@ final class RudraSdk {
   ///
   /// Connection and resource disposal failures propagate.
   /// Previously submitted application requests are not repeated.
-  Future<void> reconnect() async {
-    await _connection.reconnect();
+  Future<void> reconnect([ConnectionParams? params]) async {
+    await _connection.reconnect(params);
   }
 
   /// Reads the latest verified composite application state.
@@ -243,3 +250,6 @@ final class RudraSdk {
     _state_observer.close();
   }
 }
+
+/// Host-validated identity of Rudra's local macOS filesystem target.
+const local_macos_target_id = 'local-macos';

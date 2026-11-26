@@ -30,24 +30,17 @@ void main() {
     final composition = HostComposition(
       identity_provider: const _TestIdentityProvider(owner),
       ownership_provider: ownership,
-      data_directory: directory,
+      resolve_database: () => File('$scope/rudra.sqlite'),
       target_id: 'local-macos',
       inspector: const UnusedTargetInspector(),
-      transport_factory: ({required scope_directory, required os_user_id}) {
-        expect(scope_directory, scope);
-        expect(os_user_id, owner);
-
-        return transport;
+      communication_factory: ({required codecs, required handlers}) {
+        return Communication(
+          listening_transports: [transport],
+          codecs: codecs,
+          handlers: handlers,
+          options: const MessageSessionOptions(request_timeout: timeout),
+        );
       },
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-              options: const MessageSessionOptions(request_timeout: timeout),
-            );
-          },
     );
 
     final shutdown = Completer<void>();
@@ -81,7 +74,7 @@ void main() {
     ]).timeout(timeout);
 
     expect(ownership.is_owned, isTrue);
-    expect(await composition.database_file.exists(), isFalse);
+    expect(await (await composition.resolve_database()).exists(), isFalse);
 
     final first_connections = <Communication>[];
     final second_connections = <Communication>[];
@@ -93,20 +86,18 @@ void main() {
     RudraSdk create_sdk(List<Communication> connections) {
       final sdk = RudraSdk(
         target_id: 'local-macos',
-        connection_setup: () => transport,
-        communication_factory:
-            ({required transport, required codecs, required handlers}) {
-              final communication = Communication(
-                transport: transport,
-                codecs: codecs,
-                handlers: handlers,
-                options: const MessageSessionOptions(request_timeout: timeout),
-              );
 
-              connections.add(communication);
+        communication_factory: ({required codecs, required handlers}) {
+          final communication = Communication(
+            codecs: codecs,
+            handlers: handlers,
+            options: const MessageSessionOptions(request_timeout: timeout),
+          );
 
-              return communication;
-            },
+          connections.add(communication);
+
+          return communication;
+        },
       );
 
       addTearDown(() => sdk.close().timeout(timeout));
@@ -120,8 +111,10 @@ void main() {
     expect(first_connections, isEmpty);
     expect(second_connections, isEmpty);
 
-    await Future.wait<void>([first.connect(), second.connect()])
-        .timeout(timeout);
+    await Future.wait<void>([
+      first.connect(ConnectionParams(transport: transport)),
+      second.connect(ConnectionParams(transport: transport)),
+    ]).timeout(timeout);
 
     expect(first.is_connected, isTrue);
     expect(second.is_connected, isTrue);
@@ -153,7 +146,7 @@ void main() {
     expect(second.is_connected, isTrue);
     expect(ownership.is_owned, isTrue);
 
-    expect(await composition.database_file.exists(), isFalse);
+    expect(await (await composition.resolve_database()).exists(), isFalse);
 
     // Host shutdown invalidates the remaining frontend connection.
     shutdown.complete();
@@ -171,7 +164,7 @@ void main() {
     expect(second_connections, hasLength(2));
     expect(second.resources_released, isTrue);
 
-    expect(await composition.database_file.exists(), isFalse);
+    expect(await (await composition.resolve_database()).exists(), isFalse);
   });
 }
 

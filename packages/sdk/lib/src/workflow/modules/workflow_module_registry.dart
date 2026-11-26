@@ -500,8 +500,9 @@ final class _ModuleRegistration implements WorkflowModuleRegistration {
   /// Stages a typed domain-state slice identity.
   ///
   /// [T] identifies the concrete [WorkflowSlice] contract owned
-  /// by the contributing module. [key] provides its stable identifier
-  /// and retains the declared type for subsequent validation.
+  /// by the contributing module.
+  /// [key] provides the stable identifier and retains the declared type
+  /// for subsequent validation.
   ///
   /// The enclosing registry rejects duplicate identifiers, duplicate
   /// concrete types, and keys declared for the base [WorkflowSlice].

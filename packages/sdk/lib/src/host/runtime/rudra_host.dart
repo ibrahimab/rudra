@@ -20,18 +20,15 @@ import '../../filesystem/messaging/list/filesystem_list_handlers.dart';
 /// Creates a substitute communication subsystem using host-owned
 /// application messaging configuration.
 ///
-/// [transport] supplies configured authenticated connectivity.
-///
-/// [codecs] and [handlers] contain the validated, frozen application
-/// registrations assembled by the host.
+/// [codecs] contains the frozen application message codecs.
+/// [handlers] contains the frozen application request handlers.
 ///
 /// Returns an unused communication instance retaining the supplied
-/// transport and registries. Its execution lifecycle transfers
+/// registries. Its execution lifecycle transfers
 /// to the host.
 ///
 /// The factory must not bind endpoints or execute application handlers.
 typedef HostCommunicationFactory = Communication Function({
-  required Transport transport,
   required MessageCodecRegistry codecs,
   required RequestHandlerRegistry handlers,
 });
@@ -53,7 +50,6 @@ typedef HostCommunicationFactory = Communication Function({
 ///   application: application,
 ///   filesystem_application: filesystem_application,
 ///   validate_start: validate_target_root,
-///   transport: transport,
 /// );
 ///
 /// await host.run(shutdown: shutdown.future);
@@ -63,9 +59,6 @@ final class RudraHost {
   ///
   /// [validate_start] supplies trusted target-specific validation
   /// for workflow establishment requests.
-  ///
-  /// [transport] supplies configured authenticated endpoint
-  /// establishment for this host lifecycle.
   ///
   /// [communication_factory] optionally substitutes the default
   /// communication implementation using the host-owned registries.
@@ -82,7 +75,6 @@ final class RudraHost {
     required WorkflowApplication application,
     required FilesystemApplication filesystem_application,
     required WorkflowStartValidator validate_start,
-    required Transport transport,
     HostCommunicationFactory? communication_factory,
   }) {
     // Use the same immutable runtime for execution and state codecs.
@@ -126,16 +118,8 @@ final class RudraHost {
     handlers.freeze(codecs: codecs);
 
     final communication = communication_factory == null
-        ? Communication(
-            transport: transport,
-            codecs: codecs,
-            handlers: handlers,
-          )
-        : communication_factory(
-            transport: transport,
-            codecs: codecs,
-            handlers: handlers,
-          );
+        ? Communication(codecs: codecs, handlers: handlers)
+        : communication_factory(codecs: codecs, handlers: handlers);
 
     return RudraHost._(
       application: application,

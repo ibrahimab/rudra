@@ -50,26 +50,19 @@ void main() {
     final composition = HostComposition(
       identity_provider: const _IdentityProvider(owner),
       ownership_provider: ownership,
-      data_directory: directory,
+      resolve_database: () => File('$scope/rudra.sqlite'),
       target_id: target_id,
       inspector: const UnusedTargetInspector(),
-      transport_factory: ({required scope_directory, required os_user_id}) {
-        expect(scope_directory, scope);
-        expect(os_user_id, owner);
+      communication_factory: ({required codecs, required handlers}) {
+        expect(codecs.is_frozen, isTrue);
+        expect(handlers.is_frozen, isTrue);
 
-        return transport;
+        return Communication(
+          listening_transports: [transport],
+          codecs: codecs,
+          handlers: handlers,
+        );
       },
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            expect(codecs.is_frozen, isTrue);
-            expect(handlers.is_frozen, isTrue);
-
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-            );
-          },
     );
 
     final running = composition.run(
@@ -106,12 +99,13 @@ void main() {
     // The client assembles its own codec configuration independently.
     // It receives no access to the host's application or persistence.
     final communication = Communication(
-      transport: transport,
       codecs: create_application_message_codecs(),
       options: const MessageSessionOptions(request_timeout: operation_timeout),
     );
 
-    final session = await communication.connect();
+    final session = await communication.connect(
+      ConnectionParams(transport: transport),
+    );
 
     addTearDown(() async {
       try {
@@ -132,13 +126,19 @@ void main() {
     test('State Read restores absence without initializing SQLite', () async {
       final fixture = await create_session();
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
 
       final response = await fixture.session.request(const StateReadRequest());
 
       expect(response.state.workflows.current_workflow, isNull);
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
     });
 
     test('unknown submission query does not initialize SQLite', () async {
@@ -155,7 +155,10 @@ void main() {
 
       expect(response.resolution, isNull);
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
     });
   });
 
@@ -358,7 +361,10 @@ void main() {
           WorkflowRejectionCode.workflow_not_active,
         );
 
-        expect(await fixture.composition.database_file.exists(), isTrue);
+        expect(
+          await (await fixture.composition.resolve_database()).exists(),
+          isTrue,
+        );
 
         final queried = await fixture.session.request(
           WorkflowSubmissionRequest(receipt: rejected.receipt),
@@ -467,7 +473,10 @@ void main() {
         throwsA(_handler_failure()),
       );
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
 
       // The invalid request must not reserve its operation key
       // or terminate the authenticated communication session.
@@ -496,7 +505,10 @@ void main() {
         throwsA(_handler_failure()),
       );
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
 
       final state = await fixture.session.request(const StateReadRequest());
 
@@ -534,7 +546,10 @@ void main() {
         );
       }
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
     });
   });
 }

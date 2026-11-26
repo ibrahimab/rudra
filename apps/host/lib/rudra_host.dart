@@ -11,7 +11,9 @@
 /// ```dart
 /// import 'package:rudra_host/rudra_host.dart';
 ///
-/// final HostRunOperation run_host = run_local_host;
+/// await run_local_host(
+///   on_ready: (owner, workflow) => print('Ready for $owner'),
+/// );
 /// ```
 library;
 

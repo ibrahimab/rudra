@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:rudra_host_macos/rudra_host_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:rudra_target_macos/rudra_target_macos.dart';
-import 'package:rudra_communication/rudra_communication.dart';
 
 import 'host_composition.dart';
 
@@ -19,22 +18,17 @@ typedef HostReadyCallback = void Function(
 
 /// Executes a configured local host lifecycle.
 ///
-/// The operation retains application resources until shutdown.
-/// Callers supply configuration and receive startup confirmation
-/// through the readiness callback.
+/// [on_ready] receives the verified owner and current workflow.
+///
+/// The operation retains ownership and application resources until shutdown.
 typedef HostRunOperation = Future<void> Function({
-  required Directory data_directory,
-  required bool start_workflow,
   required HostReadyCallback on_ready,
 });
 
 /// Composes and runs the host for the current operating system.
 ///
-/// [data_directory] identifies an existing, dedicated development
-/// persistence directory.
-///
-/// [start_workflow] explicitly requests workflow establishment
-/// at the current absolute working directory.
+/// Resolves the provisioned machine-wide database and per-user ownership
+/// through native capabilities. Communication selects the native endpoint.
 ///
 /// [on_ready] receives verified application state after startup
 /// operations have completed.
@@ -48,19 +42,13 @@ typedef HostRunOperation = Future<void> Function({
 /// Example:
 /// ```dart
 /// await run_local_host(
-///   data_directory: development_directory,
-///   start_workflow: false,
 ///   on_ready: (os_user_id, workflow) {
 ///     print(os_user_id);
 ///     print(workflow?.identity.workflow_id);
 ///   },
 /// );
 /// ```
-Future<void> run_local_host({
-  required Directory data_directory,
-  required bool start_workflow,
-  required HostReadyCallback on_ready,
-}) async {
+Future<void> run_local_host({required HostReadyCallback on_ready}) async {
   // Select native implementations at the application composition
   // boundary, preserving the SDK runtime's platform independence.
   if (!Platform.isMacOS) {
@@ -72,32 +60,17 @@ Future<void> run_local_host({
   final composition = HostComposition(
     identity_provider: const MacOsHostIdentity(),
     ownership_provider: const MacOsHostOwnershipProvider(),
-    data_directory: data_directory,
-    target_id: 'local-macos',
+    resolve_database: const MacOsHostStorage().resolve,
+    require_existing_wal: true,
+    target_id: local_macos_target_id,
     inspector: MacOsTargetInspector(),
-    transport_factory: ({required scope_directory, required os_user_id}) {
-      return MacOsUnixTransport(
-        scope_directory: scope_directory,
-        os_user_id: os_user_id,
-      );
-    },
   );
-
-  // Only an explicitly requested development operation may
-  // establish a workflow during host initialization.
-  final startup_root = start_workflow
-      ? TargetPath(Directory.current.absolute.path)
-      : null;
 
   const lifecycle = MacOsHostShutdown();
 
   // Establish termination handling before acquiring persistence
   // resources so shutdown remains coordinated during initialization.
   await lifecycle.run((shutdown) async {
-    await composition.run(
-      shutdown: shutdown,
-      startup_root: startup_root,
-      on_ready: on_ready,
-    );
+    await composition.run(shutdown: shutdown, on_ready: on_ready);
   });
 }

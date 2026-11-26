@@ -355,7 +355,7 @@ void main() {
 
     await fixture.start_host();
 
-    await requester.reconnect();
+    await requester.reconnect(ConnectionParams(transport: fixture.transport));
 
     expect(requester.workflows, same(workflows));
 
@@ -401,7 +401,7 @@ void main() {
     await fixture.stop_host();
     await fixture.start_host();
 
-    await sdk.reconnect();
+    await sdk.reconnect(ConnectionParams(transport: fixture.transport));
 
     final recovered = await sdk.workflows.status_for(started.receipt);
 
@@ -536,9 +536,8 @@ final class _HostFixture {
   Completer<void>? _shutdown;
 
   /// Durable database retained across host recreation.
-  File get database_file => File.fromUri(
-    Directory(scope).uri.resolve(HostComposition.database_filename),
-  );
+  File get database_file =>
+      File.fromUri(Directory(scope).uri.resolve('rudra.sqlite'));
 
   /// Original absolute target-native workflow root.
   TargetPath get root => TargetPath(scope);
@@ -578,24 +577,17 @@ final class _HostFixture {
     final composition = HostComposition(
       identity_provider: const _TestIdentityProvider(owner),
       ownership_provider: _ownership,
-      data_directory: directory,
+      resolve_database: () => File('$scope/rudra.sqlite'),
       target_id: target_id,
       inspector: const UnusedTargetInspector(),
-      transport_factory: ({required scope_directory, required os_user_id}) {
-        expect(scope_directory, scope);
-        expect(os_user_id, owner);
-
-        return transport;
+      communication_factory: ({required codecs, required handlers}) {
+        return Communication(
+          listening_transports: [transport],
+          codecs: codecs,
+          handlers: handlers,
+          options: const MessageSessionOptions(request_timeout: timeout),
+        );
       },
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-              options: const MessageSessionOptions(request_timeout: timeout),
-            );
-          },
     );
 
     final shutdown = Completer<void>();
@@ -634,21 +626,19 @@ final class _HostFixture {
   Future<RudraSdk> connect() async {
     final sdk = RudraSdk(
       target_id: target_id,
-      connection_setup: () => transport,
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-              options: const MessageSessionOptions(request_timeout: timeout),
-            );
-          },
+
+      communication_factory: ({required codecs, required handlers}) {
+        return Communication(
+          codecs: codecs,
+          handlers: handlers,
+          options: const MessageSessionOptions(request_timeout: timeout),
+        );
+      },
     );
 
     _clients.add(sdk);
 
-    await sdk.connect().timeout(timeout);
+    await sdk.connect(ConnectionParams(transport: transport)).timeout(timeout);
 
     return sdk;
   }

@@ -57,12 +57,18 @@ void main() {
       expect(inspector.inspection_count, observation_count);
       expect(inspector.release_count, 1);
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
 
       final state = await sdk.read_state();
 
       expect(state.workflows.current_workflow, isNull);
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
     },
   );
 
@@ -104,7 +110,10 @@ void main() {
       expect(inspector.inspection_count, observation_count);
       expect(inspector.release_count, 1);
 
-      expect(await fixture.composition.database_file.exists(), isFalse);
+      expect(
+        await (await fixture.composition.resolve_database()).exists(),
+        isFalse,
+      );
     },
   );
 
@@ -207,7 +216,10 @@ void main() {
     expect(inspector.enumeration_count, 0);
     expect(inspector.inspection_count, 0);
 
-    expect(await fixture.composition.database_file.exists(), isFalse);
+    expect(
+      await (await fixture.composition.resolve_database()).exists(),
+      isFalse,
+    );
   });
 
   test(
@@ -293,7 +305,10 @@ void main() {
 
     expect(entries['$root/child']!.kind, FilesystemEntryKind.directory);
 
-    expect(await fixture.composition.database_file.exists(), isFalse);
+    expect(
+      await (await fixture.composition.resolve_database()).exists(),
+      isFalse,
+    );
   }, skip: !Platform.isMacOS);
 }
 
@@ -346,24 +361,17 @@ final class _HostFixture {
     final composition = HostComposition(
       identity_provider: const _IdentityProvider(),
       ownership_provider: ownership,
-      data_directory: directory,
+      resolve_database: () => File('$scope/rudra.sqlite'),
       target_id: target_id,
       inspector: inspector,
-      transport_factory: ({required scope_directory, required os_user_id}) {
-        expect(scope_directory, scope);
-        expect(os_user_id, owner);
-
-        return transport;
+      communication_factory: ({required codecs, required handlers}) {
+        return Communication(
+          listening_transports: [transport],
+          codecs: codecs,
+          handlers: handlers,
+          options: const MessageSessionOptions(request_timeout: timeout),
+        );
       },
-      communication_factory:
-          ({required codecs, required handlers, required transport}) {
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-              options: const MessageSessionOptions(request_timeout: timeout),
-            );
-          },
     );
 
     final shutdown = Completer<void>();
@@ -409,21 +417,19 @@ final class _HostFixture {
   Future<RudraSdk> connect({String target_id = _HostFixture.target_id}) async {
     final sdk = RudraSdk(
       target_id: target_id,
-      connection_setup: () => transport,
-      communication_factory:
-          ({required codecs, required handlers, required transport}) {
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-              options: const MessageSessionOptions(request_timeout: timeout),
-            );
-          },
+
+      communication_factory: ({required codecs, required handlers}) {
+        return Communication(
+          codecs: codecs,
+          handlers: handlers,
+          options: const MessageSessionOptions(request_timeout: timeout),
+        );
+      },
     );
 
     addTearDown(() => sdk.close().timeout(timeout));
 
-    await sdk.connect().timeout(timeout);
+    await sdk.connect(ConnectionParams(transport: transport)).timeout(timeout);
 
     return sdk;
   }

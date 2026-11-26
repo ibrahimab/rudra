@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:rudra_cli/src/features/explorer/application/explorer_controller.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../../support/cli_host_fixture.dart';
 
 /// Verifies read-only CLI navigation through the public SDK.
 ///
@@ -32,7 +35,7 @@ void main() {
         entries: _entry_map(entries),
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       expect(controller.model, isNull);
       expect(inspector.listed_directories, isEmpty);
@@ -79,7 +82,7 @@ void main() {
         entries: _entry_map([first, second]),
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       await controller.start();
 
@@ -107,7 +110,7 @@ void main() {
         entries: _entry_map([apps, main_file]),
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       await controller.start();
 
@@ -150,7 +153,7 @@ void main() {
         entries: _entry_map([file, link]),
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       final initial = await controller.start();
 
@@ -177,7 +180,7 @@ void main() {
     test('handles an empty directory without selection', () async {
       final inspector = _ExplorerInspector();
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       final model = await controller.start();
 
@@ -212,7 +215,7 @@ void main() {
         },
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       final model = await controller.start();
 
@@ -245,13 +248,22 @@ void main() {
         entries: _entry_map([apps]),
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       final before = await controller.start();
 
       inspector.unexpected_directory = '/fixture/apps';
 
-      await expectLater(controller.open_selected(), throwsA(isA<StateError>()));
+      await expectLater(
+        controller.open_selected(),
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
+      );
 
       expect(identical(controller.model, before), isTrue);
       expect(controller.model?.history, isEmpty);
@@ -268,14 +280,23 @@ void main() {
         entries: _entry_map([apps]),
       );
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       await controller.start();
       final child = await controller.open_selected();
 
       inspector.unexpected_directory = '/fixture';
 
-      await expectLater(controller.back(), throwsA(isA<StateError>()));
+      await expectLater(
+        controller.back(),
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
+      );
 
       expect(identical(controller.model, child), isTrue);
       expect(controller.model?.history, hasLength(1));
@@ -301,7 +322,7 @@ void main() {
         entries: _entry_map([directory]),
       );
 
-      final controller = _controller(inspector, root: root);
+      final controller = await _controller(inspector, root: root);
 
       await controller.start();
       final child = await controller.open_selected();
@@ -319,13 +340,13 @@ void main() {
 
       final inspector = _ExplorerInspector(inspection_gate: gate);
 
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       final pending_start = controller.start();
 
       expect(controller.is_loading, isTrue);
 
-      await expectLater(controller.start(), throwsA(isA<StateError>()));
+      await expectLater(controller.start(), throwsStateError);
 
       expect(() => controller.move_selection(1), throwsStateError);
 
@@ -341,7 +362,7 @@ void main() {
 
     test('quit closes interaction without filesystem changes', () async {
       final inspector = _ExplorerInspector();
-      final controller = _controller(inspector);
+      final controller = await _controller(inspector);
 
       expect(() => controller.move_selection(1), throwsStateError);
 
@@ -378,14 +399,16 @@ Map<String, FilesystemEntry> _entry_map(List<FilesystemEntry> entries) {
 }
 
 /// Creates an explorer with an isolated SDK instance.
-ExplorerController _controller(
+Future<ExplorerController> _controller(
   TargetInspector inspector, {
   String root = '/fixture',
-}) {
-  return ExplorerController(
-    sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
-    starting_directory: TargetPath(root),
-  );
+}) async {
+  final fixture = CliHostFixture(inspector: inspector);
+  final client = fixture.composition();
+  final sdk = await client.connect();
+  addTearDown(sdk.close);
+
+  return ExplorerController(sdk: sdk, starting_directory: TargetPath(root));
 }
 
 /// A deterministic read-only inspector for explorer tests.

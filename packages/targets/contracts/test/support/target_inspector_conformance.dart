@@ -12,7 +12,7 @@ import 'package:test/test.dart';
 /// The root directory must contain exactly the four named children.
 /// The child directory must be empty.
 ///
-/// [directory_symbolic_link] must point to [child_directory].
+/// [directory_symbolic_link] must point to the fixture child directory.
 /// [dangling_symbolic_link] must point to a nonexistent destination.
 ///
 /// The two stored symbolic-link destinations must be relative paths.

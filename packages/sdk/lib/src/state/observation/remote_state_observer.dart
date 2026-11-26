@@ -111,7 +111,8 @@ final class RemoteStateObserver {
 
   /// Invalidates observation associated with the supplied [session].
   ///
-  /// [error] and [stack_trace] describe the lost communication boundary.
+  /// [error] describes why communication became unavailable.
+  /// [stack_trace] preserves the diagnostic stack.
   /// Outstanding local observation terminates with this failure.
   ///
   /// Notifications belonging to previously replaced sessions are ignored.
@@ -720,7 +721,8 @@ final class _LatestListener<T extends Object> {
 
   /// Terminates this listener.
   ///
-  /// [error] and [stack_trace] optionally describe terminal failure.
+  /// [error] optionally describes terminal failure.
+  /// [stack_trace] optionally preserves the failure stack.
   ///
   /// Failed observation discards pending state. Normal completion may
   /// deliver its final pending value before closing.

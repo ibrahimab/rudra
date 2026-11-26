@@ -915,8 +915,9 @@ final class _ExecutionFixture {
 
   /// Overlaps two identified Start operations.
   ///
-  /// [first_key] identifies the first operation. [second_key] and
-  /// [second_root] identify the overlapping operation.
+  /// [first_key] identifies the first operation.
+  /// [second_key] identifies the overlapping operation.
+  /// [second_root] supplies the root of the overlapping Start.
   ///
   /// The first operation is held during identity proposal while the
   /// second command is durably accepted. Both high-level executions

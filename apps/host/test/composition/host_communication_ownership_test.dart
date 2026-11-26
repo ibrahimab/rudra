@@ -39,19 +39,13 @@ void main() {
   /// Returns a composition sharing the fixture's exclusive ownership
   /// provider and isolated persistence directory.
   HostComposition create_composition(
-    Transport transport,
     HostCommunicationFactory communication_factory,
   ) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: ownership,
-    data_directory: directory,
+    resolve_database: () => File('${directory.path}/rudra.sqlite'),
     target_id: 'test-target',
     inspector: const UnusedTargetInspector(),
-    transport_factory: ({required scope_directory, required os_user_id}) {
-      expect(ownership.is_owned, isTrue);
-
-      return transport;
-    },
     communication_factory: communication_factory,
   );
 
@@ -65,13 +59,12 @@ void main() {
 
     late final Communication communication;
 
-    final composition = create_composition(transport, ({
-      required transport,
+    final composition = create_composition(({
       required codecs,
       required handlers,
     }) {
       communication = Communication(
-        transport: transport,
+        listening_transports: [transport],
         codecs: codecs,
         handlers: handlers,
       );
@@ -92,7 +85,7 @@ void main() {
     expect(communication.resources_released, isTrue);
     expect(ownership.is_owned, isFalse);
     expect(ownership.release_count, 1);
-    expect(await composition.database_file.exists(), isFalse);
+    expect(await (await composition.resolve_database()).exists(), isFalse);
   });
 
   test('failed communication disposal retains exclusive ownership', () async {
@@ -108,13 +101,12 @@ void main() {
 
     late final Communication communication;
 
-    final composition = create_composition(transport, ({
-      required transport,
+    final composition = create_composition(({
       required codecs,
       required handlers,
     }) {
       communication = Communication(
-        transport: transport,
+        listening_transports: [transport],
         codecs: codecs,
         handlers: handlers,
       );
@@ -135,13 +127,11 @@ void main() {
     final competing_transport = TestHostTransport();
 
     final competing = create_composition(
-      competing_transport,
-      ({required transport, required codecs, required handlers}) =>
-          Communication(
-            transport: transport,
-            codecs: codecs,
-            handlers: handlers,
-          ),
+      ({required codecs, required handlers}) => Communication(
+        listening_transports: [competing_transport],
+        codecs: codecs,
+        handlers: handlers,
+      ),
     );
 
     // Unconfirmed communication disposal must prevent a competing

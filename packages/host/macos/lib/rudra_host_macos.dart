@@ -12,3 +12,6 @@ export 'src/macos_host_shutdown.dart';
 
 /// Native macOS host ownership acquisition.
 export 'src/ownership/macos_host_ownership_provider.dart';
+
+/// Native machine-wide storage provisioning validation.
+export 'src/macos_host_storage.dart';

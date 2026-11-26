@@ -36,7 +36,8 @@ enum WorkflowRejectionCode {
 ///
 /// The persistence adapter resolves this reference through the journal's
 /// causation identity, rather than inferring it from the current projection.
-/// [sequence] is database-global; [version] is workflow-local.
+/// [sequence] is database-global.
+/// [version] is workflow-local.
 ///
 /// Example:
 /// ```dart
@@ -51,8 +52,10 @@ enum WorkflowRejectionCode {
 final class WorkflowCommittedOutcome {
   /// Creates a validated reference to a committed outcome.
   ///
-  /// [workflow_id] identifies the affected workflow. [event_type] is its
-  /// registered outcome identifier. [version] and [sequence] must be positive.
+  /// [workflow_id] identifies the affected workflow.
+  /// [event_type] is its registered outcome identifier.
+  /// [version] is the positive workflow version.
+  /// [sequence] is the positive journal sequence.
   /// Invalid values throw [ArgumentError].
   WorkflowCommittedOutcome({
     required this.workflow_id,

@@ -182,7 +182,9 @@ The production build command is:
 
     ./rudra build
 
-Development-only tools must not become production commands accidentally.
+The build writes the executable and SQLite native library under `build/rudra-cli/bundle/`.
+Run the executable at `build/rudra-cli/bundle/bin/rudra` with the bundle intact. The build
+checks that production help excludes development commands.
 
 ### 3.8 Drift code generation and migrations
 
@@ -217,6 +219,99 @@ Dart source files belong in version control.
 Do not manually edit generated code.
 
 Neither command runs Git diff validation.
+
+### Running the macOS host
+
+The supported foreground invocation uses the platform-defined resources.
+
+```bash
+./rudra host start --foreground
+```
+
+Start the host after explicit administrator provisioning. Use a dedicated
+macOS group for authorized Rudra users and a local filesystem that supports
+SQLite WAL locking and shared memory. Provision the following entries without
+extended ACLs. Administrators control the ancestor directories of the layout.
+
+| Entry under `/Library/Application Support/Rudra` | Owner and group | Mode |
+| --- | --- | --- |
+| Application data directory | `root`, authorized Rudra group | `1770` |
+| `rudra.sqlite` | `root`, authorized Rudra group | `0660` |
+| `rudra.sqlite-wal` and `rudra.sqlite-shm` | Creating host or administrator, authorized Rudra group | `0660` |
+| `runtime/` | `root`, authorized Rudra group | `0750` |
+| `runtime/<uid>/` | Effective user identified by the numeric UID | `0700` |
+| `runtime/<uid>/rudra.sock` | Effective user, created by the listener | `0600` |
+| `runtime/<uid>/rudra.lock` | Effective user, created by ownership acquisition | `0600` |
+
+The sticky bit on the data directory prevents group members from unlinking or
+renaming administrator-owned entries such as the database and runtime parent.
+The protected runtime parent prevents users from removing each other's private
+directories. Runtime directories and the database must be real entries at the
+configured paths. The database and lock must have a single hard link.
+
+Provision a fresh SQLite file with `PRAGMA journal_mode = WAL` before assigning
+its final ownership and mode. Production startup checks the journal mode.
+The persistence adapter creates the application schema and its version together
+on the first open. Historical frontend and standalone development databases
+remain outside this layout. Ordinary startup reports missing or unsuitable
+provisioning and performs no service installation.
+
+Any preprovisioned WAL or SHM files must have the shared group and mode.
+SQLite creates absent auxiliary files on access using the database's permissions.
+Use an inherited process umask such as `0007` that preserves the group access
+needed when those files are created. The application retains WAL and SHM on
+connection close so a different account does not need to unlink another user's
+files in the sticky directory. Normal automatic checkpoints continue. Preserve
+the WAL alongside the database for recovery. Any offline maintenance of these
+files requires all hosts to be stopped and the database to be checkpointed first.
+[SQLite WAL](https://sqlite.org/wal.html) · [SQLite Unix file handling](https://sqlite.org/sqlar/doc/trunk/sqlite3.c)
+
+Run `./rudra`, `./rudra ls`, `./rudra explore`, or the workflow commands from
+another terminal under the same user. Submit workflow Start with
+`./rudra workflow start` after the host is ready. Each invocation connects to
+`runtime/<uid>/rudra.sock` and closes its SDK after the command finishes.
+An unavailable host produces a diagnostic and exit 69. A competing host exits
+75. An existing workflow can cause Start to exit 73. The lock file remains
+after shutdown and the kernel releases the held lock at process termination.
+
+#### SDK connectivity
+
+```dart
+import 'package:rudra_sdk/rudra_sdk.dart';
+
+final sdk = RudraSdk();
+try {
+  await sdk.connect();
+  final listing = await sdk.filesystem.list(directory: TargetPath('/workspace'));
+  print(listing.entries.length);
+} finally {
+  await sdk.close();
+}
+```
+
+To connect to an isolated or explicitly configured host, pass the matching
+socket path in an owned, canonical private directory.
+
+```dart
+await sdk.connect(const ConnectionParams(
+  transport: MacOsUnixTransport(socket_path: '/private/tmp/fixture/rudra.sock'),
+));
+```
+
+Trusted host composition configures enabled endpoints through Communication's
+`listening_transports`, typically using the host's `communication_factory`
+substitution for an isolated fixture. Endpoint changes preserve host ownership,
+database identity and effective-user peer verification. `sdk.reconnect()`
+reuses the last selection after confirmed disposal. Passing a new
+`ConnectionParams` replaces that selection. An empty `ConnectionParams()`
+restores native defaults. Reconnection does not repeat application requests.
+
+The native process tests use isolated paths. Multi-user permission verification
+requires two distinct macOS accounts in the authorized group and a separately
+provisioned test layout. Verify concurrent access, owned workflow restoration and
+WAL/SHM recreation under both accounts before the native multi-user gate is
+closed. Managed provisioning and launchd integration belong to 7E.
+
 
 ## 4. Naming Conventions
 
@@ -413,6 +508,9 @@ Public methods must explain:
 - Error contracts.
 - Asynchronous behavior.
 - Relevant safety guarantees.
+
+Start each parameter description on its own DartDoc line using `[parameter]`.
+Wrap longer descriptions below that line.
 
 When appropriate, include an `Example` section or DartDoc code example.
 

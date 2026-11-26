@@ -18,8 +18,11 @@ import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
 
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../../support/cli_host_fixture.dart';
 
 /// Verifies interactive Explorer orchestration.
 ///
@@ -32,7 +35,7 @@ import 'package:test/test.dart';
 void main() {
   group('ExplorerRunner', () {
     test('starts, renders, quits, and closes navigation', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/docs'],
         },
@@ -61,7 +64,7 @@ void main() {
     });
 
     test('moves selection without additional SDK requests', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/a.txt', '/root/b.txt'],
         },
@@ -86,7 +89,7 @@ void main() {
     });
 
     test('enters directories and navigates back', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/docs'],
           '/root/docs': ['/root/docs/readme.md'],
@@ -118,7 +121,7 @@ void main() {
     });
 
     test('does not navigate into files or symbolic links', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/a.txt', '/root/link'],
         },
@@ -150,7 +153,7 @@ void main() {
     test('tracks incomplete inspection across navigation', () async {
       final blocked_path = TargetPath('/root/blocked');
 
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/docs', blocked_path.value],
           '/root/docs': [],
@@ -187,7 +190,7 @@ void main() {
     test('tracks incomplete inspection discovered in a child', () async {
       final blocked_path = TargetPath('/root/docs/blocked');
 
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/docs'],
           '/root/docs': [blocked_path.value],
@@ -215,7 +218,7 @@ void main() {
     });
 
     test('handles empty directories and input EOF', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         source: const Stream<List<int>>.empty(),
@@ -236,7 +239,7 @@ void main() {
         for (final name in ['a', 'b', 'c', 'd', 'e']) '/root/$name.txt',
       ];
 
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': paths},
         entries: [
           for (final path in paths)
@@ -269,7 +272,7 @@ void main() {
     });
 
     test('adapts viewport dimensions on the next render', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/a.txt', '/root/b.txt'],
         },
@@ -298,7 +301,7 @@ void main() {
     });
 
     test('permits a zero-height entry viewport', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/a.txt'],
         },
@@ -317,7 +320,10 @@ void main() {
     });
 
     test('rejects unsupported terminals without inspection', () async {
-      final scenario = _Scenario(children: {'/root': []}, entries: []);
+      final scenario = await _Scenario.create(
+        children: {'/root': []},
+        entries: [],
+      );
 
       scenario.terminal.interactive = false;
 
@@ -330,7 +336,11 @@ void main() {
     });
 
     test('rejects initially undersized terminals', () async {
-      final scenario = _Scenario(children: {'/root': []}, entries: [], rows: 6);
+      final scenario = await _Scenario.create(
+        children: {'/root': []},
+        entries: [],
+        rows: 6,
+      );
 
       final status = await scenario.runner.run();
 
@@ -340,18 +350,30 @@ void main() {
     });
 
     test('does not enter terminal mode when startup fails', () async {
-      final scenario = _Scenario(children: {'/root': []}, entries: []);
+      final scenario = await _Scenario.create(
+        children: {'/root': []},
+        entries: [],
+      );
 
       scenario.inspector.unexpected_directory = '/root';
 
-      await expectLater(scenario.runner.run(), throwsStateError);
+      await expectLater(
+        scenario.runner.run(),
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
+      );
 
       expect(scenario.terminal.invocations, 0);
       expect(scenario.controller.model, isNull);
     });
 
     test('restores terminal after navigation failure', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/docs'],
           '/root/docs': [],
@@ -362,7 +384,16 @@ void main() {
 
       scenario.inspector.unexpected_directory = '/root/docs';
 
-      await expectLater(scenario.runner.run(), throwsStateError);
+      await expectLater(
+        scenario.runner.run(),
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
+      );
 
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.current_directory.value, '/root');
@@ -370,7 +401,10 @@ void main() {
     });
 
     test('restores terminal after rendering failure', () async {
-      final scenario = _Scenario(children: {'/root': []}, entries: []);
+      final scenario = await _Scenario.create(
+        children: {'/root': []},
+        entries: [],
+      );
 
       scenario.renderer.fail_render = true;
 
@@ -381,7 +415,7 @@ void main() {
     });
 
     test('propagates input errors after restoration', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         source: Stream<List<int>>.error(StateError('Injected input failure.')),
@@ -394,7 +428,7 @@ void main() {
     });
 
     test('does not convert signal interruption into success', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         source: Stream<List<int>>.error(
@@ -412,7 +446,7 @@ void main() {
     });
 
     test('restores terminal if it becomes too small', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/a.txt'],
         },
@@ -430,7 +464,7 @@ void main() {
     });
 
     test('rejects repeated invocations', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         keys: 'q',
@@ -445,7 +479,7 @@ void main() {
     });
 
     test('allocates viewport rows using renderer layout height', () async {
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/a.txt', '/root/b.txt', '/root/c.txt'],
         },
@@ -474,7 +508,10 @@ void main() {
     });
 
     test('rejects negative renderer height before inspection', () async {
-      final scenario = _Scenario(children: {'/root': []}, entries: []);
+      final scenario = await _Scenario.create(
+        children: {'/root': []},
+        entries: [],
+      );
 
       scenario.renderer.fixed_rows = -1;
 
@@ -506,7 +543,7 @@ void main() {
           ),
         ]);
 
-        final scenario = _Scenario(
+        final scenario = await _Scenario.create(
           children: {'/root': []},
           entries: [],
           keys: 'pPq',
@@ -530,7 +567,7 @@ void main() {
     test('ignores printable keys without registered actions', () async {
       var refreshes = 0;
 
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         keys: 'sXp?q',
@@ -564,7 +601,7 @@ void main() {
         ),
       ]);
 
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         keys: 'fq',
@@ -596,7 +633,7 @@ void main() {
         ),
       ]);
 
-      final scenario = _Scenario(
+      final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         keys: 'rq',
@@ -623,6 +660,8 @@ void main() {
 /// Action contributions are synthetic and supplied through the
 /// generic registry.
 final class _Scenario {
+  _Scenario._();
+
   /// Creates a runner scenario from deterministic inputs.
   ///
   /// [children] maps directory paths to their observed child paths.
@@ -631,7 +670,7 @@ final class _Scenario {
   ///
   /// [failures] identifies paths that produce inspection failures.
   ///
-  /// [keys] is the terminal input sequence used when [source] is null.
+  /// [keys] is the terminal input sequence used without a custom source.
   ///
   /// [source] optionally supplies a custom terminal byte stream.
   ///
@@ -641,7 +680,7 @@ final class _Scenario {
   ///
   /// [refresh_application_state] is an optional callback invoked
   /// after an action completes successfully.
-  _Scenario({
+  static Future<_Scenario> create({
     required Map<String, List<String>> children,
     required List<FilesystemEntry> entries,
     Map<String, TargetInspectionException> failures = const {},
@@ -650,31 +689,36 @@ final class _Scenario {
     int rows = 24,
     ExplorerActionRegistry? action_registry,
     Future<void> Function()? refresh_application_state,
-  }) {
-    inspector = _Inspector(
+  }) async {
+    final inspector = _Inspector(
       children: children,
       entries: {for (final entry in entries) entry.path.value: entry},
       failures: failures,
     );
 
-    terminal = _FakeTerminalHost(
-      source: source ?? Stream<List<int>>.fromIterable([ascii.encode(keys)]),
-      rows: rows,
-    );
+    final fixture = CliHostFixture(inspector: inspector);
+    final client = fixture.composition();
+    final sdk = await client.connect();
+    addTearDown(sdk.close);
 
-    renderer = _RecordingRenderer();
-    errors = StringBuffer();
+    final scenario = _Scenario._()
+      ..inspector = inspector
+      ..terminal = _FakeTerminalHost(
+        source: source ?? Stream<List<int>>.fromIterable([ascii.encode(keys)]),
+        rows: rows,
+      )
+      ..renderer = _RecordingRenderer()
+      ..errors = StringBuffer()
+      ..controller = ExplorerController(
+        sdk: sdk,
+        starting_directory: TargetPath('/root'),
+      );
 
-    controller = ExplorerController(
-      sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
-      starting_directory: TargetPath('/root'),
-    );
-
-    runner = ExplorerRunner(
-      controller: controller,
-      terminal: terminal,
-      renderer: renderer,
-      error_output: errors,
+    scenario.runner = ExplorerRunner(
+      controller: scenario.controller,
+      terminal: scenario.terminal,
+      renderer: scenario.renderer,
+      error_output: scenario.errors,
       create_view_model:
           (
             explorer, {
@@ -691,6 +735,7 @@ final class _Scenario {
       refresh_application_state: refresh_application_state,
       action_registry: action_registry,
     );
+    return scenario;
   }
 
   /// Configured in-memory filesystem inspector.

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:rudra_platform_macos/rudra_platform_macos.dart';
+
 import '../../contracts/transport.dart';
 import '../../contracts/transport_connection.dart';
 import '../../contracts/transport_listener.dart';
@@ -9,61 +11,28 @@ import 'darwin_peer_credentials.dart';
 import 'macos_unix_connection.dart';
 import 'macos_unix_listener.dart';
 
-/// Provides authenticated local Unix-domain IPC on macOS.
+/// Provides native Unix-domain IPC authenticated by Darwin peer credentials.
 ///
-/// Establishes listening endpoints inside exclusively owned
-/// communication scopes and connects to existing trusted endpoints.
+/// By default both sides use the effective user's protected runtime endpoint.
+/// An explicit path changes only the socket location.
 ///
-/// Both accepted and outbound connections verify remote operating-system
-/// identities using kernel-provided peer credentials.
-///
-/// Listener ownership remains exclusive throughout endpoint
-/// preparation, execution and disposal. Outbound connections do not
-/// acquire or modify listener ownership.
-///
-/// Example:
 /// ```dart
-/// final transport = MacOsUnixTransport(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-/// );
-///
+/// final transport = MacOsUnixTransport(socket_path: '/private/tmp/fixture/host.sock');
 /// final connection = await transport.connect();
-///
 /// await connection.close();
 /// ```
 final class MacOsUnixTransport implements Transport {
-  /// Creates a configured macOS Unix-domain transport.
+  /// Retains an optional absolute [socket_path] without touching the filesystem.
   ///
-  /// [scope_directory] identifies the trusted canonical private
-  /// directory containing the communication endpoint.
-  ///
-  /// [os_user_id] identifies the trusted operating-system owner
-  /// used to authenticate outbound peers and authorize incoming
-  /// connections.
-  ///
-  /// Construction retains configuration without accessing the
-  /// filesystem or establishing native communication resources.
-  /// Configuration is validated during endpoint establishment.
-  const MacOsUnixTransport({
-    required this.scope_directory,
-    required this.os_user_id,
-  });
+  /// An override must be in a canonical, private directory owned by the
+  /// effective UID. Both ends continue to authenticate peers as that UID.
+  const MacOsUnixTransport({this.socket_path});
 
-  /// Trusted directory containing the native communication endpoint.
-  final String scope_directory;
-
-  /// Trusted operating-system identity used for peer authentication.
-  final String os_user_id;
-
-  /// Stable endpoint filename within the communication scope.
-  static const String socket_filename = 'rudra-host.sock';
+  /// The explicitly selected endpoint, or null for native default resolution.
+  final String? socket_path;
 
   /// Darwin sockaddr_un pathname capacity, including termination.
   static const int _socket_path_capacity = 104;
-
-  /// Permission bits representing group and other access.
-  static const int _shared_permission_mask = 0x003f;
 
   /// Darwin ECONNREFUSED error code.
   static const int _connection_refused = 61;
@@ -74,77 +43,56 @@ final class MacOsUnixTransport implements Transport {
   /// Maximum duration of outbound native connection establishment.
   static const Duration _connection_timeout = Duration(seconds: 5);
 
-  /// Kernel credential reader used to authenticate outbound peers.
-  static const DarwinPeerCredentials _credentials = DarwinPeerCredentials();
-
-  /// Opens an authenticated local host listener.
+  /// Binds the configured endpoint and accepts only the effective user's peers.
   ///
-  /// The configured [scope_directory] must identify an existing
-  /// canonical private communication directory under the caller's
-  /// exclusive ownership.
-  ///
-  /// Exclusive ownership must remain established until the returned
-  /// listener and its outstanding connections have been disposed of.
-  ///
-  /// The configured [os_user_id] identifies the owner authorized
-  /// to establish incoming connections.
-  ///
-  /// Returns a bound listener.
-  ///
-  /// Throws [UnsupportedError] outside macOS, [ArgumentError]
-  /// for invalid configuration, or [FileSystemException] for
-  /// unsafe endpoint entries and directory configuration.
-  ///
-  /// Native socket failures propagate to the caller.
+  /// The caller must retain exclusive ownership until listener disposal.
   @override
   Future<TransportListener> listen() async {
     final endpoint = await _resolve_endpoint();
-
     await _prepare_endpoint(
       address: endpoint.address,
-      socket_path: endpoint.socket_path,
+      socket_path: endpoint.path,
     );
 
     final server = await ServerSocket.bind(endpoint.address, 0, shared: false);
-
-    return MacOsUnixListener(
+    final listener = MacOsUnixListener(
       server: server,
-      socket_path: endpoint.socket_path,
-      os_user_id: os_user_id,
+      socket_path: endpoint.path,
+      os_user_id: macos_user_id(endpoint.uid),
     );
+
+    try {
+      // The directory is already private during the bind-to-chmod interval.
+      final result = await Process.run('/bin/chmod', ['0600', endpoint.path]);
+      if (result.exitCode != 0) {
+        throw FileSystemException(
+          'Unable to protect the Rudra socket.',
+          endpoint.path,
+        );
+      }
+      return listener;
+    } catch (error) {
+      try {
+        await listener.close();
+      } catch (disposal_error) {
+        throw TransportDisposalException(error, disposal_error);
+      }
+      rethrow;
+    }
   }
 
-  /// Connects to the configured authenticated macOS Unix endpoint.
+  /// Connects to an existing endpoint and verifies the host's native identity.
   ///
-  /// The configured [scope_directory] identifies the trusted
-  /// canonical private directory containing the remote endpoint.
-  ///
-  /// The configured [os_user_id] identifies the expected
-  /// kernel-authenticated identity of the remote process.
-  ///
-  /// Returns an authenticated connection owned by the caller.
-  ///
-  /// Throws [UnsupportedError] outside macOS, [ArgumentError]
-  /// for invalid configuration, [FileSystemException] for absent
-  /// or unsafe endpoints, or [StateError] when peer authentication
-  /// does not establish the expected identity.
-  ///
-  /// Native connection and credential retrieval failures propagate.
-  /// Failed authentication destroys the acquired socket before
-  /// propagating the failure.
+  /// The caller owns the returned connection. Unavailable or unsafe endpoints
+  /// and mismatched peers cause explicit failure.
   @override
   Future<TransportConnection> connect() async {
     final endpoint = await _resolve_endpoint();
-
-    final type = await FileSystemEntity.type(
-      endpoint.socket_path,
-      followLinks: false,
-    );
-
+    final type = await FileSystemEntity.type(endpoint.path, followLinks: false);
     if (type != FileSystemEntityType.unixDomainSock) {
       throw FileSystemException(
         'Existing Unix socket endpoint required.',
-        endpoint.socket_path,
+        endpoint.path,
       );
     }
 
@@ -153,73 +101,37 @@ final class MacOsUnixTransport implements Transport {
       0,
       timeout: _connection_timeout,
     );
-
-    // Observe sink completion even when authentication rejects
-    // the socket before a managed connection can be constructed.
-    socket.done.ignore();
-
-    try {
-      final peer_owner = _credentials.read_os_user_id(socket);
-
-      if (peer_owner != os_user_id) {
-        throw StateError('Connected peer does not match the trusted owner.');
-      }
-
-      return MacOsUnixConnection(socket: socket, os_user_id: peer_owner);
-    } catch (_) {
-      socket.destroy();
-
-      rethrow;
-    }
+    return authenticate_macos_unix_connection(
+      socket,
+      macos_user_id(endpoint.uid),
+    );
   }
 
-  /// Resolves the configured native endpoint without modifying it.
-  ///
-  /// Validates the retained communication directory and trusted
-  /// operating-system identity.
-  ///
-  /// Returns the validated native address and filesystem pathname.
-  ///
-  /// Throws [UnsupportedError] outside macOS, [ArgumentError]
-  /// for invalid configuration, or [FileSystemException] for
-  /// missing or unsafe directory configuration and excessive
-  /// native pathname length.
-  Future<({InternetAddress address, String socket_path})>
+  /// Resolves the endpoint and validates its parent before socket operations.
+  Future<({InternetAddress address, String path, int uid})>
   _resolve_endpoint() async {
-    if (!Platform.isMacOS) {
-      throw UnsupportedError('macOS Unix transport requires macOS.');
-    }
-
-    if (os_user_id.trim().isEmpty || !scope_directory.startsWith('/')) {
-      throw ArgumentError('Invalid host transport configuration.');
-    }
-
-    final directory = Directory(scope_directory);
-    final metadata = await directory.stat();
-
-    if (metadata.type != FileSystemEntityType.directory ||
-        (metadata.mode & _shared_permission_mask) != 0) {
-      throw FileSystemException(
-        'Host transport requires a private directory.',
-        scope_directory,
+    final uid = await macos_effective_uid();
+    final path = socket_path ?? macos_default_socket_path(uid);
+    if (!path.startsWith('/') ||
+        path.endsWith('/') ||
+        path.contains('\u0000')) {
+      throw ArgumentError.value(
+        path,
+        'socket_path',
+        'Expected an absolute socket file path.',
       );
     }
 
-    final socket_path = File.fromUri(directory.uri.resolve(socket_filename))
-        .path;
-
-    // Darwin limits pathname length in bytes, not Dart string
-    // characters. Reserve one byte for native NUL termination.
-    if (utf8.encode(socket_path).length >= _socket_path_capacity) {
-      throw FileSystemException(
-        'Unix socket endpoint path is too long.',
-        socket_path,
-      );
+    // Darwin counts pathname bytes, including the native NUL terminator.
+    if (utf8.encode(path).length >= _socket_path_capacity) {
+      throw FileSystemException('Unix socket endpoint path is too long.', path);
     }
 
+    await require_macos_private_directory(File(path).parent.path, uid);
     return (
-      address: InternetAddress(socket_path, type: InternetAddressType.unix),
-      socket_path: socket_path,
+      address: InternetAddress(path, type: InternetAddressType.unix),
+      path: path,
+      uid: uid,
     );
   }
 
@@ -289,5 +201,30 @@ final class MacOsUnixTransport implements Transport {
     }
 
     await File(socket_path).delete();
+  }
+}
+
+/// Resolves the deterministic default Unix endpoint for a trusted [uid].
+String macos_default_socket_path(int uid) =>
+    '${MacOsResourceLayout.user_runtime(uid)}/${MacOsResourceLayout.socket_filename}';
+
+/// Transfers [socket] to a managed connection after native peer verification.
+///
+/// On authentication failure, destroys the acquired socket before returning.
+TransportConnection authenticate_macos_unix_connection(
+  Socket socket,
+  String expected_owner,
+) {
+  socket.done.ignore();
+
+  try {
+    final peer_owner = const DarwinPeerCredentials().read_os_user_id(socket);
+    if (peer_owner != expected_owner) {
+      throw StateError('Connected peer does not match the trusted owner.');
+    }
+    return MacOsUnixConnection(socket: socket, os_user_id: peer_owner);
+  } catch (_) {
+    socket.destroy();
+    rethrow;
   }
 }

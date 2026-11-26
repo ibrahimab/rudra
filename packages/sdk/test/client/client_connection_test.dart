@@ -29,33 +29,24 @@ void main() {
     next_connection_error = null;
 
     connection = ClientConnection(
-      setup: () {
+      runtime: WorkflowRuntime.standard(),
+      communication_factory: ({required codecs, required handlers}) {
         resolution_count++;
 
         final error = next_resolution_error;
+        if (error != null) throw error;
 
-        if (error != null) {
-          throw error;
-        }
+        expect(codecs.is_frozen, isTrue);
+        expect(handlers.is_frozen, isTrue);
 
-        return configured_transport;
+        final communication = _TestCommunication(
+          connection_error: next_connection_error,
+        );
+
+        created.add(communication);
+
+        return communication;
       },
-      runtime: WorkflowRuntime.standard(),
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            expect(codecs.is_frozen, isTrue);
-            expect(handlers.is_frozen, isTrue);
-            expect(transport, same(configured_transport));
-
-            final communication = _TestCommunication(
-              transport: transport as _TestTransport,
-              connection_error: next_connection_error,
-            );
-
-            created.add(communication);
-
-            return communication;
-          },
     );
   });
 
@@ -76,7 +67,7 @@ void main() {
   });
 
   test('establishes a connection using the resolved transport', () async {
-    await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     expect(resolution_count, 1);
     expect(created, hasLength(1));
@@ -88,39 +79,42 @@ void main() {
     expect(connection.is_connected, isTrue);
     expect(connection.resources_released, isFalse);
 
-    await expectLater(connection.connect(), throwsStateError);
+    await expectLater(
+      connection.connect(ConnectionParams(transport: configured_transport)),
+      throwsStateError,
+    );
 
     expect(created, hasLength(1));
     expect(resolution_count, 1);
   });
 
-  test(
-    'failed transport resolution acquires no communication resources',
-    () async {
-      final failure = StateError('Configured transport could not be resolved.');
+  test('failed communication construction acquires no resources', () async {
+    final failure = StateError('Configured transport could not be resolved.');
 
-      next_resolution_error = failure;
+    next_resolution_error = failure;
 
-      await expectLater(connection.connect(), throwsA(same(failure)));
+    await expectLater(
+      connection.connect(ConnectionParams(transport: configured_transport)),
+      throwsA(same(failure)),
+    );
 
-      expect(resolution_count, 1);
-      expect(created, isEmpty);
-      expect(connection.is_connected, isFalse);
-      expect(connection.resources_released, isTrue);
+    expect(resolution_count, 1);
+    expect(created, isEmpty);
+    expect(connection.is_connected, isFalse);
+    expect(connection.resources_released, isTrue);
 
-      next_resolution_error = null;
+    next_resolution_error = null;
 
-      await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
-      expect(resolution_count, 2);
-      expect(created, hasLength(1));
-      expect(created.single.transport, same(configured_transport));
-      expect(connection.is_connected, isTrue);
-    },
-  );
+    expect(resolution_count, 2);
+    expect(created, hasLength(1));
+    expect(created.single.transport, same(configured_transport));
+    expect(connection.is_connected, isTrue);
+  });
 
-  test('resolves a configured transport again during replacement', () async {
-    await connection.connect();
+  test('replaces configured transport when given new parameters', () async {
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     final previous = created.single;
     final original_transport = configured_transport;
@@ -129,7 +123,9 @@ void main() {
       os_user_id: 'replacement-owner',
     );
 
-    await connection.reconnect();
+    await connection.reconnect(
+      ConnectionParams(transport: configured_transport),
+    );
 
     expect(resolution_count, 2);
     expect(created, hasLength(2));
@@ -150,7 +146,7 @@ void main() {
   });
 
   test('replacement waits for admitted-handler draining', () async {
-    await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     final previous = created.single;
     final barrier = previous.hold_drain();
@@ -170,7 +166,10 @@ void main() {
       expect(created, hasLength(1));
       expect(resolution_count, 1);
 
-      await expectLater(connection.connect(), throwsStateError);
+      await expectLater(
+        connection.connect(ConnectionParams(transport: configured_transport)),
+        throwsStateError,
+      );
       await expectLater(connection.close(), throwsStateError);
 
       await expectLater(
@@ -193,7 +192,10 @@ void main() {
 
     next_connection_error = failure;
 
-    await expectLater(connection.connect(), throwsA(same(failure)));
+    await expectLater(
+      connection.connect(ConnectionParams(transport: configured_transport)),
+      throwsA(same(failure)),
+    );
 
     expect(connection.is_connected, isFalse);
     expect(connection.resources_released, isTrue);
@@ -203,7 +205,7 @@ void main() {
 
     next_connection_error = null;
 
-    await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     expect(created, hasLength(2));
     expect(connection.is_connected, isTrue);
@@ -216,7 +218,10 @@ void main() {
 
       next_connection_error = failure;
 
-      await expectLater(connection.connect(), throwsA(same(failure)));
+      await expectLater(
+        connection.connect(ConnectionParams(transport: configured_transport)),
+        throwsA(same(failure)),
+      );
 
       expect(created, hasLength(1));
       expect(connection.resources_released, isTrue);
@@ -234,7 +239,9 @@ void main() {
   test(
     'remote termination invalidates application request admission',
     () async {
-      await connection.connect();
+      await connection.connect(
+        ConnectionParams(transport: configured_transport),
+      );
 
       final previous = created.single;
 
@@ -258,7 +265,9 @@ void main() {
   test(
     'terminal communication failure permits replacement after disposal',
     () async {
-      await connection.connect();
+      await connection.connect(
+        ConnectionParams(transport: configured_transport),
+      );
 
       final previous = created.single;
       final failure = StateError('Transport failed.');
@@ -280,7 +289,7 @@ void main() {
   );
 
   test('unconfirmed disposal prevents replacement communication', () async {
-    await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     final previous = created.single;
 
@@ -294,13 +303,16 @@ void main() {
     expect(created, hasLength(1));
     expect(resolution_count, 1);
 
-    await expectLater(connection.connect(), throwsStateError);
+    await expectLater(
+      connection.connect(ConnectionParams(transport: configured_transport)),
+      throwsStateError,
+    );
 
     expect(created, hasLength(1));
   });
 
   test('forwards typed requests through the current connection', () async {
-    await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     final response = await connection.request(const StateReadRequest());
 
@@ -309,7 +321,7 @@ void main() {
   });
 
   test('session-bound requests cannot execute through a replacement', () async {
-    await connection.connect();
+    await connection.connect(ConnectionParams(transport: configured_transport));
 
     final original = connection.require_session();
 
@@ -339,7 +351,9 @@ void main() {
   test(
     'does not implicitly repeat unsuccessful application requests',
     () async {
-      await connection.connect();
+      await connection.connect(
+        ConnectionParams(transport: configured_transport),
+      );
 
       final previous = created.single;
       final failure = StateError('Application request failed.');
@@ -364,7 +378,9 @@ void main() {
   test(
     'closing releases communication and permanently ends connectivity',
     () async {
-      await connection.connect();
+      await connection.connect(
+        ConnectionParams(transport: configured_transport),
+      );
 
       final previous = created.single;
 
@@ -376,7 +392,10 @@ void main() {
 
       await connection.close();
 
-      await expectLater(connection.connect(), throwsStateError);
+      await expectLater(
+        connection.connect(ConnectionParams(transport: configured_transport)),
+        throwsStateError,
+      );
       await expectLater(connection.reconnect(), throwsStateError);
 
       await expectLater(
@@ -445,16 +464,15 @@ final class _TestCommunication implements Communication {
   /// connectivity configuration.
   ///
   /// [connection_error] optionally prevents session establishment.
-  _TestCommunication({required this.transport, this.connection_error})
-    : session = _TestSession(transport.os_user_id) {
+  _TestCommunication({this.connection_error}) {
     _completion.future.ignore();
   }
 
   /// Configured transport retained by this communication lifecycle.
-  final _TestTransport transport;
+  late final _TestTransport transport;
 
   /// Controlled authenticated message session.
-  final _TestSession session;
+  late final _TestSession session;
 
   /// Optional failure during connection establishment.
   final Object? connection_error;
@@ -496,12 +514,17 @@ final class _TestCommunication implements Communication {
   /// Returns the configured session or propagates [connection_error].
   /// Throws [StateError] for repeated execution.
   @override
-  Future<MessageSession> connect() async {
+  Future<MessageSession> connect([
+    ConnectionParams params = const ConnectionParams(),
+  ]) async {
     if (_started) {
       throw StateError('Test communication already executed.');
     }
 
     _started = true;
+
+    transport = params.transport! as _TestTransport;
+    session = _TestSession(transport.os_user_id);
 
     final error = connection_error;
 
@@ -534,7 +557,8 @@ final class _TestCommunication implements Communication {
 
   /// Completes the owning lifecycle after any draining barrier.
   ///
-  /// [error] and [stack_trace] preserve terminal execution failure.
+  /// [error] identifies the terminal execution failure.
+  /// [stack_trace] preserves the failure stack.
   /// Disposal failure takes precedence over execution failure.
   Future<void> _finish([Object? error, StackTrace? stack_trace]) async {
     await _drain_barrier?.future;

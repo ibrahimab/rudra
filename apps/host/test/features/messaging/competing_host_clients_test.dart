@@ -613,7 +613,12 @@ final class _HostFixture {
         target_id: target_id,
         inspector: const UnusedTargetInspector(),
       ),
-      transport: transport,
+      communication_factory: ({required codecs, required handlers}) =>
+          Communication(
+            listening_transports: [transport],
+            codecs: codecs,
+            handlers: handlers,
+          ),
     );
 
     final running = host.run(
@@ -647,12 +652,13 @@ final class _HostFixture {
     transport.next_response_barrier = response_barrier;
 
     final communication = Communication(
-      transport: transport,
       codecs: create_application_message_codecs(),
       options: const MessageSessionOptions(request_timeout: operation_timeout),
     );
 
-    final session = await communication.connect();
+    final session = await communication.connect(
+      ConnectionParams(transport: transport),
+    );
 
     final client = _Client(communication: communication, session: session);
 
@@ -663,8 +669,8 @@ final class _HostFixture {
 
   /// Sends an identified Start from [client].
   ///
-  /// [key] identifies the logical operation. [root] optionally replaces
-  /// the fixture's default requested filesystem root.
+  /// [key] identifies the logical operation.
+  /// [root] optionally replaces the default requested filesystem root.
   ///
   /// Returns the application outcome received through communication.
   Future<WorkflowOperationOutcome> start(
@@ -685,8 +691,8 @@ final class _HostFixture {
 
   /// Sends an identified Stop from [client].
   ///
-  /// [key] identifies the logical operation and [workflow_id] identifies
-  /// the intended workflow.
+  /// [key] identifies the logical operation.
+  /// [workflow_id] identifies the intended workflow.
   ///
   /// Returns the application outcome received through communication.
   Future<WorkflowOperationOutcome> stop(
@@ -732,8 +738,8 @@ final class _HostFixture {
   /// [second] executes the competing operation after the first has
   /// reached the commitment boundary. It receives that validated plan.
   ///
-  /// [second_key] and [second_occurrence] identify the acceptance
-  /// invocation that must complete before commitment is released.
+  /// [second_key] identifies the operation whose acceptance gates commitment.
+  /// [second_occurrence] selects its acceptance invocation.
   ///
   /// [observer] independently queries pending submission status
   /// while both operations remain outstanding.

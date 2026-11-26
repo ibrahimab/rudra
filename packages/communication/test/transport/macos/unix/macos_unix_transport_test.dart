@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:rudra_communication/rudra_communication.dart';
+import 'package:rudra_communication/src/transport/macos/unix/macos_unix_listener.dart';
 
 import '../../../support/macos_test_identity.dart';
 
@@ -31,7 +32,7 @@ void main() {
       scope = await directory.resolveSymbolicLinks();
       owner = await resolve_macos_test_identity();
 
-      socket_path = '$scope/${MacOsUnixTransport.socket_filename}';
+      socket_path = '$scope/rudra.sock';
 
       address = InternetAddress(socket_path, type: InternetAddressType.unix);
     });
@@ -40,20 +41,8 @@ void main() {
       await directory.delete(recursive: true);
     });
 
-    /// Opens a configured listener for the trusted fixture owner.
-    ///
-    /// [authorized_owner] optionally overrides authorization
-    /// to exercise rejection of a kernel-authenticated peer.
-    ///
-    /// Returns the authenticated native listener.
-    Future<TransportListener> listen({String? authorized_owner}) {
-      final transport = MacOsUnixTransport(
-        scope_directory: scope,
-        os_user_id: authorized_owner ?? owner,
-      );
-
-      return transport.listen();
-    }
+    Future<TransportListener> listen() =>
+        MacOsUnixTransport(socket_path: socket_path).listen();
 
     /// Establishes a native client connection.
     ///
@@ -166,7 +155,11 @@ void main() {
     });
 
     test('rejects a peer outside the authorized owner scope', () async {
-      final listener = await listen(authorized_owner: 'different-owner');
+      final listener = MacOsUnixListener(
+        server: await ServerSocket.bind(address, 0),
+        socket_path: socket_path,
+        os_user_id: 'different-owner',
+      );
 
       final accepted = <TransportConnection>[];
 

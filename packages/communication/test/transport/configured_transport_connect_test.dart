@@ -27,13 +27,11 @@ void main() {
       final owner = await resolve_macos_test_identity();
 
       final listener_transport = MacOsUnixTransport(
-        scope_directory: scope,
-        os_user_id: owner,
+        socket_path: '$scope/rudra.sock',
       );
 
       final client_transport = MacOsUnixTransport(
-        scope_directory: scope,
-        os_user_id: owner,
+        socket_path: '$scope/rudra.sock',
       );
 
       final listener = await listener_transport.listen();
@@ -65,10 +63,7 @@ void main() {
   );
 
   test('unsupported native transports reject outbound connectivity', () async {
-    const transport = MacOsUnixTransport(
-      scope_directory: '/unused',
-      os_user_id: 'test-owner',
-    );
+    const transport = MacOsUnixTransport(socket_path: '/unused/rudra.sock');
 
     await expectLater(transport.connect(), throwsA(isA<UnsupportedError>()));
   }, skip: Platform.isMacOS);

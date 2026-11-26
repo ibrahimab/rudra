@@ -33,7 +33,7 @@ import '../presentation/widgets/directory_listing/directory_listing_view_model.d
 /// Example:
 /// ```dart
 /// final command = ListCommand(
-///   sdk: sdk,
+///   connect: connect_sdk,
 ///   working_directory: TargetPath('/workspace'),
 ///   renderer: renderer,
 /// );
@@ -47,7 +47,7 @@ import '../presentation/widgets/directory_listing/directory_listing_view_model.d
 final class ListCommand extends Command<int> {
   /// Creates a read-only filesystem listing command.
   ///
-  /// [sdk] provides the configured filesystem service.
+  /// [connect] provides the configured filesystem service.
   ///
   /// [working_directory] is the default target-native directory
   /// when no explicit directory argument is supplied.
@@ -65,11 +65,11 @@ final class ListCommand extends Command<int> {
   /// Construction performs no filesystem inspection or
   /// terminal I/O.
   ListCommand({
-    required RudraSdk sdk,
+    required Future<RudraSdk> Function() connect,
     required TargetPath working_directory,
     required Renderer<FilesystemViewModel> renderer,
     DirectoryListingPresenter presenter = const DirectoryListingPresenter(),
-  }) : _sdk = sdk,
+  }) : _connect = connect,
        _working_directory = working_directory,
        _renderer = renderer,
        _presenter = presenter;
@@ -88,7 +88,7 @@ final class ListCommand extends Command<int> {
   String get invocation => 'rudra ls [absolute-directory]';
 
   /// SDK providing platform-independent filesystem operations.
-  final RudraSdk _sdk;
+  final Future<RudraSdk> Function() _connect;
 
   /// Default target-native directory for the command.
   final TargetPath _working_directory;
@@ -138,12 +138,18 @@ final class ListCommand extends Command<int> {
       throw UsageException('The directory argument must not be empty.', usage);
     }
 
-    final directory = arguments.isEmpty
-        ? _working_directory
-        : TargetPath(arguments.single);
+    TargetPath directory = _working_directory;
+    if (arguments.isNotEmpty) {
+      try {
+        directory = TargetPath(arguments.single);
+      } on ArgumentError {
+        throw UsageException('Invalid directory argument.', usage);
+      }
+    }
 
     // Only the SDK performs filesystem inspection.
-    final listing = await _sdk.filesystem.list(directory: directory);
+    final sdk = await _connect();
+    final listing = await sdk.filesystem.list(directory: directory);
 
     // Preserve the established compact listing format.
     final view_model = _presenter.present(

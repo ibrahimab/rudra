@@ -1,114 +1,63 @@
 import 'dart:io';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_target_macos/rudra_target_macos.dart';
 
-/// Holds the SDK dependencies assembled for the production CLI.
+/// Configures the connected SDK and its starting directory for one invocation.
 ///
-/// ProductSdkComposition is an application composition object,
-/// not an SDK service or domain model.
-///
-/// It associates a configured [RudraSdk] with the target-native
-/// working directory used by the CLI frontend.
-///
-/// Concrete target adapters must be instantiated at this
-/// composition boundary, never inside the SDK.
-///
-/// The current production implementation supports local macOS
-/// filesystem inspection.
-///
-/// Other platforms remain unavailable until corresponding
-/// adapters have been implemented and verified.
-///
-/// Example:
 /// ```dart
 /// final composition = ProductSdkComposition.for_current_host();
-///
-/// if (composition != null) {
-///   print(composition.sdk.target_id);
+/// try {
+///   final sdk = await composition.connect();
+///   await sdk.filesystem.list(directory: composition.working_directory);
+/// } finally {
+///   await composition.sdk.close();
 /// }
 /// ```
 final class ProductSdkComposition {
-  /// Creates an application composition from supplied dependencies.
+  /// Creates an inactive production SDK composition.
   ///
-  /// [sdk] must already be configured for the target represented
-  /// by [working_directory].
-  ///
-  /// This constructor supports dependency injection in CLI tests
-  /// and alternative application composition environments.
-  ///
-  /// It performs no filesystem inspection or mutation.
+  /// [sdk] supplies connected application services and transfers lifecycle ownership.
+  /// [working_directory] supplies the initial target-native path.
+  /// [connection_params] optionally selects an explicit endpoint.
   const ProductSdkComposition({
     required this.sdk,
     required this.working_directory,
+    this.connection_params = const ConnectionParams(),
   });
 
-  /// SDK configured with the target's inspection adapter.
-  ///
-  /// All application-level filesystem operations must be
-  /// performed through this SDK rather than directly through
-  /// the underlying target adapter.
+  /// The SDK whose lifecycle belongs to the enclosing CLI invocation.
   final RudraSdk sdk;
 
-  /// Initial target-native directory for CLI filesystem commands.
-  ///
-  /// The path must belong to the environment represented by [sdk].
-  ///
-  /// It must not be interpreted using unrelated platform rules.
+  /// Initial path on the SDK's selected filesystem target.
   final TargetPath working_directory;
 
-  /// Creates the production SDK composition for the local host.
+  /// Native default connectivity unless isolated composition overrides it.
+  final ConnectionParams connection_params;
+
+  /// Assembles the production frontend with native default connectivity.
+  static ProductSdkComposition for_current_host() => ProductSdkComposition(
+    sdk: RudraSdk(),
+    working_directory: TargetPath(Directory.current.absolute.path),
+  );
+
+  /// Establishes the invocation's authenticated session and returns its SDK.
   ///
-  /// Currently macOS is the only implemented production target.
-  ///
-  /// On macOS:
-  /// - Creates a [MacOsTargetInspector].
-  /// - Injects it into [RudraSdk].
-  /// - Associates the SDK with the local macOS target.
-  /// - Captures the process working directory.
-  ///
-  /// On other platforms, returns null because no verified
-  /// production target adapter is available yet.
-  ///
-  /// Unsupported platforms are never silently assigned the
-  /// macOS adapter or given fabricated inspection capabilities.
-  ///
-  /// Native adapter initialization failures are propagated.
-  /// They are not disguised as an unsupported target.
-  ///
-  /// No directory enumeration or entry inspection is performed.
-  ///
-  /// Example:
-  /// ```dart
-  /// final composition = ProductSdkComposition.for_current_host();
-  ///
-  /// if (composition != null) {
-  ///   final listing = await composition.sdk.filesystem.list(
-  ///     directory: composition.working_directory,
-  ///   );
-  ///
-  ///   print(listing.is_complete);
-  /// }
-  /// ```
-  static ProductSdkComposition? for_current_host() {
-    if (!Platform.isMacOS) {
-      return null;
+  /// Throws [CliHostUnavailableException] when establishment fails.
+  Future<RudraSdk> connect() async {
+    try {
+      await sdk.connect(connection_params);
+      return sdk;
+    } catch (error, stack) {
+      Error.throwWithStackTrace(CliHostUnavailableException(error), stack);
     }
-
-    // Only the application composition layer creates concrete
-    // platform adapters. The SDK receives the shared contract.
-    final TargetInspector inspector = MacOsTargetInspector();
-
-    final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
-
-    // The production adapter inspects the local filesystem,
-    // so the process working directory is a valid target-local
-    // starting point for the CLI.
-    final working_directory = TargetPath(Directory.current.absolute.path);
-
-    return ProductSdkComposition(
-      sdk: sdk,
-      working_directory: working_directory,
-    );
   }
+}
+
+/// Reports that the frontend could not establish an authenticated host session.
+final class CliHostUnavailableException implements Exception {
+  /// Preserves the underlying connection [cause] for diagnostics.
+  const CliHostUnavailableException(this.cause);
+
+  /// The configuration, connectivity, authentication or disposal failure.
+  final Object cause;
 }

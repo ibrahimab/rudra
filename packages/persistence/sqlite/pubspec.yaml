@@ -7,6 +7,7 @@ environment:
   sdk: ^3.14.0
 
 dependencies:
+  sqlite3: ^3.9.1
   rudra_sdk:
     path: ../../sdk
   drift: ^2.35.4

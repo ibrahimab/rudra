@@ -10,8 +10,6 @@ import 'package:test/test.dart';
 /// Tests use private temporary directories and independent native
 /// descriptors. Cross-process tests execute a separate Dart process.
 void main() {
-  const provider = MacOsHostOwnershipProvider();
-
   const process_timeout = Duration(seconds: 30);
 
   late Directory directory;
@@ -30,9 +28,9 @@ void main() {
     /// Acquires ownership of the canonical test directory.
     ///
     /// Returns the native ownership lease.
-    Future<HostOwnershipLease> acquire() async => provider.acquire(
-      scope_directory: await directory.resolveSymbolicLinks(),
-    );
+    Future<HostOwnershipLease> acquire() async => MacOsHostOwnershipProvider(
+      runtime_directory: await directory.resolveSymbolicLinks(),
+    ).acquire();
 
     test('rejects competing ownership and permits reacquisition', () async {
       final first = await acquire();
@@ -52,7 +50,7 @@ void main() {
 
       final lock_file = File(
         '${directory.path}/'
-        '${MacOsHostOwnershipProvider.lock_filename}',
+        'rudra.lock',
       );
 
       try {
@@ -88,7 +86,7 @@ void main() {
 
       final link = Link(
         '${directory.path}/'
-        '${MacOsHostOwnershipProvider.lock_filename}',
+        'rudra.lock',
       );
 
       await link.create(target.path);
@@ -96,6 +94,39 @@ void main() {
       await expectLater(acquire(), throwsA(isA<FileSystemException>()));
 
       expect(await target.readAsString(), 'unchanged');
+    });
+
+    test('rejects missing directories and symbolic directory paths', () async {
+      final canonical = await directory.resolveSymbolicLinks();
+      final link = Link('$canonical/runtime-link')..createSync(canonical);
+
+      for (final path in ['$canonical/missing', link.path]) {
+        await expectLater(
+          MacOsHostOwnershipProvider(runtime_directory: path).acquire(),
+          throwsA(isA<FileSystemException>()),
+        );
+      }
+      expect(await File('$canonical/rudra.lock').exists(), isFalse);
+    });
+
+    test('rejects exposed directory and lock modes', () async {
+      final canonical = await directory.resolveSymbolicLinks();
+      expect(
+        (await Process.run('/bin/chmod', ['0755', canonical])).exitCode,
+        0,
+      );
+      await expectLater(acquire(), throwsA(isA<FileSystemException>()));
+
+      expect(
+        (await Process.run('/bin/chmod', ['0700', canonical])).exitCode,
+        0,
+      );
+      final lock = File('$canonical/rudra.lock')..createSync();
+      expect(
+        (await Process.run('/bin/chmod', ['0644', lock.path])).exitCode,
+        0,
+      );
+      await expectLater(acquire(), throwsA(isA<FileSystemException>()));
     });
 
     for (final forced in [false, true]) {

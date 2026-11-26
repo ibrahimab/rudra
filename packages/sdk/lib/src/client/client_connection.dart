@@ -6,30 +6,25 @@ import '../messaging/application_message_codecs.dart';
 import '../messaging/standard_messaging_modules.dart';
 import '../workflow/workflow_runtime.dart';
 
-import 'contracts/client_connection_setup.dart';
-
 /// Constructs an independent communication subsystem.
 ///
-/// [transport] supplies the resolved authenticated connectivity.
-///
-/// [codecs] and [handlers] contain validated application messaging
-/// configuration supplied by the SDK.
+/// [codecs] contains the validated application message codecs.
+/// [handlers] contains the validated receiving handlers for the SDK.
 ///
 /// Returns an unused Communication instance retaining the supplied
-/// transport and registries. Its execution and disposal lifecycle
+/// registries. Its execution and disposal lifecycle
 /// transfers to the client connection owner.
 ///
 /// The factory must not establish connections or execute handlers.
 typedef ClientCommunicationFactory = Communication Function({
-  required Transport transport,
   required MessageCodecRegistry codecs,
   required RequestHandlerRegistry handlers,
 });
 
 /// Owns successive authenticated SDK communication lifecycles.
 ///
-/// Each connection attempt resolves a configured authenticated
-/// transport and constructs an independent Communication instance.
+/// Each attempt constructs Communication, which establishes the selected
+/// transport using native defaults or explicit parameters.
 ///
 /// Connection replacement requires confirmed disposal of previously
 /// owned communication resources.
@@ -40,7 +35,6 @@ typedef ClientCommunicationFactory = Communication Function({
 /// Example:
 /// ```dart
 /// final connection = ClientConnection(
-///   setup: resolve_connection,
 ///   runtime: WorkflowRuntime.standard(),
 /// );
 ///
@@ -54,8 +48,6 @@ typedef ClientCommunicationFactory = Communication Function({
 final class ClientConnection {
   /// Creates an inactive connection lifecycle owner.
   ///
-  /// [setup] resolves a configured authenticated transport for
-  /// each connection attempt.
   /// [runtime] supplies the immutable application serialization configuration.
   /// [communication_factory] optionally replaces default Communication
   /// construction while preserving SDK-owned messaging configuration.
@@ -75,14 +67,12 @@ final class ClientConnection {
   /// Messaging configuration failures propagate.
   /// Construction performs no endpoint resolution or resource acquisition.
   ClientConnection({
-    required ClientConnectionSetup setup,
     required WorkflowRuntime runtime,
     ClientCommunicationFactory? communication_factory,
     void Function(RequestHandlerRegistry)? register_handlers,
     void Function(MessageSession)? on_session_available,
     void Function(MessageSession, Object, StackTrace)? on_session_unavailable,
-  }) : _setup = setup,
-       _communication_factory = communication_factory,
+  }) : _communication_factory = communication_factory,
        _register_handlers = register_handlers,
        _on_session_available = on_session_available,
        _on_session_unavailable = on_session_unavailable,
@@ -90,8 +80,8 @@ final class ClientConnection {
          modules: standard_messaging_modules(workflow_runtime: runtime),
        );
 
-  /// Trusted configured transport resolution capability.
-  final ClientConnectionSetup _setup;
+  /// Parameters last selected for an attempt after confirmed disposal.
+  ConnectionParams _params = const ConnectionParams();
 
   /// Optional substitution for default communication construction.
   final ClientCommunicationFactory? _communication_factory;
@@ -142,20 +132,20 @@ final class ClientConnection {
   /// or another lifecycle operation is executing.
   ///
   /// Configuration, connection and resource disposal failures propagate.
-  Future<void> connect() {
+  Future<void> connect([ConnectionParams params = const ConnectionParams()]) {
     return _exclusive(() async {
       if (is_connected) {
         throw StateError('SDK is already connected.');
       }
 
-      await _open_connection();
+      await _open_connection(params);
     });
   }
 
   /// Replaces the current communication lifecycle.
   ///
-  /// Resolves a configured transport again after the previous
-  /// connection's resources have been released.
+  /// Uses the last selected parameters when [params] is omitted.
+  /// Supply an empty [ConnectionParams] to restore native defaults.
   ///
   /// Returns after establishing an independent authenticated session.
   /// No previously submitted application request is repeated.
@@ -163,8 +153,8 @@ final class ClientConnection {
   /// Throws [StateError] when permanently closed or another lifecycle
   /// operation is executing. Configuration, connection and resource
   /// disposal failures propagate.
-  Future<void> reconnect() {
-    return _exclusive(_open_connection);
+  Future<void> reconnect([ConnectionParams? params]) {
+    return _exclusive(() => _open_connection(params ?? _params));
   }
 
   /// Returns the currently admitted authenticated session.
@@ -249,17 +239,15 @@ final class ClientConnection {
 
   /// Establishes a new connection after releasing previous resources.
   ///
-  /// Resolves a configured transport before constructing Communication.
-  ///
   /// Transfers the resulting lifecycle into [_owned] before beginning
   /// authenticated session establishment.
   ///
   /// Failed establishment drains acquired resources before
   /// propagating the failure.
-  Future<void> _open_connection() async {
+  Future<void> _open_connection(ConnectionParams params) async {
     await _release_connection();
 
-    final transport = await _setup();
+    _params = params;
 
     final handlers = RequestHandlerRegistry();
 
@@ -270,19 +258,15 @@ final class ClientConnection {
     final factory = _communication_factory;
 
     final communication = factory == null
-        ? Communication(
-            transport: transport,
-            codecs: _codecs,
-            handlers: handlers,
-          )
-        : factory(transport: transport, codecs: _codecs, handlers: handlers);
+        ? Communication(codecs: _codecs, handlers: handlers)
+        : factory(codecs: _codecs, handlers: handlers);
 
     final owned = _OwnedConnection(communication: communication);
 
     _owned = owned;
 
     try {
-      final session = await communication.connect();
+      final session = await communication.connect(params);
 
       owned.session = session;
       owned.available = true;
@@ -308,7 +292,8 @@ final class ClientConnection {
 
   /// Invalidates request admission for the specified [owned] connection.
   ///
-  /// [error] and [stack_trace] optionally preserve its terminal failure.
+  /// [error] optionally identifies the terminal failure.
+  /// [stack_trace] optionally preserves the failure stack.
   /// Otherwise an explicit unavailable-connection error is supplied.
   ///
   /// Application capabilities are notified exactly once after request

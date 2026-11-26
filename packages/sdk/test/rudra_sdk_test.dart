@@ -11,7 +11,7 @@ void main() {
 
     sdk = RudraSdk(
       target_id: 'test-target',
-      connection_setup: () {
+      communication_factory: ({required codecs, required handlers}) {
         resolutions++;
 
         throw StateError('Unexpected endpoint resolution.');
@@ -71,7 +71,7 @@ void main() {
         expect(
           () => RudraSdk(
             target_id: target_id,
-            connection_setup: () {
+            communication_factory: ({required codecs, required handlers}) {
               throw StateError('Unexpected endpoint resolution.');
             },
           ),
@@ -83,7 +83,7 @@ void main() {
     test('keeps independently configured SDK instances isolated', () async {
       final second = RudraSdk(
         target_id: 'second-target',
-        connection_setup: () {
+        communication_factory: ({required codecs, required handlers}) {
           throw StateError('Unexpected endpoint resolution.');
         },
       );

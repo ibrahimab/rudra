@@ -1,8 +1,8 @@
 
 # Rudra — Software Architecture
 
-Version: 1.3
-Last updated: 2026-11-11
+Version: 1.4
+Last updated: 2026-11-27
 **Status:** Architectural baseline
 
 ## 1. Purpose
@@ -175,9 +175,15 @@ The established package organization is:
             rudra.dart
           tool/
             rudra_dev.dart
+        host/
 
       packages/
         sdk/
+        communication/
+        host/
+          macos/
+        platform/
+          macos/
         targets/
           contracts/
           macos/
@@ -396,27 +402,33 @@ SQLite must not become the owner of domain policy.
 
 The SDK defines the rules; the persistence adapter stores and retrieves their state.
 
-### 4.6 Dependency direction
+### 4.6 Authenticated host execution
 
-The intended dependency direction is:
+The production CLI and future graphical clients use `RudraSdk` to connect to
+one authoritative host for their effective operating-system user. Connection
+and application execution are explicit. A frontend selects the target and
+supplies the operation's inputs. The host validates the target and executes
+filesystem inspection and workflow operations.
 
-    CLI / Future Flutter UI
-              |
-              v
-          Rudra SDK
-          /       \
-         v         v
-    Target       Persistence
-    contracts    contracts
-         ^         ^
-         |         |
-    macOS adapter SQLite adapter
+`RudraHost` owns application execution, state publication and its Communication
+lifecycle. Communication owns registered transports, endpoint activation, native
+peer credentials, typed messaging and independent client sessions. The default
+macOS transport derives its endpoint from the effective UID. An explicit Unix
+socket configuration changes the endpoint while preserving authentication and
+the host's ownership scope.
 
-Concrete adapters are supplied through application composition.
+`apps/host` composes trusted identity, native ownership, target inspection and
+SQLite persistence. The SDK depends on portable target and persistence
+contracts. Communication remains independent of the SDK and its application
+semantics. The native host adapter and Unix transport share a focused macOS
+resource layout capability.
 
-Neither the SDK nor the target contracts may import CLI-specific types.
+All production hosts open separate connections to the same database. Each host
+scopes submissions and journal restoration to its trusted user and publishes
+commits within its own context. The SQLite adapter owns schema and transaction
+coordination.
 
-Persistence contracts will be introduced as needed rather than prematurely coupled to SQLite.
+[ADR 0008](decisions/0008-machine-wide-persistence-and-transport-independent-connectivity.md) records the architecture. [Host provisioning and usage](DEVELOPMENT.md#running-the-macos-host) describes the native paths and operating requirements.
 
 ## 5. CLI Architecture
 
@@ -667,16 +679,11 @@ through explicit constructor injection.
 renderer. It is available even without a configured filesystem
 target and performs no SDK inspection.
 
-`WelcomeController` receives a nullable SDK and starting directory,
-plus an injected `Renderer<WelcomeViewModel>`.
-
-The SDK and starting directory must either both be present
-or both be absent.
-
-Their absence represents an unsupported inspection target.
-
-`ListCommand` receives the configured SDK, starting directory,
-and `Renderer<FilesystemViewModel>`.
+`WelcomeController` and `ListCommand` receive the target-native starting
+directory, an SDK connection operation and their renderer. The production CLI
+owns one authenticated SDK lifecycle per operational invocation. Help, About,
+invalid usage and host management remain independent of client connectivity.
+An unavailable host produces a diagnostic and exit status 69.
 
 `FilesystemCliModule` supplies its injected dependencies to
 its registered commands.
@@ -731,8 +738,8 @@ backends or terminal styling encoders.
 
 Features must not import `ProductSdkComposition`.
 
-Application composition owns concrete adapter selection and
-injection. Features use the public SDK and CLI rendering contracts.
+Host composition owns concrete inspection adapter selection. CLI features use
+the connected SDK and CLI rendering contracts.
 
 No CLI presentation component may bypass SDK safety policy or
 independently authorize destructive filesystem operations.
@@ -988,7 +995,7 @@ A session is associated with exactly one originally selected root location and o
 
 ### 7.1 Single unfinished session invariant
 
-Rudra permits only one unfinished inspection session per Rudra user profile.
+Rudra permits one unfinished workflow per trusted operating-system user.
 
 A user cannot start an independent second session while an unfinished session exists.
 
@@ -1084,7 +1091,7 @@ Persistent session uniqueness and active process ownership are separate concerns
 
 SQLite transactions must enforce relevant persistent invariants.
 
-Process coordination must handle stale ownership caused by crashes or abrupt termination.
+The kernel releases per-user host ownership when the process terminates. Hosts retain their lock while disposal remains unconfirmed.
 
 Reclaiming a stale process lock must never imply authorization to resume destructive execution.
 
@@ -1347,9 +1354,7 @@ The execution-cancellation model will be formalized before destructive functiona
 
 ## 12. Persistence and Audit Architecture
 
-SQLite is the initial persistence implementation.
-
-The domain model must remain independent of SQL.
+SQLite stores the authoritative workflow journal, submission state and unfinished-workflow projections in one machine-wide database. Hosts own independent connections and owner-scoped application contexts. The domain model remains independent of SQL.
 
 ### 12.1 Persistence responsibilities
 
@@ -1501,7 +1506,7 @@ An architectural rule must not be silently changed through a local implementatio
 
 ## 16. Current Implementation Status
 
-**Status date:** 2026-11-11
+**Status date:** 2026-11-27
 
 ### 16.1 Implemented foundations
 
@@ -1516,7 +1521,8 @@ The repository contains:
 - macOS native target inspection adapter.
 - Pure-Dart Rudra SDK.
 - SDK-backed directory listing.
-- Production SDK and target-adapter composition.
+- Connected production SDK and authoritative host-side target inspection.
+- Per-user host exclusivity and owner-scoped SQLite workflow persistence.
 - Read-only `rudra ls` command.
 - SDK-backed welcome workflow.
 - Feature-specific presenters and immutable view models.
@@ -1536,15 +1542,9 @@ CLI features reside under `apps/cli/lib/src/features/`.
 
 Reusable CLI infrastructure resides under `apps/cli/lib/src/core/`.
 
-Production SDK and target-adapter assembly remains in the
-application composition layer.
-
-The welcome, filesystem, and Explorer implementations consume
-public SDK services rather than accessing concrete target adapters
-directly.
-
-Explorer navigation is transient and read-only. It does not create
-or modify a persistent Rudra session.
+The welcome, filesystem, workflow and Explorer features use connected public
+SDK services. Explorer navigation is transient and read-only. Explicit Explorer
+Start and Stop actions submit durable workflow intentions through the host.
 
 ### 16.3 Verification
 
@@ -1565,10 +1565,8 @@ passes verification.
 
 The following remain future development work:
 
-- Complete interactive Explorer terminal hosting.
-- Integration of keyboard input with Explorer navigation.
-- Persistent inspection session lifecycle implementation.
-- SQLite-backed session and audit repositories.
+- Reactive Explorer state synchronization and managed macOS host installation.
+- Persistent cleanup planning and execution audit beyond workflow lifecycle events.
 - Persistent dry-run cleanup candidate selection.
 - Cleanup-plan orchestration.
 - Pre-execution revalidation and authorization.

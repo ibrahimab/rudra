@@ -74,10 +74,9 @@ void main() {
           ..register<EchoResponse, EchoRequest>(handler);
 
         final communication = Communication(
-          transport: MacOsUnixTransport(
-            scope_directory: scope,
-            os_user_id: owner,
-          ),
+          listening_transports: [
+            MacOsUnixTransport(socket_path: '$scope/rudra.sock'),
+          ],
           codecs: create_echo_codecs(),
           handlers: handlers,
         );
@@ -331,7 +330,7 @@ void main() {
 
           expect(server.communication.resources_released, isTrue);
 
-          final socket_path = '$scope/${MacOsUnixTransport.socket_filename}';
+          final socket_path = '$scope/rudra.sock';
 
           expect(
             await FileSystemEntity.type(socket_path, followLinks: false),

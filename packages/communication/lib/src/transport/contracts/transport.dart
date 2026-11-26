@@ -50,3 +50,30 @@ abstract interface class Transport {
   /// propagate to the caller.
   Future<TransportConnection> connect();
 }
+
+/// Indicates that resources acquired during transport startup may remain live.
+///
+/// A transport throws this when cleanup itself fails following an unsuccessful
+/// listen or connect. Owners retain their disposal boundary on this failure.
+///
+/// Example:
+/// ```dart
+/// throw TransportDisposalException(startup_error, close_error);
+/// ```
+final class TransportDisposalException implements Exception {
+  /// Records both failures from one unsuccessful transport startup.
+  ///
+  /// [cause] is the original startup failure.
+  /// [disposal_error] describes the failed cleanup.
+  const TransportDisposalException(this.cause, this.disposal_error);
+
+  /// Original startup or connection failure.
+  final Object cause;
+
+  /// Error encountered releasing the acquired resources.
+  final Object disposal_error;
+
+  @override
+  String toString() =>
+      'Transport startup failed ($cause) and disposal failed ($disposal_error).';
+}

@@ -49,7 +49,8 @@ final class DefaultMessageSession implements MessageSession {
   /// Constructs the intrinsic components of a message session.
   ///
   /// [connection] supplies the authenticated transport capability.
-  /// [codecs] and [handlers] supply frozen messaging configuration.
+  /// [codecs] supplies frozen message codecs.
+  /// [handlers] supplies frozen request handlers.
   /// [options] defines the session's execution limits.
   /// [encoding] optionally substitutes the default envelope encoder.
   ///
@@ -105,8 +106,8 @@ final class DefaultMessageSession implements MessageSession {
 
   /// Opens a message session over the supplied [connection].
   ///
-  /// [codecs] and [handlers] must contain compatible frozen
-  /// messaging configuration.
+  /// [codecs] must contain frozen message codecs.
+  /// [handlers] must contain frozen request handlers compatible with those codecs.
   ///
   /// [options] optionally supplies execution limits and deadlines.
   /// [encoding] optionally substitutes the default wire encoder.
@@ -661,7 +662,8 @@ final class DefaultMessageSession implements MessageSession {
   /// Releases communication resources and completes lifecycle futures.
   ///
   /// [disposal] reports resource disposal independently of execution.
-  /// [cause] and [stack] identify the original terminal failure.
+  /// [cause] identifies the original terminal failure.
+  /// [stack] captures the failure stack.
   ///
   /// Transport closure and incoming cancellation are initiated
   /// independently so neither prevents the other from beginning.

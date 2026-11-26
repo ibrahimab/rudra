@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:rudra_communication/rudra_communication.dart';
+import 'package:rudra_communication/src/transport/macos/unix/macos_unix_transport.dart'
+    show authenticate_macos_unix_connection;
 import 'package:test/test.dart';
 
 import '../../../support/macos_test_identity.dart';
@@ -26,7 +28,7 @@ void main() {
       scope = await directory.resolveSymbolicLinks();
       owner = await resolve_macos_test_identity();
 
-      socket_path = '$scope/${MacOsUnixTransport.socket_filename}';
+      socket_path = '$scope/rudra.sock';
     });
 
     tearDown(() async {
@@ -37,28 +39,13 @@ void main() {
     ///
     /// Returns the authenticated native listener.
     Future<TransportListener> listen() {
-      final transport = MacOsUnixTransport(
-        scope_directory: scope,
-        os_user_id: owner,
-      );
+      final transport = MacOsUnixTransport(socket_path: '$scope/rudra.sock');
 
       return transport.listen();
     }
 
-    /// Connects to the fixture's existing communication endpoint.
-    ///
-    /// [expected_owner] optionally substitutes the expected remote
-    /// identity to exercise authentication failure.
-    ///
-    /// Returns the authenticated connection.
-    Future<TransportConnection> connect({String? expected_owner}) {
-      final transport = MacOsUnixTransport(
-        scope_directory: scope,
-        os_user_id: expected_owner ?? owner,
-      );
-
-      return transport.connect();
-    }
+    Future<TransportConnection> connect() =>
+        MacOsUnixTransport(socket_path: socket_path).connect();
 
     test('authenticates peers in both directions', () async {
       final listener = await listen();
@@ -135,7 +122,13 @@ void main() {
         final pending = accepted.moveNext();
 
         await expectLater(
-          connect(expected_owner: 'different-owner'),
+          () async {
+            final socket = await Socket.connect(address, 0);
+            return authenticate_macos_unix_connection(
+              socket,
+              'different-owner',
+            );
+          }(),
           throwsA(
             isA<StateError>().having(
               (error) => error.message,
@@ -232,10 +225,7 @@ void main() {
       final missing_scope = '$scope/missing';
 
       await expectLater(
-        MacOsUnixTransport(
-          scope_directory: missing_scope,
-          os_user_id: owner,
-        ).connect(),
+        MacOsUnixTransport(socket_path: '$missing_scope/rudra.sock').connect(),
         throwsA(isA<FileSystemException>()),
       );
 
@@ -284,21 +274,10 @@ void main() {
       );
     });
 
-    test('rejects an empty trusted peer identity', () async {
-      await expectLater(connect(expected_owner: ''), throwsArgumentError);
-
-      expect(
-        await FileSystemEntity.type(socket_path, followLinks: false),
-        FileSystemEntityType.notFound,
-      );
-    });
-
     test('rejects relative communication scopes', () async {
       await expectLater(
-        MacOsUnixTransport(
-          scope_directory: 'relative-directory',
-          os_user_id: owner,
-        ).connect(),
+        MacOsUnixTransport(socket_path: 'relative-directory/rudra.sock')
+            .connect(),
         throwsArgumentError,
       );
     });

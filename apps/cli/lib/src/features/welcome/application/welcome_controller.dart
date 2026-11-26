@@ -23,22 +23,13 @@ import 'welcome_model.dart';
 /// In particular, it does not construct terminal templates,
 /// encode ANSI text, or write directly to an output sink.
 ///
-/// A null SDK and starting directory represent an unsupported target.
-///
-/// Application composition supplies the SDK and its corresponding
-/// target-native starting directory. This controller does not depend
-/// on concrete application composition or platform adapter types.
-///
-/// The controller never:
-/// - Calls a platform-specific TargetInspector directly.
-/// - Modifies filesystem content.
-/// - Creates or executes cleanup sessions.
-/// - Authorizes deletion or other destructive operations.
+/// Application composition supplies the authenticated SDK and its
+/// corresponding target-native starting directory.
 ///
 /// Example:
 /// ```dart
 /// final controller = WelcomeController(
-///   sdk: sdk,
+///   connect: connect_sdk,
 ///   starting_directory: TargetPath('/workspace'),
 ///   renderer: renderer,
 /// );
@@ -48,18 +39,8 @@ import 'welcome_model.dart';
 final class WelcomeController {
   /// Creates a welcome controller with explicitly injected dependencies.
   ///
-  /// [sdk] provides the platform-independent Rudra application services
-  /// used to inspect the configured starting directory.
-  ///
-  /// [starting_directory] identifies the initial target-native directory
-  /// to inspect through [sdk].
-  ///
-  /// [sdk] and [starting_directory] must either both be provided or
-  /// both be null. Null values represent an unsupported target,
-  /// allowing the welcome screen to render without filesystem inspection.
-  ///
-  /// Throws [ArgumentError] if exactly one of [sdk] or
-  /// [starting_directory] is null.
+  /// [connect] establishes the invocation's authenticated SDK session.
+  /// [starting_directory] is inspected through that SDK after connecting.
   ///
   /// [renderer] receives the prepared [WelcomeViewModel].
   /// Its concrete implementation is selected by application composition,
@@ -75,7 +56,7 @@ final class WelcomeController {
   /// Example:
   /// ```dart
   /// final controller = WelcomeController(
-  ///   sdk: sdk,
+  ///   connect: connect_sdk,
   ///   starting_directory: TargetPath('/workspace'),
   ///   renderer: renderer,
   /// );
@@ -83,33 +64,17 @@ final class WelcomeController {
   /// final exit_code = await controller.show();
   /// ```
   WelcomeController({
-    required RudraSdk? sdk,
-    required TargetPath? starting_directory,
+    required Future<RudraSdk> Function() connect,
+    required TargetPath starting_directory,
     required Renderer<WelcomeViewModel> renderer,
     WelcomePresenter presenter = const WelcomePresenter(),
-  }) : _sdk = sdk,
+  }) : _connect = connect,
        _starting_directory = starting_directory,
        _renderer = renderer,
-       _presenter = presenter {
-    if ((sdk == null) != (starting_directory == null)) {
-      throw ArgumentError(
-        'SDK and starting directory must be provided together.',
-      );
-    }
-  }
+       _presenter = presenter;
 
-  /// Configured SDK providing read-only filesystem inspection services.
-  ///
-  /// Null indicates that no supported inspection target is configured.
-  final RudraSdk? _sdk;
-
-  /// Initial target-native directory associated with [_sdk].
-  ///
-  /// Null when no SDK is configured.
-  ///
-  /// The original path spelling is preserved and passed to the SDK
-  /// without interpretation using host filesystem rules.
-  final TargetPath? _starting_directory;
+  final Future<RudraSdk> Function() _connect;
+  final TargetPath _starting_directory;
 
   /// Backend-independent welcome rendering contract.
   final Renderer<WelcomeViewModel> _renderer;
@@ -119,37 +84,15 @@ final class WelcomeController {
 
   /// Inspects the starting directory and renders the result.
   ///
-  /// When a target is configured, exactly one SDK directory
-  /// listing operation is requested.
-  ///
-  /// When no target is available, the welcome screen is
-  /// rendered without attempting filesystem inspection.
-  ///
-  /// Incomplete observations retain their successfully
-  /// inspected entries and typed diagnostic information.
-  ///
-  /// Returns:
-  /// - [RudraExitCode.success] when inspection completes.
-  /// - [RudraExitCode.success] for an unsupported target.
-  /// - [RudraExitCode.inspection_incomplete] when the SDK
-  ///   reports an incomplete directory listing.
-  ///
-  /// Unexpected SDK and renderer exceptions propagate
-  /// without being converted into successful results.
-  ///
-  /// This operation is strictly read-only.
+  /// Returns success for a complete listing or the incomplete-inspection
+  /// status for partial observations. Connection and rendering errors propagate.
   Future<int> show() async {
-    final sdk = _sdk;
-    final starting_directory = _starting_directory;
-
-    final DirectoryListing? listing = sdk == null
-        ? null
-        : await sdk.filesystem.list(directory: starting_directory!);
-
+    final sdk = await _connect();
+    final listing = await sdk.filesystem.list(directory: _starting_directory);
     final model = WelcomeModel(
       product_name: application_name,
-      target_id: sdk?.target_id,
-      starting_directory: starting_directory,
+      target_id: sdk.target_id,
+      starting_directory: _starting_directory,
       listing: listing,
     );
 
@@ -160,7 +103,7 @@ final class WelcomeController {
     // Rendering is backend-independent and injected.
     _renderer.render(view_model);
 
-    return listing != null && !listing.is_complete
+    return !listing.is_complete
         ? RudraExitCode.inspection_incomplete.value
         : RudraExitCode.success.value;
   }

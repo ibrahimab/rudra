@@ -7,10 +7,7 @@ import 'transport_connection.dart';
 ///
 /// Example:
 /// ```dart
-/// final listener = await transport.listen(
-///   scope_directory: directory,
-///   os_user_id: trusted_owner,
-/// );
+/// final listener = await transport.listen();
 ///
 /// final subscription = listener.connections.listen(handle_connection);
 /// await listener.close();

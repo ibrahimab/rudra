@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host/src/composition/host_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -31,10 +32,13 @@ void main() {
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: TestHostOwnershipProvider(),
     inspector: const UnusedTargetInspector(),
-    transport_factory: ({required scope_directory, required os_user_id}) {
-      return TestHostTransport();
-    },
-    data_directory: directory,
+    communication_factory: ({required codecs, required handlers}) =>
+        Communication(
+          listening_transports: [TestHostTransport()],
+          codecs: codecs,
+          handlers: handlers,
+        ),
+    resolve_database: () => File('${directory.path}/rudra.sqlite'),
     target_id: 'test-target',
   );
 
@@ -67,7 +71,7 @@ void main() {
     final current = await run_once(composition);
 
     expect(current, isNull);
-    expect(await composition.database_file.exists(), isFalse);
+    expect(await (await composition.resolve_database()).exists(), isFalse);
   });
 
   test('explicit startup establishes a durable workflow', () async {
@@ -84,7 +88,7 @@ void main() {
     expect(current.identity.target_id, 'test-target');
     expect(current.identity.root.value, directory.path);
 
-    expect(await composition.database_file.exists(), isTrue);
+    expect(await (await composition.resolve_database()).exists(), isTrue);
   });
 
   test('host restart restores the established workflow', () async {

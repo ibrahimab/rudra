@@ -48,7 +48,7 @@ import 'workflow_application_persistence.dart';
 final class WorkflowApplication {
   /// Binds SDK application services to trusted host dependencies.
   ///
-  /// [runtime] must match the workflow configuration used by [persistence].
+  /// [runtime] supplies the same workflow configuration as persistence.
   /// [persistence] shares the history, submission and commit boundaries.
   /// [identity_provider] proposes owner-bound identities for new workflows.
   /// [os_user_id] is resolved by a trusted host, never supplied by a frontend.

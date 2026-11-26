@@ -52,7 +52,7 @@ enum RudraExitCode {
   /// Exit 73 follows BSD EX_CANTCREAT.
   workflow_conflict(73),
 
-  /// Another host instance owns the requested persistence scope.
+  /// Another host instance is running for this operating-system user.
   ///
   /// The requested operation cannot proceed until the existing
   /// host releases its ownership resource.
@@ -63,6 +63,9 @@ enum RudraExitCode {
 
   /// A required input file, manifest, or repository resource is missing.
   missing_input(66),
+
+  /// An authenticated session with the Rudra host could not be established.
+  host_unavailable(69),
 
   /// An internal application or tool execution failure occurred.
   software_error(70),

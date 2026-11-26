@@ -2,69 +2,64 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
-/// Verifies mandatory SDK connection composition and lifecycle.
 void main() {
-  test('construction retains configuration without resolving it', () async {
-    var resolutions = 0;
-
+  test('construction and closure never resolve connectivity', () async {
     final sdk = RudraSdk(
-      target_id: 'local-macos',
-      connection_setup: () {
-        resolutions++;
-
-        return const MacOsUnixTransport(
-          scope_directory: '/unused-scope',
-          os_user_id: 'trusted-owner',
-        );
+      communication_factory: ({required codecs, required handlers}) {
+        fail('Inactive SDK must not construct Communication.');
       },
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            throw StateError(
-              'Communication must not be constructed during initialization.',
-            );
-          },
     );
 
-    addTearDown(sdk.close);
-
-    expect(resolutions, 0);
+    expect(sdk.target_id, local_macos_target_id);
     expect(sdk.is_connected, isFalse);
     expect(sdk.resources_released, isTrue);
 
     await sdk.close();
 
-    expect(resolutions, 0);
-    expect(sdk.resources_released, isTrue);
-
     await expectLater(sdk.connect(), throwsStateError);
     await expectLater(sdk.reconnect(), throwsStateError);
   });
 
-  test('resolves the trusted endpoint during explicit connection', () async {
-    var resolutions = 0;
+  test(
+    'failed establishment releases resources and retains explicit selection',
+    () async {
+      final first = _UnavailableTransport();
+      final second = _UnavailableTransport();
+      final sdk = RudraSdk();
+      addTearDown(sdk.close);
 
-    final sdk = RudraSdk(
-      target_id: 'local-macos',
-      connection_setup: () {
-        resolutions++;
+      await expectLater(
+        sdk.connect(ConnectionParams(transport: first)),
+        throwsStateError,
+      );
+      expect(first.attempts, 1);
+      expect(sdk.is_connected, isFalse);
+      expect(sdk.resources_released, isTrue);
 
-        throw StateError('Configured host is unavailable.');
-      },
-    );
+      await expectLater(sdk.reconnect(), throwsStateError);
+      expect(first.attempts, 2);
 
-    addTearDown(sdk.close);
+      await expectLater(
+        sdk.reconnect(ConnectionParams(transport: second)),
+        throwsStateError,
+      );
+      expect(first.attempts, 2);
+      expect(second.attempts, 1);
+      expect(sdk.resources_released, isTrue);
+    },
+  );
+}
 
-    expect(resolutions, 0);
+final class _UnavailableTransport implements Transport {
+  int attempts = 0;
 
-    await expectLater(sdk.connect(), throwsStateError);
+  @override
+  Future<TransportConnection> connect() async {
+    attempts++;
+    throw StateError('Fixture endpoint is unavailable.');
+  }
 
-    expect(resolutions, 1);
-    expect(sdk.is_connected, isFalse);
-    expect(sdk.resources_released, isTrue);
-
-    await expectLater(sdk.reconnect(), throwsStateError);
-
-    expect(resolutions, 2);
-    expect(sdk.resources_released, isTrue);
-  });
+  @override
+  Future<TransportListener> listen() async =>
+      fail('Expected client execution.');
 }

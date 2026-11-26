@@ -5,8 +5,6 @@ import 'dart:typed_data';
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
-import '../../../support/macos_test_identity.dart';
-
 /// Verifies native connection disposal during active transmission.
 ///
 /// Exercises both independently owned outbound connections and
@@ -22,16 +20,14 @@ void main() {
 
   late Directory directory;
   late String scope;
-  late String owner;
 
   group('MacOsUnixConnection disposal', () {
     setUp(() async {
       directory = await Directory('/tmp').createTemp('rudra-connection-');
 
       scope = await directory.resolveSymbolicLinks();
-      owner = await resolve_macos_test_identity();
 
-      transport = MacOsUnixTransport(scope_directory: scope, os_user_id: owner);
+      transport = MacOsUnixTransport(socket_path: '$scope/rudra.sock');
     });
 
     tearDown(() async {

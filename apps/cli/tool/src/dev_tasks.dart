@@ -304,7 +304,8 @@ final class DevTasks {
   ///
   /// [package_name] restricts execution to one workspace member.
   /// [test_name] filters matching test names using Dart's test runner.
-  /// [tags] and [exclude_tags] filter using Dart tag selectors.
+  /// [tags] selects tests using Dart tag selectors.
+  /// [exclude_tags] excludes tests using Dart tag selectors.
   ///
   /// Packages without test files are reported as skipped.
   ///
@@ -401,7 +402,7 @@ final class DevTasks {
     return RudraExitCode.success.value;
   }
 
-  /// Compiles and verifies the production Rudra executable.
+  /// Builds and verifies the production Rudra CLI bundle.
   ///
   /// The compilation root is the production entrypoint rather than
   /// the development entrypoint.
@@ -411,19 +412,21 @@ final class DevTasks {
   ///
   /// Returns a nonzero status on compilation or verification failure.
   Future<int> build() async {
-    final output_directory = Directory('${repo_root.path}/build');
+    final output_directory = Directory('${repo_root.path}/build/rudra-cli');
 
     await output_directory.create(recursive: true);
 
     final binary_name = Platform.isWindows ? 'rudra.exe' : 'rudra';
-    final binary_path = '${output_directory.path}/$binary_name';
+    final binary_path = '${output_directory.path}/bundle/bin/$binary_name';
 
+    // The host links SQLite through a Dart build hook. Keep its native
+    // library alongside the executable. Dart replaces the output directory,
+    // so use a dedicated location for the CLI bundle.
     final status = await _run_dart([
-      'compile',
-      'exe',
-      'apps/cli/bin/rudra.dart',
-      '-o',
-      binary_path,
+      'build',
+      'cli',
+      '--target=apps/cli/bin/rudra.dart',
+      '--output=${output_directory.path}',
     ]);
 
     if (status != 0) {

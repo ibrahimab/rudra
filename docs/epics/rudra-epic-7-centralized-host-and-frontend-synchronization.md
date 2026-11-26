@@ -1,8 +1,8 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A, 7B, 7C and 7D.1.3B complete; 7D.1.4 planned
+**Status:** 7A through 7D.2 implemented. Native multi-user provisioning verification, 7D.3 and 7E remain open.
 **Created:** 24 November 2026
-**Updated:** 26 November 2026
+**Updated:** 27 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
 **Planning baseline:** `86cb08462467260afee8beba5f90d05be3aab33b`
 **Predecessors:** [Epic 6 — Architectural Realignment](rudra-epic-6-architectural-realignment.md) and [Epic 6C — Observability and Future Trusted Host Direction](rudra-epic-6c-observability-and-trusted-host-direction.md)
@@ -1110,7 +1110,7 @@ production connectivity contract.
 
 The previously proposed 7D.1.3C frontend cutover is superseded.
 
-Production frontend migration proceeds after 7D.1.4.
+The production frontend cutover in 7D.2 uses the 7D.1.4 connection and persistence contracts.
 
 **Gate:** Independent SDK consumers execute filesystem and workflow
 operations through one authoritative host. Unavailable communication
@@ -1120,11 +1120,40 @@ never activates frontend-local execution.
 
 **Goal:** Establish the ownership and connectivity boundaries defined in ADR 0008 before completing the production frontend cutover.
 
+**Implementation record:** The macOS host acquires its UID-scoped Darwin lock
+before resolving storage or starting Communication. The lock retains a stable
+pathname and stays held until resource disposal is confirmed. The production
+host resolves `rudra.sqlite` under the machine-wide application support
+directory. Each host creates its own SQLite and notification context scoped
+to the trusted effective UID.
+
+SQLite keeps schema version 5. The file executor opens WAL with FULL
+synchronization and a five-second busy timeout. Schema creation or upgrade and
+the schema version are committed under one `BEGIN IMMEDIATE` transaction. Drift
+native transactions acquire the writer lock before any reads in a durable
+operation. This avoids read-to-write snapshot upgrades. The adapter retries only
+busy journal-mode setup before admitting operations. Production requires
+administrator-provisioned WAL mode. SQLite retains the WAL and SHM across
+ordinary closes. The schema, journal checks, durable idempotency and existing
+owner-scope predicates remain in the persistence adapters.
+
+Communication registers the macOS Unix transport and selects it by default.
+Configured listener sets activate before session admission and roll back on
+partial activation failure. Incoming and outgoing connections authenticate
+native peers as the effective UID. `RudraSdk()` constructs one inactive
+connection owner and stable services. `connect()` uses native defaults, and
+`connect(ConnectionParams(transport: MacOsUnixTransport(socket_path: path)))`
+selects a configured endpoint. Reconnection reuses the last selection unless
+explicitly replaced. Filesystem requests remain pinned to their admitted
+session until completion or cancellation.
+
+[Host invocation, provisioning and SDK examples](../DEVELOPMENT.md#running-the-macos-host)
+
 ##### 7D.1.4A — Machine-wide persistence and exclusive host ownership
 
 Establish one authoritative machine-wide persistence domain while retaining independent user-owned host execution.
 
-Implementation proceeds through the following increments:
+This work was implemented in the following increments:
 
 ###### 7D.1.4A.1 — Native resource configuration and host ownership
 
@@ -1187,7 +1216,7 @@ Additional transports and composable authentication mechanisms remain deferred.
 
 The public SDK connection contract supports default native connectivity and explicitly selected configured transports.
 
-The precise public API is established against the implemented Communication contract.
+The SDK exposes `connect([ConnectionParams])` and `reconnect([ConnectionParams?])`.
 
 **Gate:** Independent SDK consumers establish authenticated connections without knowing the host persistence location, native endpoint conventions or trusted native identity resolution mechanics.
 
@@ -1221,6 +1250,34 @@ Full workspace verification is required after production frontend cutover.
   and resource disposal across command execution.
 - Preserve non-operational CLI commands without requiring unnecessary
   host connectivity.
+
+**Implementation record:** The CLI starts one authenticated SDK lifecycle for
+Welcome, List, Workflow Start, Workflow Stop or Explorer after command argument
+validation. Help, About, invalid usage, development tools and host management
+remain host-independent at client connection time. Foreground startup restores
+state. The former startup workflow flag was removed so production Start always
+uses the authenticated SDK command. Stop submits the identity
+read from the authoritative host, so a replacement workflow cannot be stopped
+by a stale selection. Explorer keeps explicit refresh and restores terminal
+state before SDK disposal. The frontend-local workflow composition and its
+production SQLite and macOS inspector dependencies were removed. The build
+uses a Dart CLI bundle to include the host's SQLite native library.
+
+**Verification evidence:** Isolated macOS processes confirmed native peer
+authentication, per-user lock contention across alternate socket and database
+paths, competing Start outcomes, filesystem listing, independent Stop,
+forced host termination and durable restoration. Synthetic trusted identities
+in independent processes initialized and committed against one SQLite file.
+The production `/Library/Application Support/Rudra` layout was left untouched.
+Distinct native accounts have yet to verify shared-directory access and SQLite
+auxiliary-file permissions end to end. That portion of the 7D.1.4A gate remains
+open.
+
+Workspace verification on 27 November 2026 passed `dart pub get`,
+`./rudra verify all`, `./rudra build`, and `git diff --check`. The eight runnable
+suites passed 1,514 tests. Two unsupported-platform tests were skipped on macOS.
+The workspace root and macOS layout package have no standalone test suites.
+The production bundle passed its help and command-registration smoke check.
 
 **Gate:** Official production frontend application operations execute
 through the configured authenticated host, and frontend processes
@@ -1345,7 +1402,7 @@ Decide these from inspected code and real platform constraints immediately befor
 - [`WorkflowStateObserver`](../../packages/sdk/lib/src/workflow/observation/workflow_state_observer.dart)
 - [`RudraState`](../../packages/sdk/lib/src/state/rudra_state.dart)
 - [`RudraSqlitePersistence`](../../packages/persistence/sqlite/lib/src/sqlite_persistence.dart)
-- [`ProductWorkflowComposition`](../../apps/cli/lib/src/composition/product_workflow_composition.dart)
+- [`ProductSdkComposition`](../../apps/cli/lib/src/composition/product_sdk_composition.dart)
 - [`ExplorerRunner`](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart)
 
 **Guiding acceptance criterion:** The SDK owns portable host behavior, capability contracts and extension registries; native packages under `packages/host/<platform>` implement independent platform features and installation steps; `apps/host` composes them and launches the configured SDK runtime. Independent frontends then share one trusted application/persistence owner and react to verified committed state. Neither registration nor `run()` implicitly installs operating-system services.

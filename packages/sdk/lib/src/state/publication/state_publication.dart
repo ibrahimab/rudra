@@ -252,8 +252,10 @@ final class StatePublication {
 
   /// Establishes the terminal lifecycle result and schedules disposal.
   ///
-  /// [error] and [stack_trace] optionally identify an authoritative
-  /// observation failure. The first termination result is retained.
+  /// [error] optionally identifies an authoritative observation failure.
+  /// [stack_trace] optionally preserves the failure stack.
+  ///
+  /// The first termination result is retained.
   void _terminate([Object? error, StackTrace? stack_trace]) {
     if (_stopped) return;
 
@@ -409,8 +411,8 @@ final class StateSubscription {
 
   /// Establishes the subscription's terminal lifecycle result.
   ///
-  /// [error] and [stack_trace] optionally identify the originating
-  /// delivery or authoritative observation failure.
+  /// [error] optionally identifies a delivery or observation failure.
+  /// [stack_trace] optionally preserves the failure stack.
   ///
   /// Capacity is released only after outstanding delivery has settled.
   void _stop([Object? error, StackTrace? stack_trace]) {

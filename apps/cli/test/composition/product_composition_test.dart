@@ -2,8 +2,12 @@ import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
+import 'package:rudra_communication/rudra_communication.dart';
+import 'package:rudra_target_macos/rudra_target_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../support/cli_host_fixture.dart';
 
 /// Verifies production SDK and CLI application composition.
 ///
@@ -16,30 +20,24 @@ import 'package:test/test.dart';
 /// Rudra itself performs only read-only inspection operations.
 void main() {
   group('ProductSdkComposition', () {
-    test('selects only a supported local target adapter', () {
+    test('selects the local target and defers native connectivity', () {
       final composition = ProductSdkComposition.for_current_host();
 
-      if (Platform.isMacOS) {
-        expect(composition, isNotNull);
-
-        expect(composition!.sdk.target_id, 'local-macos');
-
-        expect(
-          composition.working_directory.value,
-          Directory.current.absolute.path,
-        );
-      } else {
-        expect(composition, isNull);
-      }
+      expect(composition.sdk.target_id, local_macos_target_id);
+      expect(
+        composition.working_directory.value,
+        Directory.current.absolute.path,
+      );
+      expect(composition.connection_params.transport, isNull);
+      expect(composition.sdk.is_connected, isFalse);
+      expect(composition.sdk.resources_released, isTrue);
     });
 
     test('registers SDK-backed commands with injected composition', () {
       final inspector = _RecordingInspector();
 
-      final composition = ProductSdkComposition(
-        sdk: RudraSdk(target_id: 'test-target', inspector: inspector),
-        working_directory: TargetPath('/fixture'),
-      );
+      final composition = CliHostFixture(inspector: inspector)
+          .composition(directory: TargetPath('/fixture'));
 
       final cli = RudraCli.product(target_composition: composition);
 
@@ -69,10 +67,8 @@ void main() {
         entries: {file.path.value: file},
       );
 
-      final composition = ProductSdkComposition(
-        sdk: RudraSdk(target_id: 'test-target', inspector: inspector),
-        working_directory: directory,
-      );
+      final composition = CliHostFixture(inspector: inspector)
+          .composition(directory: directory);
 
       final output = StringBuffer();
       final errors = StringBuffer();
@@ -87,9 +83,13 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(inspector.listed_directories, [same(directory)]);
+      expect(inspector.listed_directories.map((path) => path.value), [
+        directory.value,
+      ]);
 
-      expect(inspector.inspected_paths, [same(file.path)]);
+      expect(inspector.inspected_paths.map((path) => path.value), [
+        file.path.value,
+      ]);
 
       expect(
         output.toString(),
@@ -97,16 +97,12 @@ void main() {
       );
 
       expect(errors.toString(), isEmpty);
+      expect(composition.sdk.resources_released, isTrue);
     });
 
     test('preserves existing product command registration', () {
-      final composition = ProductSdkComposition(
-        sdk: RudraSdk(
-          target_id: 'test-target',
-          inspector: _RecordingInspector(),
-        ),
-        working_directory: TargetPath('/fixture'),
-      );
+      final composition = CliHostFixture(inspector: _RecordingInspector())
+          .composition();
 
       final cli = RudraCli.product(target_composition: composition);
 
@@ -118,6 +114,71 @@ void main() {
         expect(cli.command_names, isNot(contains(name)));
       }
     });
+  });
+
+  test(
+    'host connection is deferred until an operational command validates',
+    () async {
+      final transport = _UnavailableTransport();
+
+      for (final arguments in [
+        ['--help'],
+        ['about'],
+        ['ls', '/first', '/second'],
+        ['explore', ''],
+        ['workflow', 'start', 'relative'],
+        ['workflow', 'stop', 'unexpected'],
+        ['host', 'start'],
+      ]) {
+        final composition = ProductSdkComposition(
+          sdk: RudraSdk(),
+          working_directory: TargetPath('/fixture'),
+          connection_params: ConnectionParams(transport: transport),
+        );
+        await RudraCli.product(
+          target_composition: composition,
+          output: StringBuffer(),
+          error_output: StringBuffer(),
+        ).run(arguments);
+        expect(composition.sdk.resources_released, isTrue);
+      }
+      expect(transport.attempts, 0);
+    },
+  );
+
+  test('unavailable host is explicit for every operational command', () async {
+    final transport = _UnavailableTransport();
+
+    for (final arguments in <List<String>>[
+      [],
+      ['ls'],
+      ['explore'],
+      ['workflow', 'start'],
+      ['workflow', 'stop'],
+    ]) {
+      final output = StringBuffer();
+      final errors = StringBuffer();
+      final composition = ProductSdkComposition(
+        sdk: RudraSdk(),
+        working_directory: TargetPath('/fixture'),
+        connection_params: ConnectionParams(transport: transport),
+      );
+
+      final status = await RudraCli.product(
+        target_composition: composition,
+        output: output,
+        error_output: errors,
+        explorer_terminal_host_factory: () =>
+            fail('Unavailable host must not open a terminal.'),
+      ).run(arguments);
+
+      expect(status, RudraExitCode.host_unavailable.value);
+      expect(errors.toString(), contains('Rudra Host unavailable'));
+      expect(output.toString(), isEmpty);
+      expect(composition.sdk.resources_released, isTrue);
+      await expectLater(composition.sdk.connect(), throwsStateError);
+    }
+    expect(transport.attempts, 5);
   });
 
   group('Native production composition', () {
@@ -136,11 +197,12 @@ void main() {
           final output = StringBuffer();
           final errors = StringBuffer();
 
-          // No fake adapter is injected here.
-          //
-          // This uses the exact production composition that
-          // the CLI executable uses on macOS.
-          final cli = RudraCli.product(output: output, error_output: errors);
+          final host = CliHostFixture(inspector: MacOsTargetInspector());
+          final cli = RudraCli.product(
+            target_composition: host.composition(),
+            output: output,
+            error_output: errors,
+          );
 
           final status = await cli.run(['ls', fixture.path]);
 
@@ -235,4 +297,18 @@ final class _RecordingInspector implements TargetInspector {
   Future<TargetPath> read_symbolic_link(TargetPath path) async {
     throw StateError('Unexpected read_symbolic_link call: ${path.value}');
   }
+}
+
+final class _UnavailableTransport implements Transport {
+  int attempts = 0;
+
+  @override
+  Future<TransportConnection> connect() async {
+    attempts++;
+    throw StateError('Fixture host is unavailable.');
+  }
+
+  @override
+  Future<TransportListener> listen() async =>
+      fail('Expected a client invocation.');
 }

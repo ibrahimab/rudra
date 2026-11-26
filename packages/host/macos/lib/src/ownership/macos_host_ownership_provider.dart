@@ -1,102 +1,67 @@
 import 'dart:io';
 
+import 'package:rudra_platform_macos/rudra_platform_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
 import 'darwin_flock.dart';
 import 'macos_host_ownership_lease.dart';
 
-/// Establishes exclusive host ownership on macOS.
-///
-/// Maps each canonical persistence directory to a stable
-/// lock file protected by Darwin's kernel-managed locking
-/// mechanism.
-///
-/// The provider establishes ownership without opening or
-/// initializing workflow persistence.
+/// Establishes one live host per effective macOS user using a Darwin lock.
 ///
 /// Example:
 /// ```dart
-/// final provider = MacOsHostOwnershipProvider();
-///
-/// final lease = await provider.acquire(
-///   scope_directory: '/workspace/rudra',
-/// );
-///
-/// await lease.release();
+/// final lease = await const MacOsHostOwnershipProvider().acquire();
+/// try {
+///   await run_owned_application();
+/// } finally {
+///   await lease.release();
+/// }
 /// ```
 final class MacOsHostOwnershipProvider implements HostOwnershipProvider {
-  /// Creates a native host ownership provider.
+  /// Uses the native per-user directory by default.
   ///
-  /// Native resources are acquired only when [acquire] is invoked.
-  const MacOsHostOwnershipProvider();
+  /// [runtime_directory] supplies a private, canonical directory for isolated
+  /// composition. Construction does not acquire native resources.
+  const MacOsHostOwnershipProvider({this.runtime_directory});
 
-  /// Stable filename identifying the host ownership resource.
-  static const String lock_filename = 'rudra-host.lock';
+  /// Optional isolated directory for the ownership lock.
+  final String? runtime_directory;
 
-  /// Permission mask covering group and other access bits.
-  static const int _shared_permission_mask = 0x003f;
-
-  /// Acquires exclusive ownership of [scope_directory].
+  /// Acquires the retained lock in the effective user's private directory.
   ///
-  /// The directory must be an existing, canonical absolute path
-  /// reserved for trusted host persistence.
-  ///
-  /// Returns a lease retaining the acquired native descriptor.
-  ///
-  /// Throws [HostAlreadyOwnedException] for competing ownership,
-  /// [UnsupportedError] outside macOS or [FileSystemException]
-  /// for invalid storage and native acquisition failures.
+  /// Throws [HostAlreadyOwnedException] when another instance holds it, or
+  /// [FileSystemException] for an unsafe directory, lock or native failure.
   @override
-  Future<HostOwnershipLease> acquire({required String scope_directory}) async {
-    if (!Platform.isMacOS) {
-      throw UnsupportedError('macOS host ownership requires macOS.');
-    }
-
-    final directory = Directory(scope_directory);
-    final metadata = await directory.stat();
-
-    if (metadata.type != FileSystemEntityType.directory) {
-      throw FileSystemException(
-        'Host ownership requires an existing directory.',
-        scope_directory,
-      );
-    }
-
-    // The development ownership mechanism requires a private
-    // directory rather than a shared writable lock location.
-    if ((metadata.mode & _shared_permission_mask) != 0) {
-      throw FileSystemException(
-        'Host ownership requires a private directory.',
-        scope_directory,
-      );
-    }
-
-    final lock_file = File.fromUri(directory.uri.resolve(lock_filename));
-
-    final existing_type = await FileSystemEntity.type(
-      lock_file.path,
-      followLinks: false,
+  Future<HostOwnershipLease> acquire() async {
+    final uid = await macos_effective_uid();
+    final directory = await require_macos_private_directory(
+      runtime_directory ?? MacOsResourceLayout.user_runtime(uid),
+      uid,
     );
+    final path = '${directory.path}/${MacOsResourceLayout.lock_filename}';
 
-    // Reject unexpected existing entries. Native O_NOFOLLOW
-    // additionally prevents following a final symbolic link
-    // during the actual acquisition operation.
-    if (existing_type != FileSystemEntityType.notFound &&
-        existing_type != FileSystemEntityType.file) {
-      throw FileSystemException('Invalid host lock file.', lock_file.path);
+    if (await FileSystemEntity.type(path, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      final metadata = await macos_resource_stat(path);
+      if (metadata.uid != uid ||
+          metadata.mode != 0x8180 || // Regular file with mode 0600.
+          metadata.links != 1) {
+        throw FileSystemException('Invalid Rudra ownership lock.', path);
+      }
     }
 
+    // Darwin acquires an exclusive, nonblocking lock at open and also
+    // rejects a symbolic link in the final path component.
     final native = DarwinFlock();
-    final descriptor = native.try_acquire(lock_file.path);
-
+    final descriptor = native.try_acquire(path);
     if (descriptor == null) {
-      throw HostAlreadyOwnedException(scope_directory: scope_directory);
+      throw HostAlreadyOwnedException(os_user_id: macos_user_id(uid));
     }
 
     return MacOsHostOwnershipLease(
       native: native,
       descriptor: descriptor,
-      path: lock_file.path,
+      path: path,
     );
   }
 }

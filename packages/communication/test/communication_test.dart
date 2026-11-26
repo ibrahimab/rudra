@@ -20,7 +20,7 @@ void main() {
   test('construction acquires no communication resources', () {
     final transport = _TestTransport();
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     expect(transport.listen_count, 0);
     expect(communication.resources_released, isTrue);
@@ -29,7 +29,7 @@ void main() {
   test('configured transport initializes only during execution', () async {
     final transport = _TestTransport();
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     expect(transport.listen_count, 0);
     expect(communication.resources_released, isTrue);
@@ -49,7 +49,7 @@ void main() {
   test('failed initialization retains no communication resources', () async {
     final transport = _TestTransport(fail_binding: true);
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     await expectLater(
       run_once(
@@ -69,7 +69,7 @@ void main() {
   test('failed application startup releases the acquired listener', () async {
     final transport = _TestTransport();
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     final failure = StateError('Controlled application startup failure.');
 
@@ -90,7 +90,7 @@ void main() {
   test('failed listener disposal remains unconfirmed', () async {
     final transport = _TestTransport(fail_disposal: true);
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     await expectLater(run_once(communication), throwsStateError);
 
@@ -98,10 +98,64 @@ void main() {
     expect(communication.resources_released, isFalse);
   });
 
+  test('activates each enabled listener before announcing readiness', () async {
+    final first = _TestTransport();
+    final second = _TestTransport();
+    final communication = Communication(listening_transports: [first, second]);
+
+    await run_once(
+      communication,
+      on_startup: () async {
+        expect(first.listen_count, 1);
+        expect(second.listen_count, 1);
+      },
+    );
+    expect(first.listener.close_calls, 1);
+    expect(second.listener.close_calls, 1);
+    expect(communication.resources_released, isTrue);
+  });
+
+  for (final fail_disposal in [false, true]) {
+    test(
+      'partial activation rolls back listeners (disposal failure: $fail_disposal)',
+      () async {
+        final first = _TestTransport(fail_disposal: fail_disposal);
+        final second = _TestTransport(fail_binding: true);
+        final communication = Communication(
+          listening_transports: [first, second],
+        );
+
+        await expectLater(
+          run_once(
+            communication,
+            on_startup: () async => fail('Host reported readiness.'),
+          ),
+          fail_disposal
+              ? throwsA(isA<TransportDisposalException>())
+              : throwsStateError,
+        );
+        expect(first.listener.close_calls, 1);
+        expect(second.listener.close_calls, 0);
+        expect(communication.resources_released, !fail_disposal);
+      },
+    );
+  }
+
+  test('duplicate enabled endpoints fail before activation', () async {
+    final transport = _TestTransport();
+    final communication = Communication(
+      listening_transports: [transport, transport],
+    );
+
+    await expectLater(run_once(communication), throwsArgumentError);
+    expect(transport.listen_count, 0);
+    expect(communication.resources_released, isTrue);
+  });
+
   test('communication cannot execute twice', () async {
     final transport = _TestTransport();
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     await run_once(communication);
 
@@ -121,7 +175,7 @@ void main() {
 /// Example:
 /// ```dart
 /// final transport = _TestTransport();
-/// final communication = Communication(transport: transport);
+/// final communication = Communication(listening_transports: [transport]);
 /// ```
 final class _TestTransport implements Transport {
   /// Creates a transport with controlled failure behavior.

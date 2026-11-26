@@ -7,8 +7,11 @@ import 'package:rudra_cli/src/features/filesystem/presentation/widgets/directory
 
 import 'package:rudra_cli/src/core/rendering/renderer.dart';
 
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../../../support/cli_host_fixture.dart';
 
 /// Verifies filesystem command integration with Rudra's CLI.
 ///
@@ -21,13 +24,14 @@ void main() {
     test('registers ls without inspecting the filesystem', () {
       final inspector = _FakeTargetInspector();
 
-      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
+      final host = CliHostFixture(inspector: inspector);
+      final client = host.composition();
 
       final cli = RudraCli();
 
       cli.register_module(
         FilesystemCliModule(
-          sdk: sdk,
+          connect: client.connect,
           working_directory: TargetPath('/tmp'),
           renderer: BareFilesystemRenderer(
             output: StringBuffer(),
@@ -40,6 +44,7 @@ void main() {
 
       expect(cli.module_ids, contains('rudra.product.filesystem'));
 
+      expect(host.connect_count, 0);
       expect(inspector.listed_directories, isEmpty);
       expect(inspector.inspected_paths, isEmpty);
     });
@@ -74,9 +79,9 @@ void main() {
 
       expect(status, RudraExitCode.success.value);
 
-      expect(inspector.listed_directories, [same(directory)]);
+      expect(inspector.listed_directories, [has_target_path(directory)]);
 
-      expect(inspector.inspected_paths, [same(entry.path)]);
+      expect(inspector.inspected_paths, [has_target_path(entry.path)]);
 
       expect(
         output.toString(),
@@ -220,13 +225,14 @@ void main() {
       final inspector = _FakeTargetInspector();
       final diagnostics = StringBuffer();
 
-      final sdk = RudraSdk(target_id: 'local-macos', inspector: inspector);
+      final host = CliHostFixture(inspector: inspector);
+      final client = host.composition();
 
       final cli = RudraCli(error_output: diagnostics);
 
       cli.register_module(
         FilesystemCliModule(
-          sdk: sdk,
+          connect: client.connect,
           working_directory: TargetPath('/tmp'),
           renderer: BareFilesystemRenderer(
             output: StringBuffer(),
@@ -241,6 +247,7 @@ void main() {
       expect(diagnostics.isNotEmpty, isTrue);
 
       // Argument validation must happen before SDK invocation.
+      expect(host.connect_count, 0);
       expect(inspector.listed_directories, isEmpty);
       expect(inspector.inspected_paths, isEmpty);
     });
@@ -289,7 +296,16 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      await expectLater(cli.run(['ls']), throwsA(isA<StateError>()));
+      await expectLater(
+        cli.run(['ls']),
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
+      );
     });
 
     test('renders through an injected renderer contract', () async {
@@ -324,9 +340,9 @@ void main() {
       expect(status, RudraExitCode.success.value);
 
       // Exactly one SDK listing is requested.
-      expect(inspector.listed_directories, [same(directory)]);
+      expect(inspector.listed_directories, [has_target_path(directory)]);
 
-      expect(inspector.inspected_paths, [same(entry.path)]);
+      expect(inspector.inspected_paths, [has_target_path(entry.path)]);
 
       // The controller uses the injected renderer rather
       // than constructing a concrete terminal backend.
@@ -373,7 +389,9 @@ RudraCli _create_cli({
   String target_id = 'local-macos',
   Renderer<FilesystemViewModel>? renderer,
 }) {
-  final sdk = RudraSdk(target_id: target_id, inspector: inspector);
+  final host = CliHostFixture(inspector: inspector, target_id: target_id);
+  final client = host.composition(directory: working_directory);
+  addTearDown(client.sdk.close);
 
   final filesystem_renderer =
       renderer ??
@@ -383,7 +401,7 @@ RudraCli _create_cli({
 
   cli.register_module(
     FilesystemCliModule(
-      sdk: sdk,
+      connect: client.connect,
       working_directory: working_directory,
       renderer: filesystem_renderer,
     ),
@@ -539,3 +557,6 @@ final class _FakeTargetInspector implements TargetInspector {
     throw StateError('Unexpected read_symbolic_link call: ${path.value}');
   }
 }
+
+Matcher has_target_path(TargetPath path) =>
+    isA<TargetPath>().having((value) => value.value, 'path', path.value);

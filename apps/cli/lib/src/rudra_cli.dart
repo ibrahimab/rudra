@@ -2,15 +2,13 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 
-import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
+import 'package:rudra_sdk/rudra_sdk.dart';
 
 import 'package:rudra_host/rudra_host.dart';
 
 import 'features/host/cli/host_cli_module.dart';
 
 import 'composition/product_sdk_composition.dart';
-
-import 'composition/product_workflow_composition.dart';
 
 import 'core/cli/rudra_cli_module.dart';
 import 'core/cli/rudra_exit_code.dart';
@@ -87,7 +85,7 @@ final class RudraCli {
   /// Creates a production CLI with supported application modules.
   ///
   /// The application composition boundary owns:
-  /// - SDK and target-adapter selection.
+  /// - Connected SDK configuration and disposal.
   /// - Starting-directory configuration.
   /// - Concrete renderer construction.
   /// - Terminal host construction.
@@ -108,22 +106,8 @@ final class RudraCli {
   /// [explorer_terminal_host_factory] optionally overrides the
   /// production terminal host constructor.
   ///
-  /// [workflow_composition] supplies persistent workflow services.
-  ///
-  /// Production composition resolves the local OS-user identity
-  /// and database location. Tests may inject isolated dependencies.
-  ///
-  /// Workflow persistence is accessed only by explicit workflow
-  /// actions or later read-only state restoration.
-  ///
-  /// The factory is invoked only when the Explorer command runs.
-  /// This supports deterministic interaction tests without
-  /// modifying real terminal modes.
-  ///
-  /// Existing non-interactive output remains unstyled.
-  /// Interactive Explorer uses the ANSI theme and bare renderer.
-  ///
-  /// Development-only commands are not registered.
+  /// The terminal factory is invoked only during an Explorer invocation.
+  /// Operational commands connect after argument validation.
   ///
   /// Construction does not inspect or modify filesystem content
   /// or change terminal settings.
@@ -132,7 +116,6 @@ final class RudraCli {
     StringSink? error_output,
     ProductSdkComposition? target_composition,
     ExplorerTerminalHost Function()? explorer_terminal_host_factory,
-    ProductWorkflowComposition? workflow_composition,
   }) {
     // Resolve the target once so that all application
     // components share the same SDK and starting directory.
@@ -152,15 +135,15 @@ final class RudraCli {
     );
 
     final welcome_controller = WelcomeController(
-      sdk: composition?.sdk,
-      starting_directory: composition?.working_directory,
+      connect: composition.connect,
+      starting_directory: composition.working_directory,
       renderer: welcome_renderer,
     );
 
     final cli = RudraCli(
       error_output: diagnostic_output,
       welcome_controller: welcome_controller,
-    );
+    ).._application_sdk = composition.sdk;
 
     // About uses the same application-owned output destination
     // as other non-interactive product commands.
@@ -184,186 +167,162 @@ final class RudraCli {
       ),
     );
 
-    if (composition != null) {
-      // The application composition boundary selects the
-      // concrete filesystem rendering implementation.
-      //
-      // Commands receive a backend-independent
-      // Renderer<FilesystemViewModel>.
-      //
-      // The concrete renderer independently presents
-      // directory entries and inspection diagnostics.
-      //
-      // Compact output intentionally remains plain text.
-      final filesystem_renderer = BareFilesystemRenderer(
+    // The application composition boundary selects the
+    // concrete filesystem rendering implementation.
+    //
+    // Commands receive a backend-independent
+    // Renderer<FilesystemViewModel>.
+    //
+    // The concrete renderer independently presents
+    // directory entries and inspection diagnostics.
+    //
+    // Compact output intentionally remains plain text.
+    final filesystem_renderer = BareFilesystemRenderer(
+      output: presentation_output,
+      error_output: diagnostic_output,
+    );
+
+    cli.register_module(
+      FilesystemCliModule(
+        connect: composition.connect,
+        working_directory: composition.working_directory,
+        renderer: filesystem_renderer,
+      ),
+    );
+
+    Future<WorkflowSnapshot?> current_workflow(RudraSdk sdk) async =>
+        (await sdk.read_state()).workflows.current_workflow;
+
+    cli.register_module(
+      WorkflowCliModule(
+        working_directory: composition.working_directory,
+        current_workflow: () async =>
+            current_workflow(await composition.connect()),
+        start_workflow: (root, idempotency_key) async {
+          final sdk = await composition.connect();
+          return sdk.workflows.start(
+            root: root,
+            idempotency_key: idempotency_key,
+          );
+        },
+        // Stop uses the same session that read and selected the workflow.
+        stop_workflow: (workflow_id, idempotency_key) => composition
+            .sdk
+            .workflows
+            .stop(workflow_id: workflow_id, idempotency_key: idempotency_key),
         output: presentation_output,
         error_output: diagnostic_output,
-      );
+      ),
+    );
 
-      cli.register_module(
-        FilesystemCliModule(
-          sdk: composition.sdk,
-          working_directory: composition.working_directory,
-          renderer: filesystem_renderer,
-        ),
-      );
+    // Construct terminal hosts lazily so ordinary commands
+    // never probe or modify interactive terminal state.
+    final create_terminal_host =
+        explorer_terminal_host_factory ?? () => DartExplorerTerminalHost();
 
-      // Persistent workflow services are available only when
-      // explicitly composed for this target.
-      //
-      // Injected filesystem compositions do not silently receive
-      // a production persistence context.
-      final workflows =
-          workflow_composition ??
-          (target_composition == null && Platform.isMacOS
-              ? ProductWorkflowComposition.for_current_host()
-              : null);
+    cli.register_module(
+      ExplorerCliModule(
+        working_directory: composition.working_directory,
+        create_runner: (directory) async {
+          final sdk = await composition.connect();
+          // Keep one immutable workflow presentation snapshot
+          // for the current Explorer invocation.
+          late WorkflowExplorerViewModel workflow_view_model;
 
-      if (workflows != null) {
-        cli.register_module(
-          WorkflowCliModule(
-            working_directory: composition.working_directory,
-            current_workflow: workflows.current,
-            start_workflow: (root, idempotency_key) => workflows.start(
-              target_id: composition.sdk.target_id,
-              root: root,
-              idempotency_key: idempotency_key,
+          /// Restores the current workflow through the read-only
+          /// application query.
+          ///
+          /// A missing workflow is represented by a null
+          /// [WorkflowExplorerViewModel.current_workflow].
+          ///
+          /// An unsuccessful restoration propagates its error.
+          Future<void> refresh_workflow_view_model() async {
+            workflow_view_model = WorkflowExplorerViewModel(
+              current_workflow: await current_workflow(sdk),
+            );
+          }
+
+          // Load authoritative state before terminal activation.
+          await refresh_workflow_view_model();
+
+          /// Builds the composed Explorer presentation.
+          ///
+          /// [explorer] is the current navigation snapshot.
+          ///
+          /// [visible_row_limit] is the allocated entry viewport.
+          ///
+          /// [first_visible_index] is the preferred scroll offset.
+          ///
+          /// Returns a complete presentation snapshot.
+          ExplorerViewModel create_view_model(
+            ExplorerModel explorer, {
+            required int visible_row_limit,
+            required int first_visible_index,
+          }) {
+            return ExplorerViewModel.from_navigation(
+              explorer: explorer,
+              workflows: workflow_view_model,
+              visible_row_limit: visible_row_limit,
+              first_visible_index: first_visible_index,
+            );
+          }
+
+          final action_registry = ExplorerActionRegistry([
+            ExplorerFeatureContribution(
+              id: 'workflow',
+              actions: [
+                WorkflowStartExplorerAction(
+                  start_workflow: (root, idempotency_key) => sdk.workflows
+                      .start(root: root, idempotency_key: idempotency_key),
+                ),
+                WorkflowStopExplorerAction(
+                  displayed_workflow: () =>
+                      workflow_view_model.current_workflow,
+                  stop_workflow: (workflow_id, idempotency_key) =>
+                      sdk.workflows.stop(
+                        workflow_id: workflow_id,
+                        idempotency_key: idempotency_key,
+                      ),
+                ),
+              ],
             ),
-            stop_workflow: (workflow_id, idempotency_key) => workflows.stop(
-              workflow_id: workflow_id,
-              idempotency_key: idempotency_key,
-            ),
-            output: presentation_output,
+          ]);
+
+          final terminal = create_terminal_host();
+
+          // All filesystem observations pass through the
+          // configured public Rudra SDK.
+          //
+          // The original requested directory is preserved.
+          final controller = ExplorerController(
+            sdk: sdk,
+            starting_directory: directory,
+          );
+
+          // Interactive presentation uses the same output
+          // destination owned by the terminal host.
+          //
+          // The renderer never changes terminal modes.
+          final renderer = BareExplorerRenderer(
+            output: terminal.output,
+            terminal_columns: () => terminal.terminal_columns,
+            theme: TerminalTheme.ansi,
+            ansi_text: const AnsiText(enabled: true),
+            redraw_screen: true,
+          );
+
+          return ExplorerRunner(
+            controller: controller,
+            terminal: terminal,
+            renderer: renderer,
             error_output: diagnostic_output,
-          ),
-        );
-      }
-
-      // Construct terminal hosts lazily so ordinary commands
-      // never probe or modify interactive terminal state.
-      final create_terminal_host =
-          explorer_terminal_host_factory ?? () => DartExplorerTerminalHost();
-
-      cli.register_module(
-        ExplorerCliModule(
-          working_directory: composition.working_directory,
-          create_runner: (directory) async {
-            // Keep one immutable workflow presentation snapshot
-            // for the current Explorer invocation.
-            WorkflowExplorerViewModel? workflow_view_model;
-
-            /// Restores the current workflow through the read-only
-            /// application query.
-            ///
-            /// A missing workflow is represented by a null
-            /// [WorkflowExplorerViewModel.current_workflow].
-            ///
-            /// An unsuccessful restoration propagates its error.
-            Future<void> refresh_workflow_view_model() async {
-              if (workflows == null) {
-                return;
-              }
-
-              final current_workflow = await workflows.current();
-
-              // Replace the entire immutable presentation snapshot.
-              // No frontend lifecycle transition is inferred.
-              workflow_view_model = WorkflowExplorerViewModel(
-                current_workflow: current_workflow,
-              );
-            }
-
-            // Load authoritative state before terminal activation.
-            await refresh_workflow_view_model();
-
-            /// Builds the composed Explorer presentation.
-            ///
-            /// [explorer] is the current navigation snapshot.
-            ///
-            /// [visible_row_limit] is the allocated entry viewport.
-            ///
-            /// [first_visible_index] is the preferred scroll offset.
-            ///
-            /// Returns a complete presentation snapshot.
-            ExplorerViewModel create_view_model(
-              ExplorerModel explorer, {
-              required int visible_row_limit,
-              required int first_visible_index,
-            }) {
-              return ExplorerViewModel.from_navigation(
-                explorer: explorer,
-                workflows: workflow_view_model,
-                visible_row_limit: visible_row_limit,
-                first_visible_index: first_visible_index,
-              );
-            }
-
-            // Action implementations are registered explicitly.
-            // Their application operations use the configured
-            // trusted workflow composition.
-            final action_registry = ExplorerActionRegistry([
-              ExplorerFeatureContribution(
-                id: 'workflow',
-                actions: [
-                  if (workflows != null)
-                    WorkflowStartExplorerAction(
-                      start_workflow: (root, idempotency_key) =>
-                          workflows.start(
-                            target_id: composition.sdk.target_id,
-                            root: root,
-                            idempotency_key: idempotency_key,
-                          ),
-                    ),
-                  if (workflows != null)
-                    WorkflowStopExplorerAction(
-                      displayed_workflow: () =>
-                          workflow_view_model?.current_workflow,
-                      stop_workflow: (workflow_id, idempotency_key) =>
-                          workflows.stop(
-                            workflow_id: workflow_id,
-                            idempotency_key: idempotency_key,
-                          ),
-                    ),
-                ],
-              ),
-            ]);
-
-            final terminal = create_terminal_host();
-
-            // All filesystem observations pass through the
-            // configured public Rudra SDK.
-            //
-            // The original requested directory is preserved.
-            final controller = ExplorerController(
-              sdk: composition.sdk,
-              starting_directory: directory,
-            );
-
-            // Interactive presentation uses the same output
-            // destination owned by the terminal host.
-            //
-            // The renderer never changes terminal modes.
-            final renderer = BareExplorerRenderer(
-              output: terminal.output,
-              terminal_columns: () => terminal.terminal_columns,
-              theme: TerminalTheme.ansi,
-              ansi_text: const AnsiText(enabled: true),
-              redraw_screen: true,
-            );
-
-            return ExplorerRunner(
-              controller: controller,
-              terminal: terminal,
-              renderer: renderer,
-              error_output: diagnostic_output,
-              create_view_model: create_view_model,
-              refresh_application_state: refresh_workflow_view_model,
-              action_registry: action_registry,
-            );
-          },
-        ),
-      );
-    }
+            create_view_model: create_view_model,
+            refresh_application_state: refresh_workflow_view_model,
+            action_registry: action_registry,
+          );
+        },
+      ),
+    );
 
     return cli;
   }
@@ -379,6 +338,9 @@ final class RudraCli {
   /// Only application compositions explicitly supplying
   /// a controller enable welcome-screen rendering.
   final WelcomeController? _welcome_controller;
+
+  /// Owned SDK in the production composition.
+  RudraSdk? _application_sdk;
 
   /// Identifiers of registered modules.
   final Set<String> _module_ids = <String>{};
@@ -481,20 +443,22 @@ final class RudraCli {
 
     _has_started = true;
 
-    // The welcome screen is the application's root view,
-    // not another filesystem operation or SDK service.
-    if (arguments.isEmpty && _welcome_controller != null) {
-      return await _welcome_controller.show();
-    }
-
     try {
-      final result = await _runner.run(arguments);
+      if (arguments.isEmpty && _welcome_controller != null) {
+        return await _welcome_controller.show();
+      }
 
+      final result = await _runner.run(arguments);
       return result ?? RudraExitCode.success.value;
     } on UsageException catch (error) {
       _error_output.writeln(error);
-
       return RudraExitCode.invalid_usage.value;
+    } on CliHostUnavailableException catch (error) {
+      _error_output.writeln('Rudra Host unavailable: ${error.cause}');
+      return RudraExitCode.host_unavailable.value;
+    } finally {
+      // Explorer's runner restores the terminal before command dispatch returns.
+      await _application_sdk?.close();
     }
   }
 }

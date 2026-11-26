@@ -34,7 +34,8 @@ final class BareAboutRenderer implements Renderer<AboutViewModel> {
   ///
   /// [output] is selected by the application composition boundary.
   ///
-  /// [theme] and [ansi_text] control optional styling.
+  /// [theme] supplies the terminal styling roles.
+  /// [ansi_text] encodes optional ANSI styling.
   /// Output is unbounded by default.
   ///
   /// Construction performs no terminal I/O.

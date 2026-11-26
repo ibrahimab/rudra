@@ -13,11 +13,11 @@ dependencies:
     path: ../../packages/host/macos
   rudra_persistence_sqlite:
     path: ../../packages/persistence/sqlite
-  rudra_communication:
-    path: ../../packages/communication
   rudra_target_macos:
     path: ../../packages/targets/macos
   uuid: ^4.6.0
 
 dev_dependencies:
+  rudra_communication:
+    path: ../../packages/communication
   test: ^1.33.0

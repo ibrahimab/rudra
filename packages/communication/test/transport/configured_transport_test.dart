@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
-import '../support/macos_test_identity.dart';
-
 /// Verifies explicitly configured native listener execution
 /// through the public communication API.
 void main() {
@@ -17,16 +15,12 @@ void main() {
     });
 
     final scope = await directory.resolveSymbolicLinks();
-    final owner = await resolve_macos_test_identity();
 
-    final socket_path = '$scope/${MacOsUnixTransport.socket_filename}';
+    final socket_path = '$scope/rudra.sock';
 
-    final transport = MacOsUnixTransport(
-      scope_directory: scope,
-      os_user_id: owner,
-    );
+    final transport = MacOsUnixTransport(socket_path: '$scope/rudra.sock');
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     // Construction must not acquire native endpoint resources.
     expect(
@@ -57,12 +51,9 @@ void main() {
   }, skip: !Platform.isMacOS);
 
   test('unsupported native execution retains no resources', () async {
-    const transport = MacOsUnixTransport(
-      scope_directory: '/unused',
-      os_user_id: 'test-owner',
-    );
+    const transport = MacOsUnixTransport(socket_path: '/unused/rudra.sock');
 
-    final communication = Communication(transport: transport);
+    final communication = Communication(listening_transports: [transport]);
 
     await expectLater(
       communication.run(shutdown: Future<void>.value()),

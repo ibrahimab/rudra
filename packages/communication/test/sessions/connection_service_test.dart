@@ -30,7 +30,7 @@ void main() {
     var completed = 0;
 
     final running = service.run(
-      listener: listener,
+      listeners: [listener],
       shutdown: shutdown.future,
       open_session: (connection) {
         final session = _open_session(connection);
@@ -68,12 +68,45 @@ void main() {
     expect(second.is_closed, isTrue);
   });
 
+  test('session admission is bounded across enabled listeners', () async {
+    final coordinator = ConnectionService(maximum_sessions: 1);
+    final first_listener = _TestListener();
+    final second_listener = _TestListener();
+    final shutdown = Completer<void>();
+    final admitted = Completer<void>();
+    final first = _TestConnection();
+    final excess = _TestConnection();
+
+    final running = coordinator.run(
+      listeners: [first_listener, second_listener],
+      shutdown: shutdown.future,
+      open_session: (connection) {
+        expect(connection, same(first));
+        admitted.complete();
+        return _open_session(connection);
+      },
+    );
+
+    try {
+      first_listener.accept(first);
+      await admitted.future.timeout(operation_timeout);
+      second_listener.accept(excess);
+      await excess.closed.timeout(operation_timeout);
+      expect(first.is_closed, isFalse);
+    } finally {
+      shutdown.complete();
+      await running.timeout(operation_timeout);
+    }
+    expect(first.is_closed, isTrue);
+    expect(coordinator.resources_released, isTrue);
+  });
+
   test('startup failure disposes of the listener', () async {
     final listener = _TestListener();
 
     await expectLater(
       service.run(
-        listener: listener,
+        listeners: [listener],
         shutdown: Future<void>.value(),
         open_session: (_) {
           fail('Client execution must not begin.');
@@ -98,7 +131,7 @@ void main() {
     final second_started = Completer<void>();
 
     final running = service.run(
-      listener: listener,
+      listeners: [listener],
       shutdown: shutdown.future,
       open_session: (connection) {
         final session = _open_session(connection);
@@ -140,7 +173,7 @@ void main() {
     final connection = _TestConnection(fail_disposal: true);
 
     final running = service.run(
-      listener: listener,
+      listeners: [listener],
       shutdown: shutdown.future,
       open_session: _open_session,
     );

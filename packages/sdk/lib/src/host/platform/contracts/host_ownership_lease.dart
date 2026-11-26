@@ -1,4 +1,4 @@
-/// Represents exclusive ownership of a host persistence scope.
+/// Represents exclusive host ownership for an operating-system user.
 ///
 /// Retains the underlying platform ownership resource until
 /// explicitly released. The resource remains acquired throughout
@@ -9,9 +9,7 @@
 ///
 /// Example:
 /// ```dart
-/// final lease = await provider.acquire(
-///   scope_directory: '/workspace/rudra',
-/// );
+/// final lease = await provider.acquire();
 ///
 /// try {
 ///   await run_application();

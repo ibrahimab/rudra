@@ -31,7 +31,7 @@ void main() {
     final ready = Completer<void>();
 
     final communication = Communication(
-      transport: transport,
+      listening_transports: [transport],
       codecs: _create_codecs(),
       handlers: _create_handlers(handler),
     );
@@ -69,12 +69,14 @@ void main() {
     RequestHandler<_EchoResponse, _EchoRequest>? handler,
   }) async {
     final communication = Communication(
-      transport: transport,
+      listening_transports: [transport],
       codecs: _create_codecs(),
       handlers: _create_handlers(handler),
     );
 
-    final session = await communication.connect();
+    final session = await communication.connect(
+      ConnectionParams(transport: transport),
+    );
 
     addTearDown(() async {
       try {
@@ -92,7 +94,7 @@ void main() {
       final transport = _LoopbackTransport(os_user_id: owner);
 
       final communication = Communication(
-        transport: transport,
+        listening_transports: [transport],
         options: const MessageSessionOptions(maximum_incoming: 0),
       );
 
@@ -116,11 +118,14 @@ void main() {
       final transport = _LoopbackTransport(os_user_id: owner);
 
       final communication = Communication(
-        transport: transport,
+        listening_transports: [transport],
         options: const MessageSessionOptions(maximum_pending: 0),
       );
 
-      await expectLater(communication.connect(), throwsArgumentError);
+      await expectLater(
+        communication.connect(ConnectionParams(transport: transport)),
+        throwsArgumentError,
+      );
 
       expect(transport.connect_count, 0);
       expect(communication.resources_released, isTrue);
@@ -136,7 +141,10 @@ void main() {
         const _EchoRequestCodec(),
       );
 
-      final communication = Communication(transport: transport, codecs: codecs);
+      final communication = Communication(
+        listening_transports: [transport],
+        codecs: codecs,
+      );
 
       await expectLater(
         communication.run(shutdown: Future<void>.value()),
@@ -162,7 +170,7 @@ void main() {
         );
 
         final communication = Communication(
-          transport: transport,
+          listening_transports: [transport],
           codecs: codecs,
           handlers: handlers,
         );
@@ -187,12 +195,15 @@ void main() {
         ..freeze(codecs: original_codecs);
 
       final communication = Communication(
-        transport: transport,
+        listening_transports: [transport],
         codecs: _create_codecs(),
         handlers: handlers,
       );
 
-      await expectLater(communication.connect(), throwsStateError);
+      await expectLater(
+        communication.connect(ConnectionParams(transport: transport)),
+        throwsStateError,
+      );
 
       expect(transport.connect_count, 0);
       expect(communication.resources_released, isTrue);
@@ -448,7 +459,7 @@ void main() {
     test('failed outbound establishment confirms resource release', () async {
       final transport = _LoopbackTransport(os_user_id: owner);
 
-      final communication = Communication(transport: transport);
+      final communication = Communication(listening_transports: [transport]);
 
       final lifecycle_failed = expectLater(
         communication.done,
@@ -456,7 +467,10 @@ void main() {
       );
 
       // No listening endpoint has been established.
-      await expectLater(communication.connect(), throwsStateError);
+      await expectLater(
+        communication.connect(ConnectionParams(transport: transport)),
+        throwsStateError,
+      );
 
       await lifecycle_failed;
 
@@ -476,14 +490,17 @@ void main() {
 
       await start_server(transport);
 
-      final communication = Communication(transport: transport);
+      final communication = Communication(listening_transports: [transport]);
 
       final lifecycle_failed = expectLater(
         communication.done,
         throwsA(same(failure)),
       );
 
-      await expectLater(communication.connect(), throwsA(same(failure)));
+      await expectLater(
+        communication.connect(ConnectionParams(transport: transport)),
+        throwsA(same(failure)),
+      );
 
       await lifecycle_failed;
 
@@ -503,9 +520,11 @@ void main() {
 
       await start_server(transport);
 
-      final communication = Communication(transport: transport);
+      final communication = Communication(listening_transports: [transport]);
 
-      final session = await communication.connect();
+      final session = await communication.connect(
+        ConnectionParams(transport: transport),
+      );
 
       final lifecycle_failed = expectLater(
         communication.done,

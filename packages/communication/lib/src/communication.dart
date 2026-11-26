@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'messaging/message_codec_registry.dart';
 import 'messaging/request_handler_registry.dart';
@@ -6,17 +7,19 @@ import 'sessions/connection_service.dart';
 import 'sessions/default_message_session.dart';
 import 'sessions/message_session.dart';
 import 'sessions/message_session_options.dart';
+import 'transport/connection_params.dart';
 import 'transport/contracts/transport.dart';
 import 'transport/contracts/transport_connection.dart';
 import 'transport/contracts/transport_listener.dart';
+import 'transport/transport_registry.dart';
 
 /// Coordinates authenticated object-level application communication.
 ///
 /// Owns messaging configuration, session execution and
 /// communication resource disposal.
 ///
-/// Consumers supply a configured authenticated transport together
-/// with their application message codecs and handlers.
+/// Communication selects native local connectivity by default. Consumers
+/// supply application codecs and handlers and can enable configured endpoints.
 ///
 /// Each instance owns one execution lifecycle, either a listening
 /// endpoint or an independently connected client session.
@@ -24,7 +27,6 @@ import 'transport/contracts/transport_listener.dart';
 /// Example:
 /// ```dart
 /// final communication = Communication(
-///   transport: transport,
 ///   codecs: codecs,
 ///   handlers: handlers,
 /// );
@@ -46,8 +48,9 @@ import 'transport/contracts/transport_listener.dart';
 abstract interface class Communication {
   /// Creates communication with internally owned execution components.
   ///
-  /// [transport] supplies configured authenticated endpoint
-  /// establishment.
+  /// [listening_transports] enables explicit listeners in activation order.
+  /// When omitted, the registered platform default is enabled. An explicit
+  /// list must contain one or more distinct transport instances.
   ///
   /// [codecs] supplies application message codec configuration.
   /// When absent, communication constructs an empty registry.
@@ -62,7 +65,7 @@ abstract interface class Communication {
   /// Construction does not bind endpoints, establish connections
   /// or execute application handlers.
   factory Communication({
-    required Transport transport,
+    Iterable<Transport>? listening_transports,
     MessageCodecRegistry? codecs,
     RequestHandlerRegistry? handlers,
     MessageSessionOptions options,
@@ -118,7 +121,8 @@ abstract interface class Communication {
   /// Establishes an authenticated object-level client session.
   ///
   /// Returns an executing session providing typed messaging
-  /// through the configured transport.
+  /// through the transport selected by [params]. Omit the parameters to
+  /// connect through the registered native default.
   ///
   /// The caller may terminate communication through its close
   /// operation.
@@ -133,7 +137,9 @@ abstract interface class Communication {
   /// failures propagate to the caller.
   ///
   /// Connection establishment preserves listener ownership.
-  Future<MessageSession> connect();
+  Future<MessageSession> connect([
+    ConnectionParams params = const ConnectionParams(),
+  ]);
 }
 
 /// Implements communication's default ownership and execution model.
@@ -144,7 +150,6 @@ abstract interface class Communication {
 /// Example:
 /// ```dart
 /// final communication = _Communication(
-///   transport: transport,
 /// );
 ///
 /// assert(communication.resources_released);
@@ -152,20 +157,23 @@ abstract interface class Communication {
 final class _Communication implements Communication {
   /// Creates the default communication implementation.
   ///
-  /// [transport] supplies configured authenticated connectivity.
+  /// [listening_transports] supplies explicit authenticated listeners.
   ///
-  /// [codecs] and [handlers] supply application registration.
+  /// [codecs] supplies the application message codec registry.
+  /// [handlers] supplies the application request handler registry.
   ///
   /// [options] defines session execution limits.
   ///
   /// Absent messaging registries are constructed internally.
   /// Construction performs no external resource acquisition.
   _Communication({
-    required Transport transport,
+    Iterable<Transport>? listening_transports,
     MessageCodecRegistry? codecs,
     RequestHandlerRegistry? handlers,
     MessageSessionOptions options = const MessageSessionOptions(),
-  }) : _transport = transport,
+  }) : _listening_transports = listening_transports == null
+           ? null
+           : List.unmodifiable(listening_transports),
        _codecs = codecs ?? MessageCodecRegistry(),
        _handlers = handlers ?? RequestHandlerRegistry(),
        _options = options {
@@ -174,8 +182,11 @@ final class _Communication implements Communication {
     _completion.future.ignore();
   }
 
-  /// Transport responsible for authenticated endpoint establishment.
-  final Transport _transport;
+  /// Explicitly enabled listeners, or null to activate the native default.
+  final List<Transport>? _listening_transports;
+
+  Transport _native_transport() =>
+      TransportRegistry.standard.create_default(Platform.operatingSystem);
 
   /// Application codec configuration owned by communication.
   final MessageCodecRegistry _codecs;
@@ -269,21 +280,11 @@ final class _Communication implements Communication {
 
       _resources_released = false;
 
-      final TransportListener listener;
-
-      try {
-        listener = await _transport.listen();
-      } catch (_) {
-        // Failed transport initialization must release any
-        // resources acquired during the unsuccessful attempt.
-        _resources_released = true;
-
-        rethrow;
-      }
+      final listeners = await _activate_listeners();
 
       try {
         await _connection_service.run(
-          listener: listener,
+          listeners: listeners,
           shutdown: shutdown,
           open_session: _open_session,
           on_startup: on_startup,
@@ -300,6 +301,36 @@ final class _Communication implements Communication {
     }
   }
 
+  /// Activates all enabled endpoints before session admission.
+  ///
+  /// Rolls back bound listeners if a later activation fails. A failed cleanup
+  /// is visible to the outer owner through [resources_released].
+  Future<List<TransportListener>> _activate_listeners() async {
+    final listeners = <TransportListener>[];
+    try {
+      final enabled = _listening_transports ?? [_native_transport()];
+      if (enabled.isEmpty ||
+          (Set<Transport>.identity()..addAll(enabled)).length !=
+              enabled.length) {
+        throw ArgumentError('Enabled listeners must be nonempty and distinct.');
+      }
+      for (final transport in enabled) {
+        listeners.add(await transport.listen());
+      }
+      return listeners;
+    } catch (error) {
+      try {
+        await Future.wait(
+          listeners.reversed.map((listener) async => listener.close()),
+        );
+      } catch (disposal_error) {
+        throw TransportDisposalException(error, disposal_error);
+      }
+      _resources_released = error is! TransportDisposalException;
+      rethrow;
+    }
+  }
+
   /// Establishes an authenticated client communication session.
   ///
   /// Returns an executing object-level session using the
@@ -308,7 +339,9 @@ final class _Communication implements Communication {
   /// Connection, authentication and session initialization
   /// failures propagate.
   @override
-  Future<MessageSession> connect() async {
+  Future<MessageSession> connect([
+    ConnectionParams params = const ConnectionParams(),
+  ]) async {
     _claim_lifecycle();
 
     try {
@@ -319,11 +352,11 @@ final class _Communication implements Communication {
       final TransportConnection connection;
 
       try {
-        connection = await _transport.connect();
-      } catch (_) {
+        connection = await (params.transport ?? _native_transport()).connect();
+      } catch (error) {
         // Failed outbound establishment retains no connection
         // resources according to the transport contract.
-        _resources_released = true;
+        _resources_released = error is! TransportDisposalException;
 
         rethrow;
       }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host/rudra_host.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -27,104 +28,96 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  /// Creates a composition sharing the configured ownership fixture.
-  ///
-  /// [scope] optionally supplies an alternative spelling of the
-  /// persistence directory.
-  ///
-  /// [transport_factory] optionally substitutes configured transport
-  /// resolution to exercise composition failure boundaries.
+  File database(String directory_path) => File('$directory_path/rudra.sqlite');
+
   HostComposition create_composition({
-    Directory? scope,
-    HostTransportFactory? transport_factory,
+    File Function()? resolve_database,
+    TestHostTransport? transport,
   }) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: ownership,
-    transport_factory:
-        transport_factory ??
-        ({required scope_directory, required os_user_id}) {
-          return TestHostTransport();
-        },
-    data_directory: scope ?? directory,
+    resolve_database: resolve_database ?? () => database(directory.path),
     target_id: 'test-target',
     inspector: const UnusedTargetInspector(),
+    communication_factory: ({required codecs, required handlers}) {
+      expect(ownership.is_owned, isTrue);
+      return Communication(
+        listening_transports: [transport ?? TestHostTransport()],
+        codecs: codecs,
+        handlers: handlers,
+      );
+    },
   );
 
-  test('resolves transport only after acquiring canonical ownership', () async {
-    final canonical = await directory.resolveSymbolicLinks();
+  test(
+    'acquires ownership before resolving storage or binding listeners',
+    () async {
+      var resolutions = 0;
+      final transport = TestHostTransport();
 
-    var resolutions = 0;
-
-    final transport = TestHostTransport();
-
-    final composition = create_composition(
-      scope: Directory('${directory.path}/.'),
-      transport_factory: ({required scope_directory, required os_user_id}) {
-        resolutions++;
-
-        expect(ownership.is_owned, isTrue);
-        expect(ownership.acquired_scopes, [canonical]);
-        expect(scope_directory, canonical);
-        expect(os_user_id, 'test-owner');
-
-        expect(transport.listen_count, 0);
-
-        return transport;
-      },
-    );
-
-    expect(resolutions, 0);
-
-    await composition.run(
-      shutdown: Future<void>.value(),
-      on_ready: (_, _) {
-        expect(resolutions, 1);
-        expect(transport.listen_count, 1);
-      },
-    );
-
-    expect(resolutions, 1);
-    expect(transport.close_count, 1);
-    expect(ownership.is_owned, isFalse);
-  });
-
-  test('occupied scope prevents transport resolution', () async {
-    final canonical = await directory.resolveSymbolicLinks();
-
-    final lease = await ownership.acquire(scope_directory: canonical);
-
-    try {
       final composition = create_composition(
-        transport_factory: ({required scope_directory, required os_user_id}) {
-          fail('Competing host must not resolve connectivity.');
+        transport: transport,
+        resolve_database: () {
+          resolutions++;
+          expect(ownership.is_owned, isTrue);
+          expect(ownership.acquire_count, 1);
+          expect(transport.listen_count, 0);
+          return database(directory.path);
         },
       );
 
-      await expectLater(
-        composition.run(
-          shutdown: Future<void>.value(),
-          on_ready: (_, _) {
-            fail('Competing host must not report readiness.');
-          },
-        ),
-        throwsA(isA<HostAlreadyOwnedException>()),
+      expect(resolutions, 0);
+      await composition.run(
+        shutdown: Future<void>.value(),
+        on_ready: (_, _) {
+          expect(resolutions, 1);
+          expect(transport.listen_count, 1);
+        },
       );
 
-      expect(await composition.database_file.exists(), isFalse);
+      expect(resolutions, 1);
+      expect(transport.close_count, 1);
+      expect(ownership.is_owned, isFalse);
+    },
+  );
 
-      expect(ownership.is_owned, isTrue);
-    } finally {
-      await lease.release();
-    }
-  });
+  test(
+    'occupied user prevents another database or endpoint from activating',
+    () async {
+      final lease = await ownership.acquire();
+      final other_transport = TestHostTransport();
 
-  test('failed transport resolution releases acquired ownership', () async {
-    final failure = StateError('Controlled transport resolution failure.');
+      try {
+        final composition = create_composition(
+          transport: other_transport,
+          resolve_database: () =>
+              fail('Competing host must not resolve storage.'),
+        );
 
-    final composition = create_composition(
-      transport_factory: ({required scope_directory, required os_user_id}) {
+        await expectLater(
+          composition.run(
+            shutdown: Future<void>.value(),
+            on_ready: (_, _) =>
+                fail('Competing host must not report readiness.'),
+          ),
+          throwsA(isA<HostAlreadyOwnedException>()),
+        );
+
+        expect(other_transport.listen_count, 0);
         expect(ownership.is_owned, isTrue);
+      } finally {
+        await lease.release();
+      }
+    },
+  );
 
+  test('failed storage resolution releases acquired ownership', () async {
+    final failure = StateError('Controlled storage resolution failure.');
+    final transport = TestHostTransport();
+    final composition = create_composition(
+      transport: transport,
+      resolve_database: () {
+        expect(ownership.is_owned, isTrue);
         throw failure;
       },
     );
@@ -132,15 +125,13 @@ void main() {
     await expectLater(
       composition.run(
         shutdown: Future<void>.value(),
-        on_ready: (_, _) {
-          fail('Failed configuration must not report readiness.');
-        },
+        on_ready: (_, _) =>
+            fail('Failed configuration must not report readiness.'),
       ),
       throwsA(same(failure)),
     );
 
-    expect(await composition.database_file.exists(), isFalse);
-
+    expect(transport.listen_count, 0);
     expect(ownership.is_owned, isFalse);
     expect(ownership.release_count, 1);
   });
@@ -166,7 +157,7 @@ void main() {
       expect(ownership.release_count, 0);
 
       // Ownership acquisition must not initialize workflow storage.
-      expect(await composition.database_file.exists(), isFalse);
+      expect(await database(directory.path).exists(), isFalse);
     } finally {
       shutdown.complete();
       await running;
@@ -177,9 +168,7 @@ void main() {
   });
 
   test('occupied scope rejects startup before persistence', () async {
-    final canonical = await directory.resolveSymbolicLinks();
-
-    final lease = await ownership.acquire(scope_directory: canonical);
+    final lease = await ownership.acquire();
 
     final composition = create_composition();
 
@@ -197,7 +186,7 @@ void main() {
 
       // Even an explicit workflow Start must not initialize
       // persistence after unsuccessful ownership acquisition.
-      expect(await composition.database_file.exists(), isFalse);
+      expect(await database(directory.path).exists(), isFalse);
       expect(ownership.is_owned, isTrue);
     } finally {
       await lease.release();
@@ -221,19 +210,6 @@ void main() {
     expect(ownership.release_count, 1);
   });
 
-  test('alternative directory spellings resolve to one scope', () async {
-    final canonical = await directory.resolveSymbolicLinks();
-
-    final composition = create_composition(
-      scope: Directory('${directory.path}/.'),
-    );
-
-    await composition.run(shutdown: Future<void>.value(), on_ready: (_, _) {});
-
-    expect(ownership.acquired_scopes, [canonical]);
-    expect(ownership.release_count, 1);
-  });
-
   test('a new composition can acquire a released scope', () async {
     for (var attempt = 0; attempt < 2; attempt++) {
       await create_composition().run(
@@ -242,7 +218,7 @@ void main() {
       );
     }
 
-    expect(ownership.acquired_scopes, hasLength(2));
+    expect(ownership.acquire_count, 2);
     expect(ownership.release_count, 2);
     expect(ownership.is_owned, isFalse);
   });

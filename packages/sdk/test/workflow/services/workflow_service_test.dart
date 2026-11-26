@@ -15,7 +15,7 @@ void main() {
 
     sdk = RudraSdk(
       target_id: 'test-target',
-      connection_setup: () {
+      communication_factory: ({required codecs, required handlers}) {
         resolution_count++;
 
         throw StateError('Unexpected endpoint resolution.');

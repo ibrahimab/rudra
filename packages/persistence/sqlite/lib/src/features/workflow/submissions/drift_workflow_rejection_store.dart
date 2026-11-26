@@ -14,8 +14,9 @@ import '../../../database/rudra_database.dart';
 final class DriftWorkflowRejectionStore implements WorkflowSubmissionRejector {
   /// Creates a rejection writer using shared persistence.
   ///
-  /// [database] supplies shared durable storage. [scope_id] identifies the trusted
-  /// submission namespace. [codec] validates the accepted command payload.
+  /// [database] supplies shared durable storage.
+  /// [scope_id] identifies the trusted submission namespace.
+  /// [codec] validates the accepted command payload.
   /// Blank [scope_id] values throw [ArgumentError].
   DriftWorkflowRejectionStore({
     required RudraDatabase database,

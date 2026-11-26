@@ -152,7 +152,8 @@ final class WorkflowRuntime {
   ///
   /// [codec] serializes and restores registered event types.
   /// [command_behaviors] contains the exact-type command handlers.
-  /// [lifecycles] and [slice_keys] define registered domain ownership.
+  /// [lifecycles] defines the registered workflow lifecycles.
+  /// [slice_keys] identifies the registered domain slices.
   /// [slice_codecs] contains the validated serialization capabilities
   /// contributed by the owning domain modules.
   /// [outcome_transitions] contains the registered lifecycle rules.

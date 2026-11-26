@@ -25,17 +25,16 @@
 /// ```dart
 /// import 'package:rudra_sdk/rudra_sdk.dart';
 ///
-/// final directory = TargetPath('/Users/example');
-///
-/// final listing = DirectoryListing(
-///   target_id: 'local-macos',
-///   directory: directory,
-///   entries: [],
-///   is_complete: true,
-/// );
-///
-/// print(listing.is_complete);
-/// // true
+/// final sdk = RudraSdk();
+/// try {
+///   await sdk.connect();
+///   final listing = await sdk.filesystem.list(
+///     directory: TargetPath('/Users/example'),
+///   );
+///   print(listing.is_complete);
+/// } finally {
+///   await sdk.close();
+/// }
 /// ```
 library;
 
@@ -73,8 +72,10 @@ export 'src/messaging/standard_messaging_modules.dart';
 /// Portable host runtime and platform contracts.
 export 'src/host/host.dart';
 
-/// Trusted client connection composition contracts.
-export 'src/client/contracts/client_connection_setup.dart';
+/// Explicit host connectivity configuration.
+export 'package:rudra_communication/rudra_communication.dart'
+    show ConnectionParams, MacOsUnixTransport;
+
 export 'src/client/client_connection.dart' show ClientCommunicationFactory;
 
 /// Main SDK application facade.

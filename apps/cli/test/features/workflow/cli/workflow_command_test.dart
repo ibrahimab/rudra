@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
-import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
-import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../../../support/cli_host_fixture.dart';
 
 /// Verifies explicit workflow lifecycle actions through the CLI.
 ///
@@ -16,8 +16,7 @@ import 'package:test/test.dart';
 void main() {
   late Directory directory;
   late File database_file;
-  late ProductSdkComposition sdk_composition;
-  late ProductWorkflowComposition workflow_composition;
+  late CliHostFixture host;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp(
@@ -26,27 +25,19 @@ void main() {
 
     database_file = File('${directory.path}/rudra.sqlite');
 
-    sdk_composition = ProductSdkComposition(
-      sdk: RudraSdk(target_id: 'local-macos', inspector: _UnusedInspector()),
-      working_directory: TargetPath('/fixture'),
-    );
-
-    workflow_composition = ProductWorkflowComposition(
+    addTearDown(() => directory.delete(recursive: true));
+    host = CliHostFixture(
+      inspector: _UnusedInspector(),
+      target_id: local_macos_target_id,
       database_file: database_file,
-      os_user_id_provider: () async => 'test-os-user',
     );
-  });
-
-  tearDown(() async {
-    await directory.delete(recursive: true);
   });
 
   /// Creates a fresh CLI invocation using the same persistence
   /// location and trusted test identity.
   RudraCli create_cli(StringBuffer output, {StringBuffer? error_output}) {
     return RudraCli.product(
-      target_composition: sdk_composition,
-      workflow_composition: workflow_composition,
+      target_composition: host.composition(),
       output: output,
       error_output: error_output ?? StringBuffer(),
     );
@@ -71,7 +62,7 @@ void main() {
     expect(output.toString(), contains('Version: 1'));
     expect(database_file.existsSync(), isTrue);
 
-    final restored = await workflow_composition.current();
+    final restored = await host.current();
 
     expect(restored, isNotNull);
     expect(restored!.version, 1);
@@ -88,7 +79,7 @@ void main() {
       RudraExitCode.success.value,
     );
 
-    final first = await workflow_composition.current();
+    final first = await host.current();
 
     expect(first, isNotNull);
 
@@ -102,7 +93,7 @@ void main() {
     expect(second_status, RudraExitCode.workflow_conflict.value);
     expect(errors.toString(), contains('Workflow already active.'));
 
-    final restored = await workflow_composition.current();
+    final restored = await host.current();
 
     expect(restored, isNotNull);
     expect(restored!.identity.workflow_id, first!.identity.workflow_id);
@@ -116,7 +107,7 @@ void main() {
       RudraExitCode.success.value,
     );
 
-    final original = await workflow_composition.current();
+    final original = await host.current();
 
     expect(original, isNotNull);
 
@@ -134,7 +125,7 @@ void main() {
     // Stop preserves persistent storage but releases the
     // user's unfinished-workflow reservation.
     expect(database_file.existsSync(), isTrue);
-    expect(await workflow_composition.current(), isNull);
+    expect(await host.current(), isNull);
 
     // A new explicit Start may establish another workflow.
     expect(
@@ -142,7 +133,7 @@ void main() {
       RudraExitCode.success.value,
     );
 
-    final next = await workflow_composition.current();
+    final next = await host.current();
 
     expect(next, isNotNull);
     expect(next!.version, 1);
@@ -167,9 +158,11 @@ void main() {
   test('explicit identified Stop durably records workflow absence', () async {
     expect(database_file.existsSync(), isFalse);
 
-    final outcome = await workflow_composition.stop(
-      workflow_id: 'previous-workflow',
-      idempotency_key: 'stop-previous',
+    final outcome = await host.using_client(
+      (sdk) => sdk.workflows.stop(
+        workflow_id: 'previous-workflow',
+        idempotency_key: 'stop-previous',
+      ),
     );
 
     expect(outcome, isA<WorkflowOperationResolved>());
@@ -183,11 +176,13 @@ void main() {
     );
 
     expect(database_file.existsSync(), isTrue);
-    expect(await workflow_composition.current(), isNull);
+    expect(await host.current(), isNull);
 
-    final retried = await workflow_composition.stop(
-      workflow_id: 'previous-workflow',
-      idempotency_key: 'stop-previous',
+    final retried = await host.using_client(
+      (sdk) => sdk.workflows.stop(
+        workflow_id: 'previous-workflow',
+        idempotency_key: 'stop-previous',
+      ),
     );
 
     final retried_resolution =
@@ -227,7 +222,7 @@ void main() {
     expect(status, RudraExitCode.workflow_conflict.value);
     expect(errors.toString(), contains('No active workflow to stop.'));
 
-    expect(await workflow_composition.current(), isNull);
+    expect(await host.current(), isNull);
     expect(database_file.existsSync(), isTrue);
   });
 
@@ -256,20 +251,68 @@ void main() {
     expect(database_file.existsSync(), isFalse);
   });
 
+  test(
+    'CLI Stop cannot terminate a replacement after selecting the old workflow',
+    () async {
+      expect(
+        await create_cli(StringBuffer()).run(['workflow', 'start']),
+        RudraExitCode.success.value,
+      );
+      final original = (await host.current())!;
+      final stale_read = host.hold_next_response();
+      final errors = StringBuffer();
+      final stopping = create_cli(
+        StringBuffer(),
+        error_output: errors,
+      ).run(['workflow', 'stop']);
+      stopping.ignore();
+
+      try {
+        // The selected state is already built, but the first client has not
+        // received it. Replace the workflow from independent connections.
+        await stale_read.entered;
+        expect(
+          await create_cli(StringBuffer()).run(['workflow', 'stop']),
+          RudraExitCode.success.value,
+        );
+        expect(
+          await create_cli(StringBuffer()).run(['workflow', 'start']),
+          RudraExitCode.success.value,
+        );
+        final replacement = (await host.current())!;
+        expect(
+          replacement.identity.workflow_id,
+          isNot(original.identity.workflow_id),
+        );
+
+        stale_read.release();
+        expect(await stopping, RudraExitCode.workflow_conflict.value);
+        expect(errors.toString(), contains('Active workflow changed'));
+        expect(
+          (await host.current())!.identity.workflow_id,
+          replacement.identity.workflow_id,
+        );
+      } finally {
+        stale_read.release();
+        await stopping;
+      }
+    },
+  );
+
   test('expected workflow ID cannot stop a replacement workflow', () async {
     expect(
       await create_cli(StringBuffer()).run(['workflow', 'start']),
       RudraExitCode.success.value,
     );
 
-    final original = await workflow_composition.current();
-
-    expect(original, isNotNull);
+    final original = (await host.current())!;
 
     // Simulate another frontend ending the explicitly selected workflow.
-    final original_stop = await workflow_composition.stop(
-      workflow_id: original!.identity.workflow_id,
-      idempotency_key: 'stop-original',
+    final original_stop = await host.using_client(
+      (sdk) => sdk.workflows.stop(
+        workflow_id: original.identity.workflow_id,
+        idempotency_key: 'stop-original',
+      ),
     );
 
     expect(
@@ -283,7 +326,7 @@ void main() {
       RudraExitCode.success.value,
     );
 
-    final replacement = await workflow_composition.current();
+    final replacement = await host.current();
 
     expect(replacement, isNotNull);
     expect(
@@ -293,9 +336,11 @@ void main() {
 
     // Explorer still displays the original workflow ID.
     // It must not silently stop the replacement.
-    final stale_stop = await workflow_composition.stop(
-      workflow_id: original.identity.workflow_id,
-      idempotency_key: 'stale-stop',
+    final stale_stop = await host.using_client(
+      (sdk) => sdk.workflows.stop(
+        workflow_id: original.identity.workflow_id,
+        idempotency_key: 'stale-stop',
+      ),
     );
 
     expect(stale_stop, isA<WorkflowOperationResolved>());
@@ -310,7 +355,7 @@ void main() {
       WorkflowRejectionCode.workflow_id_mismatch,
     );
 
-    final restored = await workflow_composition.current();
+    final restored = await host.current();
 
     expect(restored, isNotNull);
     expect(restored!.identity.workflow_id, replacement.identity.workflow_id);

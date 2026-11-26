@@ -470,16 +470,15 @@ final class _HostFixture {
         target_id: 'local-macos',
         inspector: const UnusedTargetInspector(),
       ),
-      transport: transport,
-      communication_factory:
-          ({required transport, required codecs, required handlers}) {
-            return Communication(
-              transport: transport,
-              codecs: codecs,
-              handlers: handlers,
-              options: const MessageSessionOptions(request_timeout: timeout),
-            );
-          },
+
+      communication_factory: ({required codecs, required handlers}) {
+        return Communication(
+          listening_transports: [transport],
+          codecs: codecs,
+          handlers: handlers,
+          options: const MessageSessionOptions(request_timeout: timeout),
+        );
+      },
     );
 
     final shutdown = Completer<void>();
@@ -536,13 +535,14 @@ final class _HostFixture {
     });
 
     final communication = Communication(
-      transport: transport,
       codecs: create_application_message_codecs(),
       handlers: handlers,
       options: const MessageSessionOptions(request_timeout: timeout),
     );
 
-    final session = await communication.connect();
+    final session = await communication.connect(
+      ConnectionParams(transport: transport),
+    );
 
     addTearDown(() async {
       try {

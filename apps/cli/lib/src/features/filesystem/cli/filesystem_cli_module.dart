@@ -39,7 +39,7 @@ import 'list_command.dart';
 /// Example:
 /// ```dart
 /// final module = FilesystemCliModule(
-///   sdk: sdk,
+///   connect: connect_sdk,
 ///   working_directory: TargetPath('/workspace'),
 ///   renderer: renderer,
 /// );
@@ -49,7 +49,7 @@ import 'list_command.dart';
 final class FilesystemCliModule implements RudraCliModule {
   /// Creates a filesystem module with explicit dependencies.
   ///
-  /// [sdk] provides platform-independent filesystem services.
+  /// [connect] provides platform-independent filesystem services.
   ///
   /// [working_directory] supplies the default target-native
   /// directory for filesystem commands.
@@ -60,19 +60,19 @@ final class FilesystemCliModule implements RudraCliModule {
   /// Its concrete backend is selected by application composition.
   ///
   /// The caller must ensure that [working_directory] belongs
-  /// to the filesystem target configured in [sdk].
+  /// to the filesystem target configured in [connect].
   ///
   /// Construction performs no filesystem or terminal I/O.
   FilesystemCliModule({
-    required RudraSdk sdk,
+    required Future<RudraSdk> Function() connect,
     required TargetPath working_directory,
     required Renderer<FilesystemViewModel> renderer,
-  }) : _sdk = sdk,
+  }) : _connect = connect,
        _working_directory = working_directory,
        _renderer = renderer;
 
   /// SDK shared by commands registered through this module.
-  final RudraSdk _sdk;
+  final Future<RudraSdk> Function() _connect;
 
   /// Default target-native directory for filesystem commands.
   final TargetPath _working_directory;
@@ -96,7 +96,7 @@ final class FilesystemCliModule implements RudraCliModule {
   Iterable<Command<int>> create_commands() {
     return [
       ListCommand(
-        sdk: _sdk,
+        connect: _connect,
         working_directory: _working_directory,
         renderer: _renderer,
       ),

@@ -1,57 +1,43 @@
 import 'host_ownership_lease.dart';
 
-/// Acquires exclusive ownership of a host persistence scope.
-///
-/// Platform implementations establish ownership through an
-/// operating-system mechanism that coordinates independent
-/// processes and releases ownership upon process termination.
-///
-/// Acquisition must reject competing owners without waiting for
-/// the existing owner to terminate.
+/// Acquires exclusive host ownership for the trusted operating-system user.
 ///
 /// Example:
 /// ```dart
-/// final lease = await provider.acquire(
-///   scope_directory: '/workspace/rudra',
-/// );
-///
-/// await lease.release();
+/// final lease = await ownership_provider.acquire();
+/// try {
+///   await run_owned_application();
+/// } finally {
+///   await lease.release();
+/// }
 /// ```
 abstract interface class HostOwnershipProvider {
-  /// Acquires ownership of the configured persistence scope.
+  /// Returns an acquired [HostOwnershipLease] for the configured user.
   ///
-  /// [scope_directory] identifies an existing canonical absolute
-  /// directory containing the host's persistence resources.
-  ///
-  /// Returns an acquired [HostOwnershipLease].
-  ///
-  /// Throws [HostAlreadyOwnedException] when another instance
-  /// owns the same scope. Configuration, permission and native
-  /// resource failures propagate independently of contention.
-  Future<HostOwnershipLease> acquire({required String scope_directory});
+  /// Throws [HostAlreadyOwnedException] without waiting for a competing
+  /// instance to exit. The operating system releases ownership at process
+  /// termination. Configuration and permission failures propagate separately.
+  Future<HostOwnershipLease> acquire();
 }
 
-/// Indicates that a persistence scope already has a host owner.
-///
-/// Represents an expected operational conflict rather than a
-/// workflow lifecycle conflict or an internal application failure.
+/// Indicates another Rudra host is running for the same operating-system user.
 ///
 /// Example:
 /// ```dart
 /// try {
-///   await provider.acquire(scope_directory: directory);
+///   final lease = await ownership_provider.acquire();
+///   await lease.release();
 /// } on HostAlreadyOwnedException catch (error) {
-///   print(error.scope_directory);
+///   print(error.os_user_id);
 /// }
 /// ```
 final class HostAlreadyOwnedException implements Exception {
-  /// Creates an ownership conflict for [scope_directory].
-  const HostAlreadyOwnedException({required this.scope_directory});
+  /// Creates an ownership conflict for the trusted [os_user_id].
+  const HostAlreadyOwnedException({required this.os_user_id});
 
-  /// Canonical persistence scope whose ownership was rejected.
-  final String scope_directory;
+  /// Trusted operating-system identity whose host ownership is occupied.
+  final String os_user_id;
 
-  /// Returns a diagnostic describing the occupied scope.
   @override
-  String toString() => 'HostAlreadyOwnedException(scope: $scope_directory)';
+  String toString() => 'HostAlreadyOwnedException(user: $os_user_id)';
 }

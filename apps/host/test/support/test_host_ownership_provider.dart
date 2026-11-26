@@ -8,9 +8,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 /// Example:
 /// ```dart
 /// final provider = TestHostOwnershipProvider();
-/// final lease = await provider.acquire(
-///   scope_directory: '/fixture',
-/// );
+/// final lease = await provider.acquire();
 ///
 /// await lease.release();
 /// ```
@@ -21,24 +19,24 @@ final class TestHostOwnershipProvider implements HostOwnershipProvider {
   /// Whether the fixture currently retains an acquired lease.
   bool is_owned = false;
 
-  /// Successfully acquired persistence scopes.
-  final List<String> acquired_scopes = [];
+  /// Number of successful acquisitions.
+  int acquire_count = 0;
 
   /// Number of successfully released ownership resources.
   int release_count = 0;
 
-  /// Acquires synthetic ownership of [scope_directory].
+  /// Acquires synthetic ownership for the fixture user.
   ///
   /// Returns a controlled lease or throws
   /// [HostAlreadyOwnedException] for an occupied fixture.
   @override
-  Future<HostOwnershipLease> acquire({required String scope_directory}) async {
+  Future<HostOwnershipLease> acquire() async {
     if (is_owned) {
-      throw HostAlreadyOwnedException(scope_directory: scope_directory);
+      throw const HostAlreadyOwnedException(os_user_id: 'test-owner');
     }
 
     is_owned = true;
-    acquired_scopes.add(scope_directory);
+    acquire_count++;
 
     return _TestHostOwnershipLease(() {
       is_owned = false;

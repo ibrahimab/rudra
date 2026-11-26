@@ -2,8 +2,11 @@ import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
 import 'package:rudra_cli/src/features/welcome/application/welcome_controller.dart';
 import 'package:rudra_cli/src/features/welcome/presentation/bare_welcome_renderer.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../../../support/cli_host_fixture.dart';
 
 /// Verifies the SDK-backed welcome workflow.
 ///
@@ -27,10 +30,8 @@ void main() {
         entries: {file.path.value: file},
       );
 
-      final composition = ProductSdkComposition(
-        sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
-        working_directory: directory,
-      );
+      final composition = CliHostFixture(inspector: inspector)
+          .composition(directory: directory);
 
       final output = StringBuffer();
       final errors = StringBuffer();
@@ -58,7 +59,7 @@ void main() {
 
       expect(inspector.enumeration_count, 1);
       expect(inspector.inspection_count, 1);
-      expect(inspector.listed_path, same(directory));
+      expect(inspector.listed_path?.value, directory.value);
       expect(inspector.symbolic_link_calls, 0);
     });
 
@@ -149,26 +150,6 @@ void main() {
       expect(inspector.inspection_count, 0);
     });
 
-    test('preserves unsupported-target presentation', () async {
-      final output = StringBuffer();
-
-      final controller = _create_welcome_controller(
-        composition: null,
-        output: output,
-        error_output: StringBuffer(),
-      );
-
-      final status = await controller.show();
-
-      expect(status, RudraExitCode.success.value);
-      expect(
-        output.toString(),
-        contains('Filesystem inspection is not available'),
-      );
-      expect(output.toString(), isNot(contains('rudra ls')));
-      expect(output.toString(), contains('rudra about'));
-    });
-
     test('propagates unexpected SDK errors', () async {
       final inspector = _StartupInspector(
         unexpected_failure: StateError('Unexpected failure'),
@@ -180,7 +161,16 @@ void main() {
         error_output: StringBuffer(),
       );
 
-      await expectLater(controller.show(), throwsA(isA<StateError>()));
+      await expectLater(
+        controller.show(),
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
+      );
     });
 
     test('accepts an explicitly injected rendering backend', () async {
@@ -188,9 +178,11 @@ void main() {
 
       final renderer = BareWelcomeRenderer(output: output);
 
+      final composition = _composition(_StartupInspector());
+      addTearDown(composition.sdk.close);
       final controller = WelcomeController(
-        sdk: null,
-        starting_directory: null,
+        connect: composition.connect,
+        starting_directory: composition.working_directory,
         renderer: renderer,
       );
 
@@ -200,10 +192,7 @@ void main() {
 
       expect(output.toString(), contains('RUDRA  |  READ ONLY'));
 
-      expect(
-        output.toString(),
-        contains('Filesystem inspection is not available'),
-      );
+      expect(output.toString(), contains('Starting directory: /fixture'));
     });
   });
 
@@ -288,7 +277,7 @@ void main() {
 ///
 /// The helper performs no filesystem inspection or terminal I/O.
 WelcomeController _create_welcome_controller({
-  required ProductSdkComposition? composition,
+  required ProductSdkComposition composition,
   required StringSink output,
   StringSink? error_output,
 }) {
@@ -297,20 +286,17 @@ WelcomeController _create_welcome_controller({
     error_output: error_output,
   );
 
+  addTearDown(composition.sdk.close);
   return WelcomeController(
-    sdk: composition?.sdk,
-    starting_directory: composition?.working_directory,
+    connect: composition.connect,
+    starting_directory: composition.working_directory,
     renderer: renderer,
   );
 }
 
 /// Creates an isolated SDK composition for welcome tests.
-ProductSdkComposition _composition(TargetInspector inspector) {
-  return ProductSdkComposition(
-    sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
-    working_directory: TargetPath('/fixture'),
-  );
-}
+ProductSdkComposition _composition(TargetInspector inspector) =>
+    CliHostFixture(inspector: inspector).composition();
 
 /// Supplies read-only filesystem observations for tests.
 ///

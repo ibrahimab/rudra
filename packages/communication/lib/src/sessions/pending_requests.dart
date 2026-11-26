@@ -298,8 +298,10 @@ final class PendingRequests {
 ///
 /// Owned exclusively by its pending request coordinator.
 final class _PendingRequest {
-  /// Creates a registration containing its response contract,
-  /// [completion] and associated [deadline] timer.
+  /// Creates a registration for one outstanding request.
+  ///
+  /// [completion] receives the response or failure.
+  /// [deadline] limits the wait for a response.
   ///
   /// [expected_response_type] identifies the exact response type
   /// permitted to complete this registration.

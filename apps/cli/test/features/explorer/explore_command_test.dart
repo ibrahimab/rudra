@@ -3,13 +3,14 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:rudra_cli/rudra_cli.dart';
-import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
-import 'package:rudra_cli/src/composition/product_workflow_composition.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_operation_exception.dart';
 
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
+
+import '../../support/cli_host_fixture.dart';
 
 /// Verifies Explorer command registration and production dispatch.
 ///
@@ -179,7 +180,13 @@ void main() {
 
       await expectLater(
         fixture.create_cli().run(['explore']),
-        throwsStateError,
+        throwsA(
+          isA<MessageSessionException>().having(
+            (error) => error.code,
+            'code',
+            MessageSessionErrorCode.handler_failed,
+          ),
+        ),
       );
 
       expect(fixture.inspector.listed, ['/fixture']);
@@ -230,67 +237,65 @@ void main() {
         'rudra-explorer-workflow-test-',
       );
 
-      try {
-        final workflows = ProductWorkflowComposition(
-          database_file: File('${directory.path}/rudra.sqlite'),
-          os_user_id_provider: () async => 'test-os-user',
-        );
+      addTearDown(() => directory.delete(recursive: true));
 
-        // Establish the workflow through the actual CLI action.
-        final starter = _Fixture(children: {'/fixture': []})
-          ..workflow_composition = workflows;
+      final database = File('${directory.path}/rudra.sqlite');
 
-        expect(
-          await starter.create_cli().run(['workflow', 'start']),
-          RudraExitCode.success.value,
-        );
+      // Establish the workflow through the actual CLI action.
+      final starter = _Fixture(
+        children: {'/fixture': []},
+        database_file: database,
+      );
+      final host = starter.application_host;
 
-        final original = await workflows.current();
+      expect(
+        await starter.create_cli().run(['workflow', 'start']),
+        RudraExitCode.success.value,
+      );
 
-        expect(original, isNotNull);
+      final original = await host.current();
 
-        // First Explorer invocation receives a fresh persisted read.
-        final first = _Fixture(children: {'/fixture': []})
-          ..workflow_composition = workflows;
+      expect(original, isNotNull);
 
-        expect(
-          await first.create_cli().run(['explore']),
-          RudraExitCode.success.value,
-        );
+      // First Explorer invocation receives a fresh persisted read.
+      final first = _Fixture(children: {'/fixture': []}, host: host);
 
-        final first_screen = first.terminal.output_buffer.toString();
+      expect(
+        await first.create_cli().run(['explore']),
+        RudraExitCode.success.value,
+      );
 
-        expect(first_screen, contains('Workflow: ACTIVE'));
-        expect(first_screen, contains('ID: ${original!.identity.workflow_id}'));
-        expect(first_screen, contains('Version: 1'));
-        expect(first.terminal.restored, isTrue);
+      final first_screen = first.terminal.output_buffer.toString();
 
-        // The fake terminal sends Q during each invocation.
-        // A completely new CLI now restores the same database.
-        final second = _Fixture(children: {'/fixture': []})
-          ..workflow_composition = workflows;
+      expect(first_screen, contains('Workflow: ACTIVE'));
+      expect(first_screen, contains('ID: ${original!.identity.workflow_id}'));
+      expect(first_screen, contains('Version: 1'));
+      expect(first.terminal.restored, isTrue);
+      expect(first.sdk!.resources_released, isTrue);
 
-        expect(
-          await second.create_cli().run(['explore']),
-          RudraExitCode.success.value,
-        );
+      // The fake terminal sends Q during each invocation.
+      // A completely new CLI now restores the same database.
+      final second = _Fixture(children: {'/fixture': []}, host: host);
 
-        final second_screen = second.terminal.output_buffer.toString();
+      expect(
+        await second.create_cli().run(['explore']),
+        RudraExitCode.success.value,
+      );
 
-        expect(second_screen, contains('Workflow: ACTIVE'));
-        expect(second_screen, contains('ID: ${original.identity.workflow_id}'));
-        expect(second_screen, contains('Version: 1'));
-        expect(second.terminal.restored, isTrue);
+      final second_screen = second.terminal.output_buffer.toString();
 
-        final restored = await workflows.current();
+      expect(second_screen, contains('Workflow: ACTIVE'));
+      expect(second_screen, contains('ID: ${original.identity.workflow_id}'));
+      expect(second_screen, contains('Version: 1'));
+      expect(second.terminal.restored, isTrue);
+      expect(second.sdk!.resources_released, isTrue);
 
-        expect(restored, isNotNull);
-        expect(restored!.identity.workflow_id, original.identity.workflow_id);
-        expect(restored.version, original.version);
-        expect(restored.identity.root.value, original.identity.root.value);
-      } finally {
-        await directory.delete(recursive: true);
-      }
+      final restored = await host.current();
+
+      expect(restored, isNotNull);
+      expect(restored!.identity.workflow_id, original.identity.workflow_id);
+      expect(restored.version, original.version);
+      expect(restored.identity.root.value, original.identity.root.value);
     });
 
     test('opening Explorer without a workflow creates no database', () async {
@@ -298,31 +303,28 @@ void main() {
         'rudra-explorer-read-only-test-',
       );
 
-      try {
-        final database_file = File('${directory.path}/rudra.sqlite');
+      addTearDown(() => directory.delete(recursive: true));
 
-        final fixture = _Fixture(children: {'/fixture': []})
-          ..workflow_composition = ProductWorkflowComposition(
-            database_file: database_file,
-            os_user_id_provider: () async => 'test-os-user',
-          );
+      final database_file = File('${directory.path}/rudra.sqlite');
 
-        expect(
-          await fixture.create_cli().run(['explore']),
-          RudraExitCode.success.value,
-        );
+      final fixture = _Fixture(
+        children: {'/fixture': []},
+        database_file: database_file,
+      );
 
-        expect(database_file.existsSync(), isFalse);
+      expect(
+        await fixture.create_cli().run(['explore']),
+        RudraExitCode.success.value,
+      );
 
-        expect(
-          fixture.terminal.output_buffer.toString(),
-          contains('Workflow: NONE'),
-        );
+      expect(database_file.existsSync(), isFalse);
 
-        expect(fixture.terminal.restored, isTrue);
-      } finally {
-        await directory.delete(recursive: true);
-      }
+      expect(
+        fixture.terminal.output_buffer.toString(),
+        contains('Workflow: NONE'),
+      );
+
+      expect(fixture.terminal.restored, isTrue);
     });
 
     test(
@@ -332,87 +334,85 @@ void main() {
           'rudra-explorer-start-key-',
         );
 
-        try {
-          final database_file = File('${directory.path}/rudra.sqlite');
+        addTearDown(() => directory.delete(recursive: true));
 
-          final workflows = ProductWorkflowComposition(
-            database_file: database_file,
-            os_user_id_provider: () async => 'test-os-user',
-          );
+        final database_file = File('${directory.path}/rudra.sqlite');
 
-          // This is a fresh database, with no existing workflow.
-          final first = _Fixture(children: {'/fixture': []}, keys: 'sq')
-            ..workflow_composition = workflows;
+        final database = database_file;
 
-          expect(database_file.existsSync(), isFalse);
+        // This is a fresh database, with no existing workflow.
+        final first = _Fixture(
+          children: {'/fixture': []},
+          keys: 'sq',
+          database_file: database,
+        );
+        final host = first.application_host;
 
-          expect(
-            await first.create_cli().run(['explore']),
-            RudraExitCode.success.value,
-          );
+        expect(database_file.existsSync(), isFalse);
 
-          // Pressing S must commit, not merely accept a submission.
-          final committed = await workflows.current();
+        expect(
+          await first.create_cli().run(['explore']),
+          RudraExitCode.success.value,
+        );
 
-          expect(database_file.existsSync(), isTrue);
-          expect(committed, isNotNull);
-          expect(committed!.version, 1);
-          expect(committed.identity.target_id, 'fixture-target');
-          expect(committed.identity.root.value, '/fixture');
+        // Pressing S must commit, not merely accept a submission.
+        final committed = await host.current();
 
-          final first_screen = first.terminal.output_buffer.toString();
+        expect(database_file.existsSync(), isTrue);
+        expect(committed, isNotNull);
+        expect(committed!.version, 1);
+        expect(committed.identity.target_id, 'fixture-target');
+        expect(committed.identity.root.value, '/fixture');
 
-          expect(first_screen, contains('Workflow: NONE'));
-          expect(first_screen, contains('Workflow: ACTIVE'));
-          expect(
-            first_screen,
-            contains('ID: ${committed.identity.workflow_id}'),
-          );
-          expect(first.terminal.restored, isTrue);
+        final first_screen = first.terminal.output_buffer.toString();
 
-          // Start an entirely new CLI invocation with the same
-          // persistence location. S must not create a second workflow.
-          final second = _Fixture(children: {'/fixture': []}, keys: 'sq')
-            ..workflow_composition = workflows;
+        expect(first_screen, contains('Workflow: NONE'));
+        expect(first_screen, contains('Workflow: ACTIVE'));
+        expect(first_screen, contains('ID: ${committed.identity.workflow_id}'));
+        expect(first.terminal.restored, isTrue);
+        expect(first.sdk!.resources_released, isTrue);
 
-          // The second explicit Start conflicts with the
-          // workflow established by the first invocation.
-          await expectLater(
-            second.create_cli().run(['explore']),
-            throwsA(
-              isA<WorkflowExplorerOperationException>().having(
-                (error) => error.outcome,
-                'outcome',
-                isA<WorkflowOperationResolved>().having(
-                  (outcome) => outcome.resolution.rejection_code,
-                  'rejection_code',
-                  WorkflowRejectionCode.ownership_conflict,
-                ),
+        // Start an entirely new CLI invocation with the same
+        // persistence location. S must not create a second workflow.
+        final second = _Fixture(
+          children: {'/fixture': []},
+          keys: 'sq',
+          host: host,
+        );
+
+        // The second explicit Start conflicts with the
+        // workflow established by the first invocation.
+        await expectLater(
+          second.create_cli().run(['explore']),
+          throwsA(
+            isA<WorkflowExplorerOperationException>().having(
+              (error) => error.outcome,
+              'outcome',
+              isA<WorkflowOperationResolved>().having(
+                (outcome) => outcome.resolution.rejection_code,
+                'rejection_code',
+                WorkflowRejectionCode.ownership_conflict,
               ),
             ),
-          );
+          ),
+        );
 
-          final second_screen = second.terminal.output_buffer.toString();
+        final second_screen = second.terminal.output_buffer.toString();
 
-          expect(second_screen, contains('Workflow: ACTIVE'));
-          expect(
-            second_screen,
-            contains('ID: ${committed.identity.workflow_id}'),
-          );
-          expect(second.terminal.restored, isTrue);
+        expect(second_screen, contains('Workflow: ACTIVE'));
+        expect(
+          second_screen,
+          contains('ID: ${committed.identity.workflow_id}'),
+        );
+        expect(second.terminal.restored, isTrue);
+        expect(second.sdk!.resources_released, isTrue);
 
-          final restored = await workflows.current();
+        final restored = await host.current();
 
-          expect(restored, isNotNull);
-          expect(
-            restored!.identity.workflow_id,
-            committed.identity.workflow_id,
-          );
-          expect(restored.version, committed.version);
-          expect(restored.identity.root.value, committed.identity.root.value);
-        } finally {
-          await directory.delete(recursive: true);
-        }
+        expect(restored, isNotNull);
+        expect(restored!.identity.workflow_id, committed.identity.workflow_id);
+        expect(restored.version, committed.version);
+        expect(restored.identity.root.value, committed.identity.root.value);
       },
     );
 
@@ -421,44 +421,41 @@ void main() {
         'rudra-explorer-current-root-',
       );
 
-      try {
-        final workflows = ProductWorkflowComposition(
-          database_file: File('${directory.path}/rudra.sqlite'),
-          os_user_id_provider: () async => 'test-os-user',
-        );
+      addTearDown(() => directory.delete(recursive: true));
 
-        final fixture = _Fixture(
-          children: {
-            '/fixture': ['/fixture/docs'],
-            '/fixture/docs': [],
-          },
-          entries: {
-            '/fixture/docs': _entry(
-              '/fixture/docs',
-              FilesystemEntryKind.directory,
-            ),
-          },
-          // Enter directory, start workflow, then quit.
-          keys: '\rsq',
-        )..workflow_composition = workflows;
+      final database = File('${directory.path}/rudra.sqlite');
 
-        expect(
-          await fixture.create_cli().run(['explore']),
-          RudraExitCode.success.value,
-        );
+      final fixture = _Fixture(
+        children: {
+          '/fixture': ['/fixture/docs'],
+          '/fixture/docs': [],
+        },
+        entries: {
+          '/fixture/docs': _entry(
+            '/fixture/docs',
+            FilesystemEntryKind.directory,
+          ),
+        },
+        // Enter directory, start workflow, then quit.
+        keys: '\rsq',
+        database_file: database,
+      );
+      final host = fixture.application_host;
 
-        final active = await workflows.current();
+      expect(
+        await fixture.create_cli().run(['explore']),
+        RudraExitCode.success.value,
+      );
 
-        expect(active, isNotNull);
-        expect(active!.identity.root.value, '/fixture/docs');
-        expect(
-          fixture.terminal.output_buffer.toString(),
-          contains('Directory: /fixture/docs'),
-        );
-        expect(fixture.terminal.restored, isTrue);
-      } finally {
-        await directory.delete(recursive: true);
-      }
+      final active = await host.current();
+
+      expect(active, isNotNull);
+      expect(active!.identity.root.value, '/fixture/docs');
+      expect(
+        fixture.terminal.output_buffer.toString(),
+        contains('Directory: /fixture/docs'),
+      );
+      expect(fixture.terminal.restored, isTrue);
     });
 
     test('X durably stops the active workflow from Explorer', () async {
@@ -466,68 +463,68 @@ void main() {
         'rudra-explorer-stop-key-',
       );
 
-      try {
-        final database_file = File('${directory.path}/rudra.sqlite');
+      addTearDown(() => directory.delete(recursive: true));
 
-        final workflows = ProductWorkflowComposition(
-          database_file: database_file,
-          os_user_id_provider: () async => 'test-os-user',
-        );
+      final database_file = File('${directory.path}/rudra.sqlite');
 
-        // Establish the workflow through the normal CLI action.
-        final starter = _Fixture(children: {'/fixture': []})
-          ..workflow_composition = workflows;
+      final database = database_file;
 
-        expect(
-          await starter.create_cli().run(['workflow', 'start']),
-          RudraExitCode.success.value,
-        );
+      // Establish the workflow through the normal CLI action.
+      final starter = _Fixture(
+        children: {'/fixture': []},
+        database_file: database,
+      );
+      final host = starter.application_host;
 
-        final original = await workflows.current();
+      expect(
+        await starter.create_cli().run(['workflow', 'start']),
+        RudraExitCode.success.value,
+      );
 
-        expect(original, isNotNull);
+      final original = await host.current();
 
-        // Explorer restores the workflow and processes explicit X.
-        final explorer = _Fixture(children: {'/fixture': []}, keys: 'xq')
-          ..workflow_composition = workflows;
+      expect(original, isNotNull);
 
-        expect(
-          await explorer.create_cli().run(['explore']),
-          RudraExitCode.success.value,
-        );
+      // Explorer restores the workflow and processes explicit X.
+      final explorer = _Fixture(
+        children: {'/fixture': []},
+        keys: 'xq',
+        host: host,
+      );
 
-        final screen = explorer.terminal.output_buffer.toString();
+      expect(
+        await explorer.create_cli().run(['explore']),
+        RudraExitCode.success.value,
+      );
 
-        expect(screen, contains('Workflow: ACTIVE'));
-        expect(screen, contains('ID: ${original!.identity.workflow_id}'));
-        expect(screen, contains('X Stop Workflow'));
-        expect(screen, contains('Workflow: NONE'));
-        expect(screen, contains('S Start Workflow'));
+      final screen = explorer.terminal.output_buffer.toString();
 
-        // The Stop is committed, not merely submitted.
-        expect(await workflows.current(), isNull);
-        expect(database_file.existsSync(), isTrue);
-        expect(explorer.terminal.restored, isTrue);
+      expect(screen, contains('Workflow: ACTIVE'));
+      expect(screen, contains('ID: ${original!.identity.workflow_id}'));
+      expect(screen, contains('X Stop Workflow'));
+      expect(screen, contains('Workflow: NONE'));
+      expect(screen, contains('S Start Workflow'));
 
-        // A new Explorer invocation must remain read-only.
-        final reopened = _Fixture(children: {'/fixture': []})
-          ..workflow_composition = workflows;
+      // The Stop is committed, not merely submitted.
+      expect(await host.current(), isNull);
+      expect(database_file.existsSync(), isTrue);
+      expect(explorer.terminal.restored, isTrue);
 
-        expect(
-          await reopened.create_cli().run(['explore']),
-          RudraExitCode.success.value,
-        );
+      // A new Explorer invocation must remain read-only.
+      final reopened = _Fixture(children: {'/fixture': []}, host: host);
 
-        expect(
-          reopened.terminal.output_buffer.toString(),
-          contains('Workflow: NONE'),
-        );
+      expect(
+        await reopened.create_cli().run(['explore']),
+        RudraExitCode.success.value,
+      );
 
-        expect(await workflows.current(), isNull);
-        expect(reopened.terminal.restored, isTrue);
-      } finally {
-        await directory.delete(recursive: true);
-      }
+      expect(
+        reopened.terminal.output_buffer.toString(),
+        contains('Workflow: NONE'),
+      );
+
+      expect(await host.current(), isNull);
+      expect(reopened.terminal.restored, isTrue);
     });
   });
 }
@@ -547,6 +544,8 @@ final class _Fixture {
     String? unexpected_directory,
     bool interactive = true,
     String keys = 'q',
+    CliHostFixture? host,
+    File? database_file,
   }) {
     inspector = _TestInspector(
       children: children,
@@ -556,6 +555,9 @@ final class _Fixture {
     );
 
     terminal = _TestTerminalHost(interactive: interactive, keys: keys);
+    application_host =
+        host ??
+        CliHostFixture(inspector: inspector, database_file: database_file);
   }
 
   /// In-memory target inspector.
@@ -570,8 +572,10 @@ final class _Fixture {
   /// CLI diagnostics.
   final StringBuffer errors = StringBuffer();
 
-  /// Optional persistence composition used by Explorer tests.
-  ProductWorkflowComposition? workflow_composition;
+  /// Authoritative host shared by the test frontends.
+  late final CliHostFixture application_host;
+
+  RudraSdk? sdk;
 
   /// Number of Explorer terminal host factory invocations.
   int host_creations = 0;
@@ -581,18 +585,16 @@ final class _Fixture {
   /// Construction does not inspect the filesystem or enter
   /// terminal mode.
   RudraCli create_cli() {
+    final composition = application_host.composition();
+    sdk = composition.sdk;
     return RudraCli.product(
-      target_composition: ProductSdkComposition(
-        sdk: RudraSdk(target_id: 'fixture-target', inspector: inspector),
-        working_directory: TargetPath('/fixture'),
-      ),
+      target_composition: composition,
       output: normal_output,
       error_output: errors,
       explorer_terminal_host_factory: () {
         host_creations++;
         return terminal;
       },
-      workflow_composition: workflow_composition,
     );
   }
 }

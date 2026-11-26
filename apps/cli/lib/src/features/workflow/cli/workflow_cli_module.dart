@@ -17,8 +17,8 @@ final class WorkflowCliModule implements RudraCliModule {
   ///
   /// [working_directory] supplies the default Start root.
   /// [current_workflow] reads the authoritative workflow selected for Stop.
-  /// [start_workflow] and [stop_workflow] execute explicit operations
-  /// using their supplied durable idempotency keys.
+  /// [start_workflow] starts a workflow with a durable idempotency key.
+  /// [stop_workflow] stops a selected workflow with a durable idempotency key.
   ///
   /// [output] receives successful operation results.
   /// [error_output] receives unsuccessful operation diagnostics.
@@ -83,8 +83,10 @@ final class _WorkflowCommand extends Command<int> {
   ///
   /// [working_directory] supplies the default Start root.
   /// [current_workflow] selects an authoritative workflow for Stop.
-  /// [start_workflow] and [stop_workflow] execute identified operations.
-  /// [output] and [error_output] receive their presentation results.
+  /// [start_workflow] executes an identified Start.
+  /// [stop_workflow] executes an identified Stop.
+  /// [output] receives successful operation results.
+  /// [error_output] receives unsuccessful operation diagnostics.
   _WorkflowCommand({
     required TargetPath working_directory,
     required Future<WorkflowSnapshot?> Function() current_workflow,
@@ -135,7 +137,8 @@ final class _WorkflowStopCommand extends Command<int> {
   ///
   /// [current_workflow] supplies the authoritative workflow selection.
   /// [stop_workflow] executes Stop for that workflow's captured identity.
-  /// [output] and [error_output] receive operation results.
+  /// [output] receives successful operation results.
+  /// [error_output] receives unsuccessful operation diagnostics.
   _WorkflowStopCommand({
     required Future<WorkflowSnapshot?> Function() current_workflow,
     required Future<WorkflowOperationOutcome> Function(
@@ -231,7 +234,8 @@ final class _WorkflowStartCommand extends Command<int> {
   ///
   /// [working_directory] supplies the default root.
   /// [start_workflow] executes an identified Start operation.
-  /// [output] and [error_output] receive operation results.
+  /// [output] receives successful operation results.
+  /// [error_output] receives unsuccessful operation diagnostics.
   _WorkflowStartCommand({
     required TargetPath working_directory,
     required Future<WorkflowOperationOutcome> Function(

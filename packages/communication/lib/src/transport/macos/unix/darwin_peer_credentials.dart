@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:rudra_platform_macos/rudra_platform_macos.dart';
+
 /// Darwin socket-option level for Unix-domain sockets.
 const int _sol_local = 0;
 
@@ -117,6 +119,6 @@ final class DarwinPeerCredentials {
       throw StateError('Invalid Darwin peer credential structure.');
     }
 
-    return 'macos-uid:$uid';
+    return macos_user_id(uid);
   }
 }

@@ -11,3 +11,4 @@ workspace:
   - packages/persistence/sqlite
   - packages/host/macos
   - packages/communication
+  - packages/platform/macos

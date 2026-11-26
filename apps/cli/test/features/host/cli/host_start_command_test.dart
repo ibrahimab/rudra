@@ -35,14 +35,9 @@ void main() {
   ///
   /// Used by registration and argument-validation tests where
   /// application execution must never be reached.
-  final HostRunOperation unexpected_execution =
-      ({
-        required data_directory,
-        required start_workflow,
-        required on_ready,
-      }) async {
-        fail('Host execution must not be invoked.');
-      };
+  final HostRunOperation unexpected_execution = ({required on_ready}) async {
+    fail('Host execution must not be invoked.');
+  };
 
   test('production composition registers the host feature', () {
     final cli = RudraCli.product(output: output, error_output: errors);
@@ -63,23 +58,26 @@ void main() {
     expect(errors.toString(), isEmpty);
   });
 
-  test('rejects missing development directory', () async {
+  test('rejects the retired production data-dir option', () async {
     final cli = create_cli(unexpected_execution);
 
-    final status = await cli.run(['host', 'start', '--foreground']);
+    final status = await cli.run([
+      'host',
+      'start',
+      '--foreground',
+      '--data-dir',
+      '/fixture',
+    ]);
 
     expect(status, RudraExitCode.invalid_usage.value);
 
-    expect(
-      errors.toString(),
-      contains('A development data directory is required.'),
-    );
+    expect(errors.toString(), contains('data-dir'));
   });
 
   test('rejects unsupported managed background startup', () async {
     final cli = create_cli(unexpected_execution);
 
-    final status = await cli.run(['host', 'start', '--data-dir', '/fixture']);
+    final status = await cli.run(['host', 'start']);
 
     expect(status, RudraExitCode.invalid_usage.value);
 
@@ -93,8 +91,6 @@ void main() {
       'host',
       'start',
       '--foreground',
-      '--data-dir',
-      '/fixture',
       'unexpected',
     ]);
 
@@ -102,25 +98,12 @@ void main() {
     expect(errors.toString(), contains('positional arguments'));
   });
 
-  test('ordinary startup requests no workflow establishment', () async {
-    final cli = create_cli(({
-      required data_directory,
-      required start_workflow,
-      required on_ready,
-    }) async {
-      expect(data_directory.path, '/fixture');
-      expect(start_workflow, isFalse);
-
+  test('ordinary startup reports verified workflow absence', () async {
+    final cli = create_cli(({required on_ready}) async {
       on_ready('trusted-owner', null);
     });
 
-    final status = await cli.run([
-      'host',
-      'start',
-      '--foreground',
-      '--data-dir',
-      '/fixture',
-    ]);
+    final status = await cli.run(['host', 'start', '--foreground']);
 
     expect(status, RudraExitCode.success.value);
 
@@ -131,7 +114,7 @@ void main() {
     expect(errors.toString(), isEmpty);
   });
 
-  test('explicit startup forwards workflow establishment', () async {
+  test('startup reports a durably restored workflow', () async {
     var invoked = false;
 
     final snapshot = WorkflowSnapshot(
@@ -145,109 +128,53 @@ void main() {
       lifecycle: WorkflowLifecycle(id: 'test.active', is_terminal: false),
     );
 
-    final cli = create_cli(({
-      required data_directory,
-      required start_workflow,
-      required on_ready,
-    }) async {
+    final cli = create_cli(({required on_ready}) async {
       invoked = true;
-
-      expect(data_directory.path, '/fixture');
-      expect(start_workflow, isTrue);
 
       // Supply a committed snapshot through the application
       // boundary rather than performing actual workflow processing.
       on_ready('trusted-owner', snapshot);
     });
 
-    final status = await cli.run([
-      'host',
-      'start',
-      '--foreground',
-      '--data-dir',
-      '/fixture',
-      '--start-workflow',
-    ]);
+    final status = await cli.run(['host', 'start', '--foreground']);
 
     expect(invoked, isTrue);
     expect(status, RudraExitCode.success.value);
-    expect(output.toString(), contains('Workflow started'));
+    expect(output.toString(), contains('Workflow restored'));
     expect(output.toString(), contains('Workflow ID: workflow-1'));
     expect(output.toString(), contains('Workflow version: 1'));
   });
 
-  test('maps workflow conflicts to the existing exit status', () async {
-    final cli = create_cli(({
-      required data_directory,
-      required start_workflow,
-      required on_ready,
-    }) async {
-      throw HostStartupWorkflowException(
-        outcome: WorkflowOperationResolved(
-          resolution: WorkflowSubmissionResolution(
-            receipt: EventSubmissionReceipt(
-              event_id: 'startup-event',
-              correlation_id: 'startup-correlation',
-            ),
-            state: WorkflowSubmissionState.rejected,
-            rejection_code: WorkflowRejectionCode.ownership_conflict,
-            rejected_at_unix_ms: 1795618800000,
-          ),
-        ),
-      );
-    });
-
+  test('host startup cannot submit a workflow command', () async {
+    final cli = create_cli(unexpected_execution);
     final status = await cli.run([
       'host',
       'start',
       '--foreground',
-      '--data-dir',
-      '/fixture',
       '--start-workflow',
     ]);
 
-    expect(status, RudraExitCode.workflow_conflict.value);
-    expect(errors.toString(), contains('ownership_conflict'));
-    expect(output.toString(), isNot(contains('Host ready')));
+    expect(status, RudraExitCode.invalid_usage.value);
+    expect(errors.toString(), contains('start-workflow'));
   });
 
   test('maps unsupported platforms to configuration errors', () async {
-    final cli = create_cli(({
-      required data_directory,
-      required start_workflow,
-      required on_ready,
-    }) async {
+    final cli = create_cli(({required on_ready}) async {
       throw UnsupportedError('Unsupported host platform.');
     });
 
-    final status = await cli.run([
-      'host',
-      'start',
-      '--foreground',
-      '--data-dir',
-      '/fixture',
-    ]);
+    final status = await cli.run(['host', 'start', '--foreground']);
 
     expect(status, RudraExitCode.configuration_error.value);
     expect(errors.toString(), contains('Host unavailable'));
   });
 
   test('maps execution failures to the software error status', () async {
-    final cli = create_cli(({
-      required data_directory,
-      required start_workflow,
-      required on_ready,
-    }) async {
+    final cli = create_cli(({required on_ready}) async {
       throw StateError('Host initialization failed.');
     });
 
-    final status = await cli.run([
-      'host',
-      'start',
-      '--foreground',
-      '--data-dir',
-      '/fixture',
-    ]);
+    final status = await cli.run(['host', 'start', '--foreground']);
 
     expect(status, RudraExitCode.software_error.value);
 

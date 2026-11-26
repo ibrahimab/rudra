@@ -16,34 +16,21 @@ void main() {
 
     cli.register_module(
       HostCliModule(
-        run_host:
-            ({
-              required data_directory,
-              required start_workflow,
-              required on_ready,
-            }) async {
-              throw const HostAlreadyOwnedException(
-                scope_directory: '/fixture',
-              );
-            },
+        run_host: ({required on_ready}) async {
+          throw const HostAlreadyOwnedException(os_user_id: 'test-owner');
+        },
         output: output,
         error_output: errors,
       ),
     );
 
-    final status = await cli.run([
-      'host',
-      'start',
-      '--foreground',
-      '--data-dir',
-      '/fixture',
-    ]);
+    final status = await cli.run(['host', 'start', '--foreground']);
 
     expect(status, RudraExitCode.host_conflict.value);
 
     expect(errors.toString(), contains('Rudra Host already running'));
 
-    expect(errors.toString(), contains('/fixture'));
+    expect(errors.toString(), contains('test-owner'));
 
     // Ownership rejection must never be presented as successful
     // initialization or graceful host completion.

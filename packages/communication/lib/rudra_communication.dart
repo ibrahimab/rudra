@@ -7,21 +7,12 @@
 /// Communication owns session construction, protocol processing,
 /// request correlation and resource disposal.
 ///
-/// Consumers supply configured authenticated transports together
-/// with their application-specific message representations
-/// and behavior.
+/// Native connectivity is selected by default. Callers supply application
+/// messages and may explicitly configure listening or outbound transports.
 ///
 /// Example:
 /// ```dart
-/// import 'package:rudra_communication/rudra_communication.dart';
-///
-/// final transport = MacOsUnixTransport(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-/// );
-///
 /// final communication = Communication(
-///   transport: transport,
 ///   codecs: codecs,
 ///   handlers: handlers,
 /// );
@@ -55,6 +46,7 @@ export 'src/messaging/request_handler_registry.dart';
 export 'src/messaging/protocol/protocol_exception.dart';
 
 /// Portable transport capability contracts.
+export 'src/transport/connection_params.dart';
 export 'src/transport/contracts/transport.dart';
 export 'src/transport/contracts/transport_connection.dart';
 export 'src/transport/contracts/transport_listener.dart';
@@ -65,4 +57,5 @@ export 'src/sessions/message_session_exception.dart';
 export 'src/sessions/message_session_options.dart';
 
 /// Explicitly selectable native macOS transport implementation.
-export 'src/transport/macos/unix/macos_unix_transport.dart';
+export 'src/transport/macos/unix/macos_unix_transport.dart'
+    show MacOsUnixTransport;

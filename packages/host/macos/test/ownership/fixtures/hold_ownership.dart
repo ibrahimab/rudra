@@ -4,7 +4,7 @@ import 'package:rudra_host_macos/rudra_host_macos.dart';
 
 /// Acquires native ownership for cross-process integration tests.
 ///
-/// [arguments] contains the dedicated persistence directory.
+/// [arguments] contains the private runtime directory.
 /// Reports readiness after acquisition and retains ownership
 /// until its standard input is closed or the process terminates.
 ///
@@ -15,9 +15,9 @@ import 'package:rudra_host_macos/rudra_host_macos.dart';
 Future<void> main(List<String> arguments) async {
   final scope = await Directory(arguments.single).resolveSymbolicLinks();
 
-  const provider = MacOsHostOwnershipProvider();
+  final provider = MacOsHostOwnershipProvider(runtime_directory: scope);
 
-  final lease = await provider.acquire(scope_directory: scope);
+  final lease = await provider.acquire();
 
   try {
     // Report readiness only after kernel ownership has been

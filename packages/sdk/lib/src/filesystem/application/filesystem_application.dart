@@ -26,7 +26,7 @@ import 'filesystem_observation.dart';
 final class FilesystemApplication {
   /// Creates an application for one configured filesystem target.
   ///
-  /// [target_id] identifies the environment represented by [inspector].
+  /// [target_id] identifies the configured filesystem environment.
   /// [inspector] supplies its target-native inspection capability.
   ///
   /// Throws [ArgumentError] for a blank target identifier.

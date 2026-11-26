@@ -6,7 +6,7 @@ import 'default_message_session.dart';
 
 /// Coordinates concurrent typed sessions over authenticated connections.
 ///
-/// Owns one listener execution lifecycle and maintains independent
+/// Owns one listening lifecycle and maintains independent
 /// message sessions for accepted connections.
 ///
 /// Session execution failures remain isolated to their respective
@@ -18,7 +18,7 @@ import 'default_message_session.dart';
 /// final service = ConnectionService();
 ///
 /// await service.run(
-///   listener: listener,
+///   listeners: [listener],
 ///   shutdown: shutdown.future,
 ///   open_session: open_session,
 /// );
@@ -29,7 +29,21 @@ final class ConnectionService {
   /// Creates an inactive session lifecycle coordinator.
   ///
   /// Construction does not acquire a listener or accept connections.
-  ConnectionService();
+  /// [maximum_sessions] limits admitted sessions across all listeners,
+  /// including sessions still draining their application handlers.
+  /// Throws [ArgumentError] when the limit is less than one.
+  ConnectionService({int maximum_sessions = 64})
+    : _maximum_sessions = maximum_sessions {
+    if (maximum_sessions < 1) {
+      throw ArgumentError.value(
+        maximum_sessions,
+        'maximum_sessions',
+        'Must be positive.',
+      );
+    }
+  }
+
+  final int _maximum_sessions;
 
   /// Whether this coordinator has claimed its execution lifecycle.
   bool _has_run = false;
@@ -45,8 +59,8 @@ final class ConnectionService {
 
   /// Executes concurrent authenticated sessions until termination.
   ///
-  /// [listener] supplies authenticated connections and transfers
-  /// ownership of its execution lifecycle to this coordinator.
+  /// [listeners] supply authenticated connections and transfer their
+  /// execution lifecycles to this coordinator.
   ///
   /// [shutdown] supplies the external termination notification.
   ///
@@ -64,7 +78,7 @@ final class ConnectionService {
   /// Startup, listener and resource disposal failures propagate.
   /// Individual session execution failures remain isolated.
   Future<void> run({
-    required TransportListener listener,
+    required List<TransportListener> listeners,
     required Future<void> shutdown,
     required DefaultMessageSession Function(TransportConnection) open_session,
     Future<void> Function()? on_startup,
@@ -81,7 +95,7 @@ final class ConnectionService {
     final active = <Future<void>>{};
     final sessions = <DefaultMessageSession>{};
 
-    StreamSubscription<TransportConnection>? subscription;
+    final subscriptions = <StreamSubscription<TransportConnection>>[];
 
     var stopping = false;
 
@@ -98,16 +112,23 @@ final class ConnectionService {
         await on_startup();
       }
 
-      subscription = listener.connections.listen(
-        (connection) {
-          late final Future<void> task;
+      for (final listener in listeners) {
+        subscriptions.add(
+          listener.connections.listen(
+            (connection) {
+              late final Future<void> task;
 
-          task =
-              _serve_connection(
-                    connection: connection,
-                    open_session: open_session,
-                    sessions: sessions,
-                  )
+              // Count draining sessions until their handlers have released
+              // application resources. Rejection still disposes the transport.
+              final execution = sessions.length >= _maximum_sessions
+                  ? Future<void>.sync(connection.close)
+                  : _serve_connection(
+                      connection: connection,
+                      open_session: open_session,
+                      sessions: sessions,
+                    );
+
+              task = execution
                   .then<void>(
                     (_) {},
                     onError: (Object error, StackTrace stack) {
@@ -123,21 +144,23 @@ final class ConnectionService {
                     active.remove(task);
                   });
 
-          active.add(task);
-        },
-        onError: (Object error, StackTrace stack) {
-          if (!stopping && !failure.isCompleted) {
-            failure.completeError(error, stack);
-          }
-        },
-        onDone: () {
-          if (!stopping && !failure.isCompleted) {
-            failure.completeError(
-              StateError('Host listener ended unexpectedly.'),
-            );
-          }
-        },
-      );
+              active.add(task);
+            },
+            onError: (Object error, StackTrace stack) {
+              if (!stopping && !failure.isCompleted) {
+                failure.completeError(error, stack);
+              }
+            },
+            onDone: () {
+              if (!stopping && !failure.isCompleted) {
+                failure.completeError(
+                  StateError('Host listener ended unexpectedly.'),
+                );
+              }
+            },
+          ),
+        );
+      }
 
       await termination;
     } finally {
@@ -146,10 +169,12 @@ final class ConnectionService {
       try {
         // Stop accepting native connections and terminate
         // connections retained by the listener.
-        await listener.close();
+        await Future.wait(listeners.map((listener) async => listener.close()));
       } finally {
         try {
-          await subscription?.cancel();
+          await Future.wait(
+            subscriptions.map((subscription) async => subscription.cancel()),
+          );
         } finally {
           try {
             // Explicitly terminate remaining message sessions

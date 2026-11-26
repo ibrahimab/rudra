@@ -58,7 +58,8 @@ void main() {
 
   /// Produces a completed submission linked to its exact journal outcome.
   ///
-  /// [workflow_id] and [event_type] come from committed journal metadata.
+  /// [workflow_id] identifies the workflow in the committed journal.
+  /// [event_type] identifies the committed event type.
   WorkflowSubmissionResolution completed({
     required String workflow_id,
     required String event_type,
@@ -781,7 +782,8 @@ final class _ControlledCommitter implements WorkflowCommitter {
 final class _NoopRejector implements WorkflowSubmissionRejector {
   /// Rejects an unexpected durable rejection request.
   ///
-  /// [submission] and [code] would describe the rejected command.
+  /// [submission] would identify the rejected command.
+  /// [code] would classify the rejection.
   @override
   Future<void> reject({
     required PendingWorkflowCommand submission,

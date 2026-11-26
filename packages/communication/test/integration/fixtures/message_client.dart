@@ -32,7 +32,6 @@ Future<void> main(List<String> arguments) async {
     });
 
   final communication = Communication(
-    transport: MacOsUnixTransport(scope_directory: scope, os_user_id: owner),
     codecs: create_echo_codecs(),
     handlers: handlers,
     options: const MessageSessionOptions(
@@ -40,7 +39,11 @@ Future<void> main(List<String> arguments) async {
     ),
   );
 
-  final session = await communication.connect();
+  final session = await communication.connect(
+    ConnectionParams(
+      transport: MacOsUnixTransport(socket_path: '$scope/rudra.sock'),
+    ),
+  );
 
   try {
     _require(session.os_user_id == owner, 'Invalid session owner.');

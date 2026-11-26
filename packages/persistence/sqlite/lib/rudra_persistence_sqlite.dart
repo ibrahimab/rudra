@@ -3,10 +3,25 @@
 /// Provides concrete Drift-backed adapters for the
 /// platform-independent persistence contracts in Rudra SDK.
 ///
-/// Application composition constructs these adapters and
-/// injects them into SDK services.
+/// Each host constructs one owner-scoped context with its own SQLite
+/// connection and post-commit notification channel. Separate production
+/// hosts use the same machine-wide file. Schema setup and durable writes
+/// coordinate through SQLite transactions.
 ///
-/// The SDK does not depend on this package.
+/// Example:
+/// ```dart
+/// final persistence = RudraSqlitePersistence(
+///   database_file: shared_database,
+///   scope_id: trusted_os_user_id,
+///   runtime: runtime,
+///   require_existing_wal: true,
+/// );
+/// try {
+///   await execute_application(persistence);
+/// } finally {
+///   await persistence.close();
+/// }
+/// ```
 library;
 
 export 'src/sqlite_persistence.dart';

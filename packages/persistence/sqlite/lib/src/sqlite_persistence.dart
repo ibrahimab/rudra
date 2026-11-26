@@ -51,16 +51,23 @@ final class RudraSqlitePersistence implements WorkflowApplicationPersistence {
   /// default state-transition rules independently.
   ///
   /// [database_file] is the SQLite file supplied by host composition.
-  /// [scope_id] identifies the trusted durable submission scope.
+  /// [scope_id] identifies the trusted durable submission scope. Production
+  /// uses the authenticated operating-system owner as this namespace.
+  /// [require_existing_wal] enables validation of the provisioned journal
+  /// mode instead of permitting automatic WAL configuration for fixtures.
   /// The caller must close this persistence instance after pending operations.
   RudraSqlitePersistence({
     required File database_file,
     required String scope_id,
     required WorkflowRuntime runtime,
+    bool require_existing_wal = false,
   }) : _scope_id = _validate_scope(scope_id),
        _runtime = runtime,
        _database_file = database_file,
-       _database = RudraDatabase.file(database_file);
+       _database = RudraDatabase.file(
+         database_file,
+         require_existing_wal: require_existing_wal,
+       );
 
   /// Trusted submission scope shared by every persistence adapter.
   final String _scope_id;

@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_communication/rudra_communication.dart';
 
 import 'host_workflow_identity_provider.dart';
 
@@ -47,44 +47,11 @@ final class HostStartupWorkflowException implements Exception {
   }
 }
 
-/// Constructs authenticated connectivity for an exclusively owned
-/// host application environment.
-///
-/// [scope_directory] identifies the canonical application scope.
-///
-/// [os_user_id] identifies the trusted operating-system owner.
-///
-/// Returns a configured inactive transport selected by trusted
-/// application composition.
-///
-/// Implementations retain configuration without binding endpoints
-/// or acquiring communication resources.
-///
-/// Example:
-/// ```dart
-/// final HostTransportFactory factory = ({
-///   required scope_directory,
-///   required os_user_id,
-/// }) {
-///   return MacOsUnixTransport(
-///     scope_directory: scope_directory,
-///     os_user_id: os_user_id,
-///   );
-/// };
-/// ```
-typedef HostTransportFactory = Transport Function({
-  required String scope_directory,
-  required String os_user_id,
-});
-
 /// Composes the application resources owned by a Rudra host.
 ///
 /// Establishes trusted ownership and constructs a shared workflow
-/// runtime, application and persistence context for one host
-/// execution lifecycle.
-///
-/// The configured development directory isolates host persistence
-/// from the existing frontend-owned production database.
+/// runtime and a user-scoped persistence context for one host lifecycle.
+/// Separate production hosts open independent connections to one database.
 ///
 /// Exclusive ownership remains established until communication,
 /// authoritative state publication and persistence resource disposal
@@ -95,10 +62,9 @@ typedef HostTransportFactory = Transport Function({
 /// final composition = HostComposition(
 ///   identity_provider: identity_provider,
 ///   ownership_provider: ownership_provider,
-///   data_directory: development_directory,
+///   resolve_database: storage.resolve,
 ///   target_id: 'local-macos',
 ///   inspector: inspector,
-///   transport_factory: transport_factory,
 /// );
 ///
 /// await composition.run(
@@ -115,14 +81,13 @@ final class HostComposition {
   /// [identity_provider] resolves the trusted operating-system owner.
   /// [ownership_provider] establishes exclusive ownership before
   /// application resources are constructed.
-  /// [data_directory] identifies an existing, dedicated development
-  /// persistence directory.
+  /// [resolve_database] supplies the database file after ownership is acquired.
+  /// Native composition validates production provisioning in this callback.
   /// [target_id] identifies the configured filesystem target.
   /// [inspector] supplies read-only inspection for the configured
   /// filesystem target.
-  /// [transport_factory] constructs configured authenticated
-  /// connectivity after trusted identity and exclusive application
-  /// ownership have been established.
+  /// [require_existing_wal] verifies that storage has already been configured
+  /// for durable multi-user execution. Isolated fixtures may initialize WAL.
   /// [communication_factory] optionally substitutes the host-owned
   /// communication implementation using its assembled messaging
   /// configuration.
@@ -132,11 +97,11 @@ final class HostComposition {
   HostComposition({
     required this.identity_provider,
     required this.ownership_provider,
-    required this.data_directory,
+    required this.resolve_database,
     required this.target_id,
     required this.inspector,
-    required this.transport_factory,
     this.communication_factory,
+    this.require_existing_wal = false,
   });
 
   /// Platform implementation responsible for trusted identity resolution.
@@ -145,9 +110,8 @@ final class HostComposition {
   /// Platform implementation responsible for exclusive host ownership.
   final HostOwnershipProvider ownership_provider;
 
-  /// Dedicated directory containing host development persistence
-  /// and its exclusively owned local communication endpoint.
-  final Directory data_directory;
+  /// Resolves the database backing the host-owned persistence context.
+  final FutureOr<File> Function() resolve_database;
 
   /// Configured filesystem target used by explicit startup operations.
   final String target_id;
@@ -157,29 +121,14 @@ final class HostComposition {
   /// Its concrete implementation is selected by native host composition.
   final TargetInspector inspector;
 
-  /// Constructs configured connectivity for the trusted host environment.
-  ///
-  /// Invoked after canonical scope resolution and successful exclusive
-  /// ownership acquisition.
-  final HostTransportFactory transport_factory;
-
-  /// Optional factory substituting the host-owned communication subsystem.
-  ///
-  /// Receives the configured transport and validated application
-  /// messaging configuration assembled by the host.
+  /// Optional replacement for the communication subsystem owned by the host.
   final HostCommunicationFactory? communication_factory;
 
-  /// Filename reserved for the standalone development host.
-  static const String database_filename = 'rudra-host-dev.sqlite';
+  /// Whether persistence requires an already provisioned WAL-mode file.
+  final bool require_existing_wal;
 
   /// Records whether this composition has entered its lifecycle.
   bool _has_run = false;
-
-  /// Returns the configured development database location.
-  ///
-  /// Resolving the location does not initialize persistence.
-  File get database_file =>
-      File.fromUri(data_directory.absolute.uri.resolve(database_filename));
 
   /// Composes and executes one exclusively owned host lifecycle.
   ///
@@ -196,9 +145,9 @@ final class HostComposition {
   ///
   /// Returns after graceful termination and resource disposal.
   ///
-  /// Throws [HostAlreadyOwnedException] when the persistence scope
-  /// already has an owner, or [StateError] for repeated execution,
-  /// unavailable storage or invalid trusted identity.
+  /// Throws [HostAlreadyOwnedException] when this operating-system user
+  /// already has a host, or [StateError] for repeated execution or invalid
+  /// trusted identity.
   ///
   /// Application, communication, state publication, ownership and
   /// persistence failures propagate to the caller.
@@ -224,41 +173,28 @@ final class HostComposition {
       throw StateError('Trusted OS-user identity must not be blank.');
     }
 
-    if (!await data_directory.exists()) {
-      throw StateError('The host development directory must already exist.');
-    }
-
-    // Resolve one canonical scope so alternative path spellings
-    // cannot establish independent ownership of the same resources.
-    final scope_directory = await data_directory.resolveSymbolicLinks();
-
-    final scoped_database = File.fromUri(
-      Directory(scope_directory).uri.resolve(database_filename),
-    );
-
-    // Competing hosts must fail before constructing or accessing
-    // application persistence or communication resources.
-    final ownership = await ownership_provider.acquire(
-      scope_directory: scope_directory,
-    );
+    // Competing hosts fail before opening persistence or binding endpoints.
+    final ownership = await ownership_provider.acquire();
 
     var persistence_closed = true;
 
     RudraHost? host;
 
     try {
-      // Configure connectivity only after the canonical application
-      // scope is exclusively owned by the trusted host.
-      final transport = transport_factory(
-        scope_directory: scope_directory,
-        os_user_id: os_user_id,
-      );
+      final database = await resolve_database();
+      if (!await database.parent.exists()) {
+        throw FileSystemException(
+          'The host database directory must already exist.',
+          database.parent.path,
+        );
+      }
 
       final runtime = WorkflowRuntime.standard();
 
       final persistence = RudraSqlitePersistence(
-        database_file: scoped_database,
-        scope_id: 'rudra-host-dev:$os_user_id',
+        database_file: database,
+        scope_id: os_user_id,
+        require_existing_wal: require_existing_wal,
         runtime: runtime,
       );
 
@@ -283,7 +219,6 @@ final class HostComposition {
           application: application,
           filesystem_application: filesystem_application,
           validate_start: _validate_start,
-          transport: transport,
           communication_factory: communication_factory,
         );
 
