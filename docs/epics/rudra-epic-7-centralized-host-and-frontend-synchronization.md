@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A, 7B, 7C.1, 7C.2 and 7C.3.1 complete; 7C.3.2 in progress
+**Status:** In progress — 7A, 7B, 7C.1, 7C.2, 7C.3.1 and 7C.3.2 complete; 7C.3.3 in progress
 **Created:** 24 November 2026
 **Updated:** 26 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -626,15 +626,42 @@ Expose host-backed application operations through the existing `RudraSdk` facade
 
 No changes to authoritative workflow processing, communication protocol or persistence schema are required.
 
-##### 7C.3.3 — Reactive state consumption and reconnection (planned)
+**Verification:** Completed and verified at
+`041f855c0712d7e736814422b9ea4dff41f7254f`.
 
-Implement remote composite state observation using the existing subscription messaging protocol and shared SDK connection lifecycle.
+SDK and host integration verification establish public workflow
+operations, authoritative state queries, durable outcome recovery
+and stable service identity across communication replacement.
 
-Preserve initial-publication reconciliation, exact delivery acknowledgment, generation and revision validation, bounded local observation, cancellation and explicit synchronization availability.
+##### 7C.3.3 — Reactive state consumption and reconnection
 
-A failed observation terminates with an error. An explicit reconnect permits fresh observation through the same SDK instance.
+Complete the receiving side of authoritative application-state observation beneath the existing `RudraSdk` facade.
 
-**Gate:** Multiple independent SDK consumers observe committed Start and Stop operations without manual refresh, including overlapping subscription establishment, communication interruption, paused listeners and host recreation.
+- `RemoteStateObserver` consumes verified host publications through the existing authenticated subscription messaging protocol.
+- `RudraSdk.observe_state()` preserves the established `Stream<RudraState>` application observation contract.
+- `RudraSdk.synchronization_status` and `observe_synchronization_status()` represent infrastructure availability independently of immutable domain state.
+- Generic client connection lifecycle notifications coordinate feature-owned receiving handlers and session invalidation.
+- Independent local listeners share one remote subscription over the SDK's existing authenticated connection.
+- The first local listener initiates remote subscription establishment.
+- Subscription acceptance and initial delivery may occur in either order; state becomes available only after both have been validated.
+- Delivery acknowledgments identify the exact subscription, publication generation and revision accepted by the receiver.
+- Publication revisions must advance within a subscription and may not regress when establishing a new subscription within the same observed generation.
+- A newly authenticated session may establish a different authoritative publication generation.
+- Previously replaced sessions cannot modify current observation or invalidate a newer connection.
+- Independent local listeners retain at most one pending latest state while paused.
+- Local rendering and paused listeners do not delay remote acknowledgment or communication resource disposal.
+- Cancelling the last local listener retires remote observation and drains the subscription before replacement admission.
+- Valid outstanding deliveries during cancellation are acknowledged without exposing retired state.
+- Communication interruption and synchronization failures terminate affected state observations with an explicit error.
+- Explicit reconnection establishes fresh communication and permits a fresh observation; terminated observations are never implicitly revived.
+- Synchronization status observers remain available across connection replacement and terminate when the SDK permanently closes.
+- Reconnection and observation never implicitly resubmit application operations or initialize absent workflow storage.
+
+**Gate:** Independent SDK consumers observe real committed Start and Stop operations without manual refresh. Controlled protocol tests establish handshake reconciliation, bounded paused delivery, cancellation ordering, stale-session rejection, generation reconciliation and initial-delivery deadlines. Host integration verifies independent SDK observation, shared local subscription delivery, explicit reconnect and restoration after host recreation.
+
+**Boundary:** Production CLI and Explorer integration remains within 7D. Native process lifecycle, service installation and cross-process acceptance remain within 7E.
+
+No changes to the communication protocol, authoritative workflow processing or persistence schema are required.
 
 ##### Migration boundary
 

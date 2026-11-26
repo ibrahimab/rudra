@@ -55,14 +55,32 @@ final class ClientConnection {
   /// [communication_factory] optionally replaces default Communication
   /// construction while preserving SDK-owned messaging configuration.
   ///
+  /// [register_handlers] contributes application-owned receiving handlers
+  /// to each independent communication configuration.
+  ///
+  /// [on_session_available] receives the authenticated session after
+  /// successful establishment.
+  ///
+  /// [on_session_unavailable] receives the retiring session and its
+  /// failure or invalidation reason before replacement is permitted.
+  ///
+  /// Lifecycle callbacks are synchronous, must not throw and must not
+  /// await or dispose of the owning communication lifecycle.
+  ///
   /// Messaging configuration failures propagate.
   /// Construction performs no endpoint resolution or resource acquisition.
   ClientConnection({
     required ClientConnectionSetup setup,
     required WorkflowRuntime runtime,
     ClientCommunicationFactory? communication_factory,
+    void Function(RequestHandlerRegistry)? register_handlers,
+    void Function(MessageSession)? on_session_available,
+    void Function(MessageSession, Object, StackTrace)? on_session_unavailable,
   }) : _setup = setup,
        _communication_factory = communication_factory,
+       _register_handlers = register_handlers,
+       _on_session_available = on_session_available,
+       _on_session_unavailable = on_session_unavailable,
        _codecs = create_application_message_codecs(
          modules: standard_messaging_modules(workflow_runtime: runtime),
        );
@@ -72,6 +90,20 @@ final class ClientConnection {
 
   /// Optional substitution for default communication construction.
   final ClientCommunicationFactory? _communication_factory;
+
+  /// Optional application receiving-handler contribution.
+  ///
+  /// Invoked before each communication handler registry is frozen.
+  final void Function(RequestHandlerRegistry)? _register_handlers;
+
+  /// Optional notification of successful authenticated establishment.
+  final void Function(MessageSession)? _on_session_available;
+
+  /// Optional notification of session invalidation.
+  ///
+  /// Receives the affected session, failure reason and diagnostic stack.
+  final void Function(MessageSession, Object, StackTrace)?
+  _on_session_unavailable;
 
   /// Validated application codecs shared by successive connections.
   final MessageCodecRegistry _codecs;
@@ -206,6 +238,8 @@ final class ClientConnection {
 
     final handlers = RequestHandlerRegistry();
 
+    _register_handlers?.call(handlers);
+
     handlers.freeze(codecs: _codecs);
 
     final factory = _communication_factory;
@@ -240,10 +274,12 @@ final class ClientConnection {
           .then<void>(
             (_) => _invalidate(owned),
             onError: (Object error, StackTrace stack_trace) {
-              _invalidate(owned);
+              _invalidate(owned, error: error, stack_trace: stack_trace);
             },
           )
           .ignore();
+
+      _on_session_available?.call(session);
     } catch (_) {
       await _release_connection();
 
@@ -272,12 +308,29 @@ final class ClientConnection {
 
   /// Invalidates request admission for the specified [owned] connection.
   ///
-  /// A termination notification from a previously replaced connection
-  /// cannot invalidate the current connection.
-  void _invalidate(_OwnedConnection owned) {
-    if (identical(_owned, owned)) {
-      owned.available = false;
+  /// [error] and [stack_trace] optionally preserve its terminal failure.
+  /// Otherwise an explicit unavailable-connection error is supplied.
+  ///
+  /// Application capabilities are notified exactly once after request
+  /// admission closes and before replacement begins.
+  ///
+  /// Notifications from previously replaced connections are ignored.
+  void _invalidate(
+    _OwnedConnection owned, {
+    Object? error,
+    StackTrace? stack_trace,
+  }) {
+    if (!identical(_owned, owned) || !owned.available) {
+      return;
     }
+
+    owned.available = false;
+
+    _on_session_unavailable?.call(
+      owned.session!,
+      error ?? StateError('SDK connection became unavailable.'),
+      stack_trace ?? StackTrace.current,
+    );
   }
 
   /// Releases the currently owned communication lifecycle.
@@ -295,7 +348,7 @@ final class ClientConnection {
 
     if (owned == null) return;
 
-    owned.available = false;
+    _invalidate(owned);
 
     try {
       try {

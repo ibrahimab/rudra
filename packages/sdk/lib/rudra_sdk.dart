@@ -51,6 +51,9 @@ export 'src/workflow/workflow.dart';
 /// Immutable composite SDK application state.
 export 'src/state/rudra_state.dart';
 
+/// Application-state synchronization availability.
+export 'src/state/observation/state_synchronization_status.dart';
+
 /// Authoritative application-state publication and subscription contracts.
 export 'src/state/publication/state_publication.dart';
 export 'src/state/publication/state_publication_snapshot.dart';

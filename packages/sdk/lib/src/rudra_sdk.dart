@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
 
 import 'client/client_connection.dart';
@@ -6,6 +8,8 @@ import 'client/contracts/client_connection_setup.dart';
 import 'filesystem/filesystem_service.dart';
 
 import 'state/messaging/read/state_read_request.dart';
+import 'state/observation/remote_state_observer.dart';
+import 'state/observation/state_synchronization_status.dart';
 import 'state/rudra_state.dart';
 
 import 'workflow/services/workflow_service.dart';
@@ -19,6 +23,8 @@ import 'workflow/workflow_runtime.dart';
 /// [filesystem] provides read-only target inspection.
 /// [workflows] provides host-backed workflow operations.
 /// [read_state] retrieves verified composite application state.
+/// [observe_state] delivers its verified initial and subsequent states.
+/// [observe_synchronization_status] reports observation availability.
 ///
 /// Host-backed application capabilities share an authenticated
 /// connection owned by this SDK.
@@ -47,6 +53,12 @@ import 'workflow/workflow_runtime.dart';
 ///
 ///   final state = await sdk.read_state();
 ///   print(state.workflows.current_workflow?.identity.workflow_id);
+///
+///   final subscription = sdk.observe_state().listen((state) {
+///     print(state.workflows.current_workflow?.identity.workflow_id);
+///   });
+///
+///   await subscription.cancel();
 /// } finally {
 ///   await sdk.close();
 /// }
@@ -82,20 +94,24 @@ final class RudraSdk {
   }) : filesystem = FilesystemService(
          target_id: target_id,
          inspector: inspector,
-       ),
-       _connection = connection_setup == null
-           ? null
-           : ClientConnection(
-               setup: connection_setup,
-               runtime: workflow_runtime ?? WorkflowRuntime.standard(),
-               communication_factory: communication_factory,
-             ) {
+       ) {
     if (connection_setup == null &&
         (workflow_runtime != null || communication_factory != null)) {
       throw ArgumentError(
         'Host communication options require a connection setup capability.',
       );
     }
+
+    _connection = connection_setup == null
+        ? null
+        : ClientConnection(
+            setup: connection_setup,
+            runtime: workflow_runtime ?? WorkflowRuntime.standard(),
+            communication_factory: communication_factory,
+            register_handlers: _state_observer.register_handlers,
+            on_session_available: _state_observer.attach_session,
+            on_session_unavailable: _state_observer.detach_session,
+          );
   }
 
   /// Provides platform-independent filesystem operations.
@@ -110,7 +126,13 @@ final class RudraSdk {
   ///
   /// Absent when the SDK is configured exclusively for independent
   /// local filesystem inspection.
-  final ClientConnection? _connection;
+  late final ClientConnection? _connection;
+
+  /// Remote state observation owned by this SDK.
+  ///
+  /// Borrows authenticated sessions from the shared connection owner
+  /// and distributes verified state to independent local listeners.
+  final RemoteStateObserver _state_observer = RemoteStateObserver();
 
   /// Provides host-backed workflow application operations.
   ///
@@ -198,10 +220,63 @@ final class RudraSdk {
     return response.state;
   }
 
+  /// Current availability of authoritative application-state observation.
+  ///
+  /// Independent of domain workflow state and connection availability.
+  StateSynchronizationStatus get synchronization_status =>
+      _state_observer.status;
+
+  /// Observes initial and subsequent verified application state.
+  ///
+  /// Each listener receives state through the SDK's shared remote
+  /// subscription. Rapid publications may be coalesced.
+  ///
+  /// Unavailable communication and synchronization failures terminate
+  /// observation with an error rather than reporting verified absence.
+  ///
+  /// Following reconnection, consumers establish a fresh observation.
+  /// Cancelling the last local listener retires the remote subscription.
+  ///
+  /// Example:
+  /// ```dart
+  /// final subscription = sdk.observe_state().listen((state) {
+  ///   print(state.workflows.current_workflow);
+  /// });
+  ///
+  /// await subscription.cancel();
+  /// ```
+  Stream<RudraState> observe_state() {
+    return _state_observer.observe();
+  }
+
+  /// Observes current and subsequent synchronization availability.
+  ///
+  /// Returns an independent local status stream. Intermediate status
+  /// changes may be coalesced for slow or paused listeners.
+  ///
+  /// Unlike application-state observation, status observation remains
+  /// available across connection replacement.
+  ///
+  /// Example:
+  /// ```dart
+  /// final subscription = sdk
+  ///     .observe_synchronization_status()
+  ///     .listen((status) {
+  ///       print(status.name);
+  ///     });
+  ///
+  /// await subscription.cancel();
+  /// ```
+  Stream<StateSynchronizationStatus> observe_synchronization_status() {
+    return _state_observer.observe_status();
+  }
+
   /// Permanently closes owned host communication resources.
   ///
   /// Returns after communication and admitted application handlers
-  /// have drained.
+  /// have drained and local observation has terminated.
+  ///
+  /// Paused frontend listeners do not delay resource disposal.
   ///
   /// Repeated successful closure has no additional effect.
   /// An SDK configured exclusively for local inspection has no
@@ -211,6 +286,8 @@ final class RudraSdk {
   /// Closing a frontend connection does not terminate RudraHost.
   Future<void> close() async {
     await _connection?.close();
+
+    _state_observer.close();
   }
 
   /// Returns the configured host connection capability.
