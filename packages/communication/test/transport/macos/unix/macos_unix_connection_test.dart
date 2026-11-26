@@ -12,7 +12,7 @@ import '../../../support/macos_test_identity.dart';
 /// Exercises both independently owned outbound connections and
 /// connections retained by a native listener.
 void main() {
-  const transport = MacOsUnixTransport();
+  late MacOsUnixTransport transport;
 
   const operation_timeout = Duration(seconds: 15);
 
@@ -30,6 +30,8 @@ void main() {
 
       scope = await directory.resolveSymbolicLinks();
       owner = await resolve_macos_test_identity();
+
+      transport = MacOsUnixTransport(scope_directory: scope, os_user_id: owner);
     });
 
     tearDown(() async {
@@ -42,10 +44,7 @@ void main() {
           : 'client closure interrupts outbound connection writes';
 
       test(description, () async {
-        final listener = await transport.listen(
-          scope_directory: scope,
-          os_user_id: owner,
-        );
+        final listener = await transport.listen();
 
         final accepted = StreamIterator<TransportConnection>(
           listener.connections,
@@ -56,10 +55,7 @@ void main() {
         try {
           final pending = accepted.moveNext();
 
-          final connected = await transport.connect(
-            scope_directory: scope,
-            os_user_id: owner,
-          );
+          final connected = await transport.connect();
 
           client = connected;
 
@@ -107,10 +103,7 @@ void main() {
     }
 
     test('rejects overlapping native transport writes', () async {
-      final listener = await transport.listen(
-        scope_directory: scope,
-        os_user_id: owner,
-      );
+      final listener = await transport.listen();
 
       final accepted = StreamIterator<TransportConnection>(
         listener.connections,
@@ -121,10 +114,7 @@ void main() {
       try {
         final pending = accepted.moveNext();
 
-        final connected = await transport.connect(
-          scope_directory: scope,
-          os_user_id: owner,
-        );
+        final connected = await transport.connect();
 
         client = connected;
 

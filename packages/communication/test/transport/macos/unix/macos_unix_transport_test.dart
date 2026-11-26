@@ -13,8 +13,6 @@ import 'package:test/test.dart';
 /// Exercises native endpoint protection, peer authorization,
 /// independent connections and listener resource disposal.
 void main() {
-  const transport = MacOsUnixTransport();
-
   const operation_timeout = Duration(seconds: 15);
 
   late Directory directory;
@@ -42,12 +40,20 @@ void main() {
       await directory.delete(recursive: true);
     });
 
-    /// Opens a listener for the trusted fixture owner.
+    /// Opens a configured listener for the trusted fixture owner.
     ///
     /// [authorized_owner] optionally overrides authorization
     /// to exercise rejection of a kernel-authenticated peer.
-    Future<TransportListener> listen({String? authorized_owner}) => transport
-        .listen(scope_directory: scope, os_user_id: authorized_owner ?? owner);
+    ///
+    /// Returns the authenticated native listener.
+    Future<TransportListener> listen({String? authorized_owner}) {
+      final transport = MacOsUnixTransport(
+        scope_directory: scope,
+        os_user_id: authorized_owner ?? owner,
+      );
+
+      return transport.listen();
+    }
 
     /// Establishes a native client connection.
     ///

@@ -7,7 +7,6 @@ import 'package:test/test.dart';
 /// Verifies public communication configuration, typed connectivity
 /// and complete application-resource ownership lifecycles.
 void main() {
-  const scope = '/test-scope';
   const owner = 'test-owner';
 
   /// Starts a listening communication lifecycle.
@@ -38,8 +37,6 @@ void main() {
     );
 
     final running = communication.run(
-      scope_directory: scope,
-      os_user_id: owner,
       shutdown: shutdown.future,
       on_startup: () async {
         ready.complete();
@@ -77,10 +74,7 @@ void main() {
       handlers: _create_handlers(handler),
     );
 
-    final session = await communication.connect(
-      scope_directory: scope,
-      os_user_id: owner,
-    );
+    final session = await communication.connect();
 
     addTearDown(() async {
       try {
@@ -95,7 +89,7 @@ void main() {
 
   group('communication configuration', () {
     test('invalid session limits prevent listener acquisition', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final communication = Communication(
         transport: transport,
@@ -108,11 +102,7 @@ void main() {
       );
 
       await expectLater(
-        communication.run(
-          scope_directory: scope,
-          os_user_id: owner,
-          shutdown: Future<void>.value(),
-        ),
+        communication.run(shutdown: Future<void>.value()),
         throwsArgumentError,
       );
 
@@ -123,24 +113,21 @@ void main() {
     });
 
     test('invalid session limits prevent outbound acquisition', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final communication = Communication(
         transport: transport,
         options: const MessageSessionOptions(maximum_pending: 0),
       );
 
-      await expectLater(
-        communication.connect(scope_directory: scope, os_user_id: owner),
-        throwsArgumentError,
-      );
+      await expectLater(communication.connect(), throwsArgumentError);
 
       expect(transport.connect_count, 0);
       expect(communication.resources_released, isTrue);
     });
 
     test('invalid codec configuration prevents listener acquisition', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
       final codecs = MessageCodecRegistry();
 
       // Deliberately omit the response codec required by this
@@ -152,11 +139,7 @@ void main() {
       final communication = Communication(transport: transport, codecs: codecs);
 
       await expectLater(
-        communication.run(
-          scope_directory: scope,
-          os_user_id: owner,
-          shutdown: Future<void>.value(),
-        ),
+        communication.run(shutdown: Future<void>.value()),
         throwsStateError,
       );
 
@@ -171,6 +154,7 @@ void main() {
         final handlers = _create_handlers(null);
 
         final transport = _LoopbackTransport(
+          os_user_id: owner,
           on_listen: () {
             expect(codecs.is_frozen, isTrue);
             expect(handlers.is_frozen, isTrue);
@@ -186,11 +170,7 @@ void main() {
         expect(codecs.is_frozen, isFalse);
         expect(handlers.is_frozen, isFalse);
 
-        await communication.run(
-          scope_directory: scope,
-          os_user_id: owner,
-          shutdown: Future<void>.value(),
-        );
+        await communication.run(shutdown: Future<void>.value());
 
         await communication.done;
 
@@ -199,7 +179,7 @@ void main() {
     );
 
     test('rejects an incompatible frozen handler registry', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final original_codecs = _create_codecs()..freeze();
 
@@ -212,10 +192,7 @@ void main() {
         handlers: handlers,
       );
 
-      await expectLater(
-        communication.connect(scope_directory: scope, os_user_id: owner),
-        throwsStateError,
-      );
+      await expectLater(communication.connect(), throwsStateError);
 
       expect(transport.connect_count, 0);
       expect(communication.resources_released, isTrue);
@@ -224,7 +201,7 @@ void main() {
 
   group('public typed connectivity', () {
     test('exchanges typed requests through the public facade', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final server = await start_server(
         transport,
@@ -246,8 +223,6 @@ void main() {
       );
 
       expect(response.value, 'Hello');
-      expect(transport.connect_scope, scope);
-      expect(transport.connect_owner, owner);
 
       await client.session.close();
       await client.communication.done;
@@ -264,7 +239,7 @@ void main() {
     });
 
     test('maintains independent concurrent client sessions', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       await start_server(
         transport,
@@ -296,7 +271,7 @@ void main() {
     });
 
     test('isolates malformed client communication', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final server = await start_server(
         transport,
@@ -328,23 +303,16 @@ void main() {
     });
 
     test('a client cannot claim a second execution lifecycle', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       await start_server(transport);
 
       final client = await start_client(transport);
 
-      await expectLater(
-        client.communication.connect(scope_directory: scope, os_user_id: owner),
-        throwsStateError,
-      );
+      await expectLater(client.communication.connect(), throwsStateError);
 
       await expectLater(
-        client.communication.run(
-          scope_directory: scope,
-          os_user_id: owner,
-          shutdown: Future<void>.value(),
-        ),
+        client.communication.run(shutdown: Future<void>.value()),
         throwsStateError,
       );
 
@@ -354,13 +322,10 @@ void main() {
     });
 
     test('a listening instance cannot claim a client lifecycle', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
       final server = await start_server(transport);
 
-      await expectLater(
-        server.communication.connect(scope_directory: scope, os_user_id: owner),
-        throwsStateError,
-      );
+      await expectLater(server.communication.connect(), throwsStateError);
 
       expect(transport.connect_count, 0);
       expect(server.communication.resources_released, isFalse);
@@ -369,7 +334,7 @@ void main() {
 
   group('complete owning lifecycle', () {
     test('host shutdown awaits outstanding application handlers', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final entered = Completer<void>();
       final release = Completer<_EchoResponse>();
@@ -425,7 +390,7 @@ void main() {
 
     test('client ownership outlives communication disposal while '
         'an application handler remains active', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final entered = Completer<void>();
       final release = Completer<_EchoResponse>();
@@ -481,7 +446,7 @@ void main() {
     });
 
     test('failed outbound establishment confirms resource release', () async {
-      final transport = _LoopbackTransport();
+      final transport = _LoopbackTransport(os_user_id: owner);
 
       final communication = Communication(transport: transport);
 
@@ -491,10 +456,7 @@ void main() {
       );
 
       // No listening endpoint has been established.
-      await expectLater(
-        communication.connect(scope_directory: scope, os_user_id: owner),
-        throwsStateError,
-      );
+      await expectLater(communication.connect(), throwsStateError);
 
       await lifecycle_failed;
 
@@ -507,7 +469,10 @@ void main() {
         'Controlled incoming stream initialization failure.',
       );
 
-      final transport = _LoopbackTransport(incoming_failure: failure);
+      final transport = _LoopbackTransport(
+        os_user_id: owner,
+        incoming_failure: failure,
+      );
 
       await start_server(transport);
 
@@ -518,10 +483,7 @@ void main() {
         throwsA(same(failure)),
       );
 
-      await expectLater(
-        communication.connect(scope_directory: scope, os_user_id: owner),
-        throwsA(same(failure)),
-      );
+      await expectLater(communication.connect(), throwsA(same(failure)));
 
       await lifecycle_failed;
 
@@ -534,16 +496,16 @@ void main() {
         'Controlled client resource disposal failure.',
       );
 
-      final transport = _LoopbackTransport(close_failure: failure);
+      final transport = _LoopbackTransport(
+        os_user_id: owner,
+        close_failure: failure,
+      );
 
       await start_server(transport);
 
       final communication = Communication(transport: transport);
 
-      final session = await communication.connect(
-        scope_directory: scope,
-        os_user_id: owner,
-      );
+      final session = await communication.connect();
 
       final lifecycle_failed = expectLater(
         communication.done,
@@ -680,21 +642,26 @@ final class _EchoResponseCodec implements MessageCodec<_EchoResponse> {
   }
 }
 
-/// Supplies controlled bidirectional endpoint establishment.
+/// Supplies configured bidirectional endpoint establishment.
 ///
 /// Connects independent in-memory transport endpoints without
 /// substituting any object-level communication components.
 final class _LoopbackTransport implements Transport {
-  /// Creates a transport with optional controlled failure behavior.
+  /// Creates a transport with controlled connectivity behavior.
   ///
+  /// [os_user_id] supplies the synthetic authenticated peer identity.
   /// [on_listen] observes listener initialization.
   /// [incoming_failure] optionally rejects client stream access.
   /// [close_failure] optionally rejects client disposal confirmation.
   _LoopbackTransport({
+    required this.os_user_id,
     this.on_listen,
     this.incoming_failure,
     this.close_failure,
   });
+
+  /// Trusted synthetic identity retained by this transport.
+  final String os_user_id;
 
   /// Optional listener initialization observer.
   final void Function()? on_listen;
@@ -714,26 +681,14 @@ final class _LoopbackTransport implements Transport {
   /// Number of attempted outbound connections.
   int connect_count = 0;
 
-  /// Scope supplied during outbound connection establishment.
-  String? connect_scope;
-
-  /// Trusted identity supplied during outbound establishment.
-  String? connect_owner;
-
   /// Most recently acquired client transport.
   _LoopbackConnection? last_client;
 
-  /// Establishes a controlled listening endpoint.
-  ///
-  /// [scope_directory] and [os_user_id] supply trusted
-  /// endpoint configuration.
+  /// Establishes the configured controlled listening endpoint.
   ///
   /// Returns an independently owned listener.
   @override
-  Future<TransportListener> listen({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportListener> listen() async {
     listen_count++;
 
     on_listen?.call();
@@ -747,22 +702,13 @@ final class _LoopbackTransport implements Transport {
 
   /// Establishes an independent controlled client connection.
   ///
-  /// [scope_directory] identifies the requested endpoint.
-  /// [os_user_id] identifies the synthetic authenticated peer.
-  ///
   /// Returns the client endpoint after delivering its counterpart
   /// to the established listener.
   ///
   /// Throws [StateError] when no active listener exists.
   @override
-  Future<TransportConnection> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportConnection> connect() async {
     connect_count++;
-
-    connect_scope = scope_directory;
-    connect_owner = os_user_id;
 
     final listener = _listener;
 

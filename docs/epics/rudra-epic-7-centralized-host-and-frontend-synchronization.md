@@ -946,6 +946,38 @@ through the existing connection admission boundary. Local
 synchronization availability observation remains independent of
 connection availability.
 
+Transport configuration encapsulation precedes production frontend
+composition migration.
+
+Implementation proceeds through the following coordinated increments:
+
+- 7D.1.3A — Authoritative filesystem execution, SDK and host
+  test migration and verification.
+- 7D.1.3B.1 — Concrete transport configuration ownership and
+  parameterless communication execution.
+- 7D.1.3B.2 — Mandatory configured transport resolution within
+  SDK and host composition.
+- 7D.1.3C — Production frontend composition migration and removal
+  of frontend-owned persistence and native filesystem inspection.
+
+Concrete transports retain immutable endpoint and authentication
+configuration. Portable transport and communication execution
+contracts remain independent of native endpoint representations.
+
+Communication requires explicit transport injection. Implicit
+platform selection is removed from the communication subsystem.
+
+Transport implementations remain responsible for authenticating
+remote peers against trusted configuration. Host application
+authorization retains its existing trusted ownership boundary.
+
+The existing operating-system identity representation remains
+in use. Future remote identity mapping requires a separately
+defined authentication and authorization policy.
+
+Existing communication protocol, correlation, session execution
+and resource disposal guarantees remain unchanged.
+
 **Gate:** Independent SDK consumers execute filesystem and workflow
 operations through one authoritative host. Unavailable communication
 never activates frontend-local execution.

@@ -12,7 +12,6 @@ import '../../../support/macos_test_identity.dart';
 /// Exercises native peer authentication, bidirectional byte delivery
 /// and preservation of listener-owned filesystem endpoints.
 void main() {
-  const transport = MacOsUnixTransport();
   const operation_timeout = Duration(seconds: 15);
 
   late Directory directory;
@@ -38,7 +37,12 @@ void main() {
     ///
     /// Returns the authenticated native listener.
     Future<TransportListener> listen() {
-      return transport.listen(scope_directory: scope, os_user_id: owner);
+      final transport = MacOsUnixTransport(
+        scope_directory: scope,
+        os_user_id: owner,
+      );
+
+      return transport.listen();
     }
 
     /// Connects to the fixture's existing communication endpoint.
@@ -48,10 +52,12 @@ void main() {
     ///
     /// Returns the authenticated connection.
     Future<TransportConnection> connect({String? expected_owner}) {
-      return transport.connect(
+      final transport = MacOsUnixTransport(
         scope_directory: scope,
         os_user_id: expected_owner ?? owner,
       );
+
+      return transport.connect();
     }
 
     test('authenticates peers in both directions', () async {
@@ -226,7 +232,10 @@ void main() {
       final missing_scope = '$scope/missing';
 
       await expectLater(
-        transport.connect(scope_directory: missing_scope, os_user_id: owner),
+        MacOsUnixTransport(
+          scope_directory: missing_scope,
+          os_user_id: owner,
+        ).connect(),
         throwsA(isA<FileSystemException>()),
       );
 
@@ -286,10 +295,10 @@ void main() {
 
     test('rejects relative communication scopes', () async {
       await expectLater(
-        transport.connect(
+        MacOsUnixTransport(
           scope_directory: 'relative-directory',
           os_user_id: owner,
-        ),
+        ).connect(),
         throwsArgumentError,
       );
     });

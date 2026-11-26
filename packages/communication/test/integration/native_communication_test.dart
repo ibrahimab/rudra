@@ -74,13 +74,15 @@ void main() {
           ..register<EchoResponse, EchoRequest>(handler);
 
         final communication = Communication(
+          transport: MacOsUnixTransport(
+            scope_directory: scope,
+            os_user_id: owner,
+          ),
           codecs: create_echo_codecs(),
           handlers: handlers,
         );
 
         final running = communication.run(
-          scope_directory: scope,
-          os_user_id: owner,
           shutdown: shutdown.future,
           on_startup: () async {
             ready.complete();

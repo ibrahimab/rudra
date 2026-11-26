@@ -7,22 +7,26 @@
 /// Communication owns session construction, protocol processing,
 /// request correlation and resource disposal.
 ///
-/// Consumers supply trusted endpoint configuration and their
-/// application-specific message representations and behavior.
+/// Consumers supply configured authenticated transports together
+/// with their application-specific message representations
+/// and behavior.
 ///
 /// Example:
 /// ```dart
 /// import 'package:rudra_communication/rudra_communication.dart';
 ///
+/// final transport = MacOsUnixTransport(
+///   scope_directory: scope,
+///   os_user_id: trusted_owner,
+/// );
+///
 /// final communication = Communication(
+///   transport: transport,
 ///   codecs: codecs,
 ///   handlers: handlers,
 /// );
 ///
-/// final session = await communication.connect(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-/// );
+/// final session = await communication.connect();
 ///
 /// try {
 ///   final response = await session.request(

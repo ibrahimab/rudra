@@ -3,60 +3,39 @@ import 'transport_listener.dart';
 
 /// Establishes authenticated bidirectional communication endpoints.
 ///
-/// Implementations provide native communication mechanisms behind
-/// portable connection and listener contracts.
+/// Concrete implementations retain their endpoint configuration,
+/// authentication requirements and native connectivity mechanisms.
 ///
 /// Listener initialization requires exclusive ownership of the
-/// communication scope. Outbound connectivity requires trusted
-/// endpoint configuration but does not acquire listener ownership.
+/// configured endpoint. Outbound connectivity establishes an
+/// authenticated connection to an existing endpoint.
 ///
 /// Example:
 /// ```dart
-/// final listener = await transport.listen(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-/// );
-///
-/// final connection = await transport.connect(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-/// );
+/// final listener = await transport.listen();
+/// final connection = await transport.connect();
 ///
 /// await connection.close();
 /// await listener.close();
 /// ```
 abstract interface class Transport {
-  /// Opens a local listener within an exclusively owned scope.
-  ///
-  /// [scope_directory] identifies the canonical directory
-  /// reserved for the communication endpoint.
-  ///
-  /// [os_user_id] identifies the trusted operating-system owner
-  /// authorized to establish connections.
+  /// Opens the configured authenticated listening endpoint.
   ///
   /// Returns a listener accepting only authorized peers.
   /// Successful initialization transfers ownership of the listener
   /// to the caller.
   ///
-  /// Failed initialization must release any communication resources
+  /// Failed initialization must release communication resources
   /// acquired during the attempt before propagating the failure.
   ///
   /// Configuration, authentication infrastructure and endpoint
   /// initialization failures propagate to the caller.
-  Future<TransportListener> listen({
-    required String scope_directory,
-    required String os_user_id,
-  });
+  Future<TransportListener> listen();
 
-  /// Establishes an authenticated connection to an existing endpoint.
-  ///
-  /// [scope_directory] identifies the trusted canonical communication
-  /// directory containing the remote endpoint.
-  ///
-  /// [os_user_id] identifies the expected trusted remote peer.
+  /// Establishes an authenticated connection to the configured endpoint.
   ///
   /// Returns a connection whose remote identity has been verified
-  /// against the supplied trusted identity.
+  /// against the transport's trusted authentication configuration.
   ///
   /// Successful establishment transfers connection ownership to
   /// the caller.
@@ -64,13 +43,10 @@ abstract interface class Transport {
   /// Failed establishment must release all connection resources
   /// acquired during the attempt.
   ///
-  /// Connecting does not acquire listener ownership or create,
-  /// replace, repair or remove the remote endpoint.
+  /// Connecting preserves ownership and integrity of the remote
+  /// listening endpoint.
   ///
-  /// Configuration, authentication and native connection failures
+  /// Configuration, authentication and connection failures
   /// propagate to the caller.
-  Future<TransportConnection> connect({
-    required String scope_directory,
-    required String os_user_id,
-  });
+  Future<TransportConnection> connect();
 }

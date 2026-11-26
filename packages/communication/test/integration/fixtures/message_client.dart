@@ -32,6 +32,7 @@ Future<void> main(List<String> arguments) async {
     });
 
   final communication = Communication(
+    transport: MacOsUnixTransport(scope_directory: scope, os_user_id: owner),
     codecs: create_echo_codecs(),
     handlers: handlers,
     options: const MessageSessionOptions(
@@ -39,10 +40,7 @@ Future<void> main(List<String> arguments) async {
     ),
   );
 
-  final session = await communication.connect(
-    scope_directory: scope,
-    os_user_id: owner,
-  );
+  final session = await communication.connect();
 
   try {
     _require(session.os_user_id == owner, 'Invalid session owner.');

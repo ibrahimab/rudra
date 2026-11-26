@@ -23,18 +23,38 @@ import 'macos_unix_listener.dart';
 ///
 /// Example:
 /// ```dart
-/// const transport = MacOsUnixTransport();
-///
-/// final connection = await transport.connect(
+/// final transport = MacOsUnixTransport(
 ///   scope_directory: scope,
 ///   os_user_id: trusted_owner,
 /// );
 ///
+/// final connection = await transport.connect();
+///
 /// await connection.close();
 /// ```
 final class MacOsUnixTransport implements Transport {
-  /// Creates a native transport without acquiring resources.
-  const MacOsUnixTransport();
+  /// Creates a configured macOS Unix-domain transport.
+  ///
+  /// [scope_directory] identifies the trusted canonical private
+  /// directory containing the communication endpoint.
+  ///
+  /// [os_user_id] identifies the trusted operating-system owner
+  /// used to authenticate outbound peers and authorize incoming
+  /// connections.
+  ///
+  /// Construction retains configuration without accessing the
+  /// filesystem or establishing native communication resources.
+  /// Configuration is validated during endpoint establishment.
+  const MacOsUnixTransport({
+    required this.scope_directory,
+    required this.os_user_id,
+  });
+
+  /// Trusted directory containing the native communication endpoint.
+  final String scope_directory;
+
+  /// Trusted operating-system identity used for peer authentication.
+  final String os_user_id;
 
   /// Stable endpoint filename within the communication scope.
   static const String socket_filename = 'rudra-host.sock';
@@ -59,13 +79,15 @@ final class MacOsUnixTransport implements Transport {
 
   /// Opens an authenticated local host listener.
   ///
-  /// [scope_directory] must identify an existing canonical private
-  /// communication directory under the caller's exclusive ownership.
+  /// The configured [scope_directory] must identify an existing
+  /// canonical private communication directory under the caller's
+  /// exclusive ownership.
   ///
   /// Exclusive ownership must remain established until the returned
   /// listener and its outstanding connections have been disposed of.
   ///
-  /// [os_user_id] identifies the trusted owner authorized to connect.
+  /// The configured [os_user_id] identifies the owner authorized
+  /// to establish incoming connections.
   ///
   /// Returns a bound listener.
   ///
@@ -75,14 +97,8 @@ final class MacOsUnixTransport implements Transport {
   ///
   /// Native socket failures propagate to the caller.
   @override
-  Future<TransportListener> listen({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
-    final endpoint = await _resolve_endpoint(
-      scope_directory: scope_directory,
-      os_user_id: os_user_id,
-    );
+  Future<TransportListener> listen() async {
+    final endpoint = await _resolve_endpoint();
 
     await _prepare_endpoint(
       address: endpoint.address,
@@ -98,13 +114,13 @@ final class MacOsUnixTransport implements Transport {
     );
   }
 
-  /// Connects to an existing authenticated macOS Unix endpoint.
+  /// Connects to the configured authenticated macOS Unix endpoint.
   ///
-  /// [scope_directory] must identify the trusted canonical private
-  /// communication directory containing the remote endpoint.
+  /// The configured [scope_directory] identifies the trusted
+  /// canonical private directory containing the remote endpoint.
   ///
-  /// [os_user_id] identifies the expected kernel-authenticated
-  /// identity of the remote process.
+  /// The configured [os_user_id] identifies the expected
+  /// kernel-authenticated identity of the remote process.
   ///
   /// Returns an authenticated connection owned by the caller.
   ///
@@ -114,19 +130,11 @@ final class MacOsUnixTransport implements Transport {
   /// does not establish the expected identity.
   ///
   /// Native connection and credential retrieval failures propagate.
-  ///
   /// Failed authentication destroys the acquired socket before
-  /// propagating the failure. Connecting never changes endpoint
-  /// filesystem entries.
+  /// propagating the failure.
   @override
-  Future<TransportConnection> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
-    final endpoint = await _resolve_endpoint(
-      scope_directory: scope_directory,
-      os_user_id: os_user_id,
-    );
+  Future<TransportConnection> connect() async {
+    final endpoint = await _resolve_endpoint();
 
     final type = await FileSystemEntity.type(
       endpoint.socket_path,
@@ -165,13 +173,10 @@ final class MacOsUnixTransport implements Transport {
     }
   }
 
-  /// Resolves native endpoint configuration without modifying it.
+  /// Resolves the configured native endpoint without modifying it.
   ///
-  /// [scope_directory] identifies the canonical private directory
-  /// supplied by trusted composition.
-  ///
-  /// [os_user_id] supplies the trusted identity used for peer
-  /// authorization.
+  /// Validates the retained communication directory and trusted
+  /// operating-system identity.
   ///
   /// Returns the validated native address and filesystem pathname.
   ///
@@ -179,10 +184,8 @@ final class MacOsUnixTransport implements Transport {
   /// for invalid configuration, or [FileSystemException] for
   /// missing or unsafe directory configuration and excessive
   /// native pathname length.
-  Future<({InternetAddress address, String socket_path})> _resolve_endpoint({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<({InternetAddress address, String socket_path})>
+  _resolve_endpoint() async {
     if (!Platform.isMacOS) {
       throw UnsupportedError('macOS Unix transport requires macOS.');
     }

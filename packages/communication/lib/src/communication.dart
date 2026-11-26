@@ -9,15 +9,14 @@ import 'sessions/message_session_options.dart';
 import 'transport/contracts/transport.dart';
 import 'transport/contracts/transport_connection.dart';
 import 'transport/contracts/transport_listener.dart';
-import 'transport/local_transport.dart';
 
 /// Coordinates authenticated object-level application communication.
 ///
-/// Owns native transport selection, messaging configuration,
-/// session execution and communication resource disposal.
+/// Owns messaging configuration, session execution and
+/// communication resource disposal.
 ///
-/// Application consumers supply their message codecs, handlers
-/// and trusted environmental configuration.
+/// Consumers supply a configured authenticated transport together
+/// with their application message codecs and handlers.
 ///
 /// Each instance owns one execution lifecycle, either a listening
 /// endpoint or an independently connected client session.
@@ -25,14 +24,12 @@ import 'transport/local_transport.dart';
 /// Example:
 /// ```dart
 /// final communication = Communication(
+///   transport: transport,
 ///   codecs: codecs,
 ///   handlers: handlers,
 /// );
 ///
-/// final session = await communication.connect(
-///   scope_directory: scope,
-///   os_user_id: trusted_owner,
-/// );
+/// final session = await communication.connect();
 ///
 /// try {
 ///   final response = await session.request(
@@ -49,7 +46,8 @@ import 'transport/local_transport.dart';
 abstract interface class Communication {
   /// Creates communication with internally owned execution components.
   ///
-  /// [transport] optionally substitutes native transport selection.
+  /// [transport] supplies configured authenticated endpoint
+  /// establishment.
   ///
   /// [codecs] supplies application message codec configuration.
   /// When absent, communication constructs an empty registry.
@@ -64,7 +62,7 @@ abstract interface class Communication {
   /// Construction does not bind endpoints, establish connections
   /// or execute application handlers.
   factory Communication({
-    Transport? transport,
+    required Transport transport,
     MessageCodecRegistry? codecs,
     RequestHandlerRegistry? handlers,
     MessageSessionOptions options,
@@ -96,12 +94,7 @@ abstract interface class Communication {
   /// own owning communication lifecycle.
   Future<void> get done;
 
-  /// Executes an authenticated listening endpoint.
-  ///
-  /// [scope_directory] identifies the exclusively owned
-  /// communication directory prepared by trusted composition.
-  ///
-  /// [os_user_id] identifies the authorized operating-system owner.
+  /// Executes the configured authenticated listening endpoint.
   ///
   /// [shutdown] supplies the external termination notification.
   ///
@@ -118,21 +111,15 @@ abstract interface class Communication {
   /// Initialization, listener and resource disposal failures
   /// propagate to the caller.
   Future<void> run({
-    required String scope_directory,
-    required String os_user_id,
     required Future<void> shutdown,
     Future<void> Function()? on_startup,
   });
 
   /// Establishes an authenticated object-level client session.
   ///
-  /// [scope_directory] identifies the existing trusted
-  /// communication endpoint.
+  /// Returns an executing session providing typed messaging
+  /// through the configured transport.
   ///
-  /// [os_user_id] identifies the expected authenticated remote
-  /// operating-system peer.
-  ///
-  /// Returns an executing session providing typed messaging.
   /// The caller may terminate communication through its close
   /// operation.
   ///
@@ -142,14 +129,11 @@ abstract interface class Communication {
   /// Throws [StateError] for repeated execution or incompatible
   /// configuration, and [ArgumentError] for invalid limits.
   ///
-  /// Native connection, authentication and session initialization
+  /// Connection, authentication and session initialization
   /// failures propagate to the caller.
   ///
-  /// Connection establishment does not acquire listener ownership.
-  Future<MessageSession> connect({
-    required String scope_directory,
-    required String os_user_id,
-  });
+  /// Connection establishment preserves listener ownership.
+  Future<MessageSession> connect();
 }
 
 /// Implements communication's default ownership and execution model.
@@ -159,24 +143,29 @@ abstract interface class Communication {
 ///
 /// Example:
 /// ```dart
-/// final communication = _Communication();
+/// final communication = _Communication(
+///   transport: transport,
+/// );
+///
 /// assert(communication.resources_released);
 /// ```
 final class _Communication implements Communication {
   /// Creates the default communication implementation.
   ///
-  /// [transport] optionally replaces native transport selection.
+  /// [transport] supplies configured authenticated connectivity.
+  ///
   /// [codecs] and [handlers] supply application registration.
+  ///
   /// [options] defines session execution limits.
   ///
-  /// Absent dependencies are constructed internally.
+  /// Absent messaging registries are constructed internally.
   /// Construction performs no external resource acquisition.
   _Communication({
-    Transport? transport,
+    required Transport transport,
     MessageCodecRegistry? codecs,
     RequestHandlerRegistry? handlers,
     MessageSessionOptions options = const MessageSessionOptions(),
-  }) : _transport = transport ?? const LocalTransport(),
+  }) : _transport = transport,
        _codecs = codecs ?? MessageCodecRegistry(),
        _handlers = handlers ?? RequestHandlerRegistry(),
        _options = options {
@@ -256,19 +245,16 @@ final class _Communication implements Communication {
 
   /// Executes the configured listening communication lifecycle.
   ///
-  /// [scope_directory] identifies the exclusively owned endpoint
-  /// scope. [os_user_id] supplies the trusted authorization identity.
-  ///
   /// [shutdown] supplies the external termination notification.
+  ///
   /// [on_startup] optionally initializes application resources
   /// before accepting connections.
   ///
   /// Returns after confirmed listener and session disposal.
+  ///
   /// Initialization, execution and disposal failures propagate.
   @override
   Future<void> run({
-    required String scope_directory,
-    required String os_user_id,
     required Future<void> shutdown,
     Future<void> Function()? on_startup,
   }) async {
@@ -286,10 +272,7 @@ final class _Communication implements Communication {
       final TransportListener listener;
 
       try {
-        listener = await _transport.listen(
-          scope_directory: scope_directory,
-          os_user_id: os_user_id,
-        );
+        listener = await _transport.listen();
       } catch (_) {
         // Failed transport initialization must release any
         // resources acquired during the unsuccessful attempt.
@@ -319,16 +302,13 @@ final class _Communication implements Communication {
 
   /// Establishes an authenticated client communication session.
   ///
-  /// [scope_directory] identifies the trusted endpoint scope.
-  /// [os_user_id] identifies the expected remote peer identity.
+  /// Returns an executing object-level session using the
+  /// configured transport.
   ///
-  /// Returns an executing object-level session.
-  /// Connection and session initialization failures propagate.
+  /// Connection, authentication and session initialization
+  /// failures propagate.
   @override
-  Future<MessageSession> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<MessageSession> connect() async {
     _claim_lifecycle();
 
     try {
@@ -339,10 +319,7 @@ final class _Communication implements Communication {
       final TransportConnection connection;
 
       try {
-        connection = await _transport.connect(
-          scope_directory: scope_directory,
-          os_user_id: os_user_id,
-        );
+        connection = await _transport.connect();
       } catch (_) {
         // Failed outbound establishment retains no connection
         // resources according to the transport contract.

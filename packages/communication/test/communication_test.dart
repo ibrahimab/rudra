@@ -5,9 +5,6 @@ import 'package:test/test.dart';
 
 /// Verifies communication construction, substitution and resource ownership.
 void main() {
-  const scope = '/test-scope';
-  const owner = 'test-owner';
-
   /// Executes one communication lifecycle without incoming connections.
   ///
   /// [communication] supplies the subsystem under test.
@@ -17,20 +14,19 @@ void main() {
   Future<void> run_once(
     Communication communication, {
     Future<void> Function()? on_startup,
-  }) => communication.run(
-    scope_directory: scope,
-    os_user_id: owner,
-    shutdown: Future<void>.value(),
-    on_startup: on_startup,
-  );
+  }) =>
+      communication.run(shutdown: Future<void>.value(), on_startup: on_startup);
 
-  test('default construction acquires no communication resources', () {
-    final communication = Communication();
+  test('construction acquires no communication resources', () {
+    final transport = _TestTransport();
 
+    final communication = Communication(transport: transport);
+
+    expect(transport.listen_count, 0);
     expect(communication.resources_released, isTrue);
   });
 
-  test('substituted transport is initialized only during execution', () async {
+  test('configured transport initializes only during execution', () async {
     final transport = _TestTransport();
 
     final communication = Communication(transport: transport);
@@ -42,8 +38,6 @@ void main() {
       communication,
       on_startup: () async {
         expect(transport.listen_count, 1);
-        expect(transport.scope_directory, scope);
-        expect(transport.os_user_id, owner);
         expect(communication.resources_released, isFalse);
       },
     );
@@ -121,8 +115,8 @@ void main() {
 
 /// Provides a controlled transport for communication lifecycle tests.
 ///
-/// Records initialization configuration and supports controlled binding
-/// and listener disposal failures without acquiring native resources.
+/// Supports controlled binding and listener disposal failures
+/// without acquiring native resources.
 ///
 /// Example:
 /// ```dart
@@ -146,28 +140,13 @@ final class _TestTransport implements Transport {
   /// Number of attempted transport initializations.
   int listen_count = 0;
 
-  /// Communication scope received during initialization.
-  String? scope_directory;
-
-  /// Trusted owner received during initialization.
-  String? os_user_id;
-
-  /// Records initialization of the supplied communication scope.
-  ///
-  /// [scope_directory] identifies the requested communication scope.
-  /// [os_user_id] identifies the authorized peer owner.
+  /// Establishes the controlled listening endpoint.
   ///
   /// Returns the controlled listener or throws [StateError]
   /// when initialization failure has been configured.
   @override
-  Future<TransportListener> listen({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportListener> listen() async {
     listen_count++;
-
-    this.scope_directory = scope_directory;
-    this.os_user_id = os_user_id;
 
     if (fail_binding) {
       throw StateError('Controlled transport initialization failure.');
@@ -178,16 +157,10 @@ final class _TestTransport implements Transport {
 
   /// Rejects outbound connection establishment for this fixture.
   ///
-  /// [scope_directory] and [os_user_id] identify the requested
-  /// connection configuration.
-  ///
   /// Throws [UnsupportedError] because this fixture exclusively
   /// exercises listener lifecycle ownership.
   @override
-  Future<TransportConnection> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportConnection> connect() async {
     throw UnsupportedError('Outbound connectivity is outside this fixture.');
   }
 }

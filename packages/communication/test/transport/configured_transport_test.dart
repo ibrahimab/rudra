@@ -5,11 +5,12 @@ import 'package:test/test.dart';
 
 import '../support/macos_test_identity.dart';
 
-/// Verifies default native transport selection through the public API.
+/// Verifies explicitly configured native listener execution
+/// through the public communication API.
 void main() {
-  test('default communication establishes a macOS Unix endpoint', () async {
+  test('configured communication establishes a macOS Unix endpoint', () async {
     final directory = await Directory('/tmp')
-        .createTemp('rudra-local-transport-');
+        .createTemp('rudra-configured-transport-');
 
     addTearDown(() async {
       await directory.delete(recursive: true);
@@ -20,16 +21,22 @@ void main() {
 
     final socket_path = '$scope/${MacOsUnixTransport.socket_filename}';
 
-    final communication = Communication();
+    final transport = MacOsUnixTransport(
+      scope_directory: scope,
+      os_user_id: owner,
+    );
 
+    final communication = Communication(transport: transport);
+
+    // Construction must not acquire native endpoint resources.
     expect(
       await FileSystemEntity.type(socket_path, followLinks: false),
       FileSystemEntityType.notFound,
     );
 
+    expect(communication.resources_released, isTrue);
+
     await communication.run(
-      scope_directory: scope,
-      os_user_id: owner,
       shutdown: Future<void>.value(),
       on_startup: () async {
         expect(
@@ -49,15 +56,16 @@ void main() {
     );
   }, skip: !Platform.isMacOS);
 
-  test('unsupported platforms fail without acquiring resources', () async {
-    final communication = Communication();
+  test('unsupported native execution retains no resources', () async {
+    const transport = MacOsUnixTransport(
+      scope_directory: '/unused',
+      os_user_id: 'test-owner',
+    );
+
+    final communication = Communication(transport: transport);
 
     await expectLater(
-      communication.run(
-        scope_directory: '/unused',
-        os_user_id: 'test-owner',
-        shutdown: Future<void>.value(),
-      ),
+      communication.run(shutdown: Future<void>.value()),
       throwsA(isA<UnsupportedError>()),
     );
 
