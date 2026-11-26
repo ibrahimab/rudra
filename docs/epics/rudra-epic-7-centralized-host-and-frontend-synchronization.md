@@ -1,12 +1,12 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A, 7B and 7C complete; 7D.1 planned
+**Status:** In progress — 7A, 7B, 7C and 7D.1.3B complete; 7D.1.4 planned
 **Created:** 24 November 2026
 **Updated:** 26 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
 **Planning baseline:** `86cb08462467260afee8beba5f90d05be3aab33b`
 **Predecessors:** [Epic 6 — Architectural Realignment](rudra-epic-6-architectural-realignment.md) and [Epic 6C — Observability and Future Trusted Host Direction](rudra-epic-6c-observability-and-trusted-host-direction.md)
-**Architectural authority:** [ADR 0006 — Event-Sourced Workflow and Reactive SDK Architecture](../decisions/0006-event-sourced-workflow-architecture.md) and [ADR 0007 — Hierarchical Ownership and Encapsulated Composition](../decisions/0007-hierarchical-ownership-and-encapsulated-composition.md)
+**Architectural authority:** [ADR 0006 — Event-Sourced Workflow and Reactive SDK Architecture](../decisions/0006-event-sourced-workflow-architecture.md) and [ADR 0007 — Hierarchical Ownership and Encapsulated Composition](../decisions/0007-hierarchical-ownership-and-encapsulated-composition.md) and [ADR 0008 — Machine-Wide Persistence and Transport-Independent Connectivity](../decisions/0008-machine-wide-persistence-and-transport-independent-connectivity.md)
 
 ## 1. Purpose
 
@@ -170,21 +170,50 @@ Installing a host may create *service-related configuration and runtime paths* w
 
 **Flutter is not required for the headless service.** Pure Dart supports the portable SDK runtime and executable; Flutter is a choice for future graphical clients.
 
-### 2.5 One host owns the application runtime and persistence
+### 2.5 Machine-wide persistence and per-user host ownership
 
-For a given authenticated OS user and Rudra persistence scope, one host process shall own:
+Rudra maintains one authoritative application data directory
+and SQLite database per machine.
 
-- The composed `WorkflowRuntime` and `WorkflowApplication`.
-- SDK command processing (`EventManager`, `WorkflowProcessor`, `WorkflowStateMachine`) through their existing contracts.
-- The SQLite/Drift persistence adapter, database connection lifetime, transactional committer, journal, inbox, projections and submission resolution.
-- The existing post-commit `WorkflowCommitPublisher.publish()` and `WorkflowCommitSubscriber.watch()` context.
-- SDK state restoration/observation and client subscription fan-out.
+Each trusted operating-system user may run at most one
+Rudra host instance.
 
-**The host is the sole intended writer for official Rudra frontend operations.** Production CLI/Explorer clients shall not open workflow SQLite connections, instantiate their own workflow processors or persist workflow outcomes directly after cutover. No direct-SQLite fallback is permitted when the host is unavailable.
+Each host owns:
 
-Host ownership is not a replacement for transactional safety. SQLite constraints, compare-and-set validation, workflow identity/version checks, durable idempotency and ownership invariants remain authoritative even when a single host coordinates requests.
+- Its composed WorkflowRuntime and WorkflowApplication.
+- SDK command processing through existing application contracts.
+- Its SQLite/Drift persistence context and connection lifecycle.
+- Its owner-scoped durable submission and workflow operations.
+- Its post-commit notification and state observation context.
+- Its connected frontend sessions and subscription resources.
 
-One host-owned persistence context is the architectural target; implementation must confirm actual Drift/SQLite connection behavior rather than claiming physical single-connection guarantees without verification. The persistence adapter stays in `packages/persistence/sqlite`, not in a new duplicate platform persistence layer.
+Independent hosts access the same authoritative database.
+
+Workflow history, submission resolution and unfinished-workflow
+ownership remain scoped to trusted operating-system identities.
+
+SQLite transactions, constraints, identity/version validation
+and durable idempotency remain authoritative across independent
+host processes.
+
+Future filesystem reservations operate across all workflow
+owners within the shared persistence domain.
+
+Exclusive host ownership remains independent of persistence
+location and communication endpoint configuration.
+
+Official frontend application operations execute exclusively
+through authenticated host connectivity.
+
+Production frontend processes neither open workflow persistence
+nor instantiate authoritative workflow processors.
+
+No frontend-local execution fallback is permitted.
+
+The persistence adapter remains in packages/persistence/sqlite.
+
+Machine-wide persistence and transport-independent connectivity
+are governed by ADR 0008.
 
 ### 2.6 Frontends remain thin consumers
 
@@ -217,16 +246,25 @@ The host sends **verified application state**, not uncommitted proposals, raw fr
 
 A workflow persists independently of the host process, client connection, terminal or frontend. Starting/stopping the host never implicitly starts/stops a workflow. A host restart reconstructs the current workflow from the authoritative journal.
 
-One host per trusted user/scope is **process and resource ownership**, not a new domain session. The current one-unfinished-workflow-per-user rule continues to be enforced by SDK/persistence, not merely by the host's request queue.
+One host per trusted operating-system user per machine is **process and resource ownership**, not a new domain session. The current one-unfinished-workflow-per-user rule continues to be enforced by SDK/persistence, not merely by the host's request queue.
 
 ### 2.9 Unified authenticated application execution
 
 Rudra has one frontend application execution model: authenticated
 execution through RudraHost.
 
-RudraSdk remains the single public application facade. Its application
-services share one mandatory, SDK-owned ClientConnection. Trusted
-connection configuration is supplied by application composition.
+RudraSdk remains the single public application facade.
+
+Its application services share one mandatory, SDK-owned
+ClientConnection.
+
+Connectivity is selected during explicit connection establishment.
+
+Communication owns default native transport selection and
+execution of explicitly configured transports.
+
+Application services remain independent of transport selection
+and native endpoint configuration.
 
 SDK construction remains side-effect-free. Connection establishment,
 replacement and closure remain explicit lifecycle operations.
@@ -276,33 +314,47 @@ guidance in ADR 0004 and ADR 0005.
 ## 3. Target topology
 
 ```text
-Terminal A: ./rudra explore    Terminal B: ./rudra workflow start|stop
-            |                             |
-            +-----------+-----------------+
-                        |
-              Application client API
-                        |
-          Authenticated local transport
-             (native host adapter)
-                        |
-             Rudra SDK host runtime
-        (packages/sdk/lib/src/host)
-                        |
-               WorkflowApplication
-              /               \
-       SDK processing      SDK observation
-              |               ^
-       WorkflowCommitter      | watch()
-              |               |
-      SQLite/Drift journal -- publish()
+User A
+    CLI / Explorer / Desktop
+                |
+        RudraSdk.connect()
+                |
+        Selected transport
+                |
+    Rudra Host A — Communication
+                |
+        WorkflowApplication
+        FilesystemApplication
+                |
+      Persistence context A
+                |
+                +-------------------------+
+                                          |
+                                 Machine-wide SQLite
+                                          |
+                +-------------------------+
+                |
+      Persistence context B
+                |
+        WorkflowApplication
+        FilesystemApplication
+                |
+    Rudra Host B — Communication
+                |
+        Selected transport
+                |
+        RudraSdk.connect()
+                |
+    CLI / Explorer / Desktop
+User B
 
-apps/host: detect OS, register and compose native adapters
-    → SDK host runtime: run with one application/persistence owner
-    → platform plugins: optional capabilities, explicitly activated
-    → install contributions: explicit setup/removal, never run implicitly
+Each host retains exclusive per-user instance ownership.
 
-Future desktop/mobile/web frontends use the same application-facing
-semantics through appropriate authenticated transport adapters.
+Communication internally owns transport registration,
+endpoint activation and authenticated session execution.
+
+Future machine-wide filesystem reservations coordinate
+conflicting operations through shared persistence.
 ```
 
 The host is a **new headless Dart application in the existing monorepo**. Do not put native service-management implementations inside the SDK or a second workflow engine inside the host. Any shared transport/client package must be justified by actual dependencies, not pre-created from a speculative diagram.
@@ -314,7 +366,10 @@ The host is a **new headless Dart application in the existing monorepo**. Do not
 - A portable SDK host feature with necessary platform capability contracts and a small validated registration mechanism.
 - `apps/host` as the composition root, selecting the native implementations supplied by `packages/host/<platform>`.
 - One macOS adapter-backed per-user host and one configured local persistence scope as the first verified implementation.
-- One deliberately managed host listener, initially runnable explicitly for development.
+- Internally registered communication transports, initially
+  using one enabled native Unix-domain socket listener.
+- Default local client connectivity and explicit transport
+  endpoint configuration.
 - Explicit optional platform plugins and distinct install-step contributions, introduced only when needed by their slices.
 - Local IPC for multiple CLI processes (Unix-domain socket is a leading design; verify support and security on each target platform before coding).
 - Authenticated/trusted local owner resolution and socket/path permission controls.
@@ -322,7 +377,10 @@ The host is a **new headless Dart application in the existing monorepo**. Do not
 - Shared host-side SDK processing/persistence and post-commit state distribution.
 - Integration of existing CLI workflow commands and Explorer action/display paths.
 - Safe initial subscription, disconnect, cancellation, reconnection/re-synchronization and host shutdown behavior.
-- Explicit macOS-managed activation/lifecycle integration, planned and installed through separate SDK-defined installation contributions after the runnable host works (per-user `launchd` agent is the initial direction; verify mechanics before implementation).
+- One authoritative machine-wide SQLite database, shared by
+  independently owned per-user host persistence contexts.
+- Exclusive host ownership per operating-system user,
+  independent of storage and communication configuration.
 
 ### Deferred
 
@@ -334,6 +392,11 @@ The host is a **new headless Dart application in the existing monorepo**. Do not
 - Durable cross-restart stream cursors or a full historical event-feed API; journal restoration remains authoritative.
 - Multiple database backends or clustered/replicated hosts.
 - Unrestricted arbitrary event submission from untrusted clients.
+- Additional network transport implementations and
+  composable authentication mechanisms.
+- Machine-wide filesystem reservation implementation.
+- Database tamper detection and stronger protection against
+  deliberate external persistence modification.
 
 **Offline behavior:** Until an explicit offline-capable contract is designed, a client unable to reach the host reports the host as unavailable. It shall not silently open SQLite or invent a verified `Workflow: NONE` state.
 
@@ -377,12 +440,37 @@ Portable framing and application-facing semantics belong above native transport 
 
 ### 5.5 Trust and process exclusivity
 
-Trusted identity comes from the host's OS context and authenticated local transport, **not** a client-supplied `os_user_id`. Validate IPC peer identity where supported and secure socket/database directories. Do not expose the local service on a network interface by default.
+Trusted application ownership originates from the native
+operating-system context and authenticated communication.
 
-Use an explicit single-owner strategy for host startup and database access. Multiple competing host instances must fail closed or resolve to the same authorized owner; do not assume a socket filename alone solves races. Official clients must use host transport after migration, including workflow commands and Explorer.
+Frontend-supplied identity values are not authoritative.
 
-An unrelated process deliberately opening the same database under the same OS account is outside the cooperative single-writer guarantee unless stronger OS isolation is introduced; preserve SQLite safety validation regardless.
+At most one host instance may execute per operating-system
+user on a machine.
 
+Host ownership must be acquired independently of persistence
+location and communication endpoint configuration.
+
+Different operating-system users may run independent hosts
+against the same authoritative machine-wide database.
+
+Concurrent database initialization, schema compatibility
+and transaction contention must be handled safely.
+
+Owner-scoped application operations and existing persistence
+integrity validation remain mandatory.
+
+Native runtime directories and communication endpoints
+retain appropriate user-scoped protection.
+
+Local connectivity is enabled by default. Network listeners
+require explicit configuration when implemented.
+
+Deliberate external database modification remains outside
+the initial cooperative execution threat model.
+
+Official frontend application operations execute exclusively
+through authenticated host connectivity.
 ### 5.6 Read-only and destructive-operation safety
 
 Connecting, observing, rendering, navigating, quitting, cancelling and reading verified absence must not create an absent database or submit/process commands. Only explicit authorized Start may initialize workflow storage as currently designed. No filesystem cleanup occurs from host startup or subscription notifications. Existing append-only journal, quarantine, outbox, revalidation and execution-gatekeeper requirements from ADR 0006 remain intact.
@@ -1006,30 +1094,133 @@ peer identity against trusted application ownership.
 Session-bound application requests cannot migrate to replacement
 communication sessions.
 
+#### Architectural revision
+
+7D.1.3A, 7D.1.3B.1 and 7D.1.3B.2 established authoritative
+filesystem execution and encapsulated transport configuration.
+
+Subsequent architectural review established machine-wide
+persistence, independent per-user host ownership and internal
+Communication transport registration under ADR 0008.
+
+The mandatory ClientConnectionSetup, HostTransportFactory
+and concrete transport injection requirements represent
+completed intermediate architecture rather than the final
+production connectivity contract.
+
+The previously proposed 7D.1.3C frontend cutover is superseded.
+
+Production frontend migration proceeds after 7D.1.4.
+
 **Gate:** Independent SDK consumers execute filesystem and workflow
 operations through one authoritative host. Unavailable communication
 never activates frontend-local execution.
 
+#### 7D.1.4 — Machine-wide persistence and communication realignment
+
+**Goal:** Establish the ownership and connectivity boundaries defined in ADR 0008 before completing the production frontend cutover.
+
+##### 7D.1.4A — Machine-wide persistence and exclusive host ownership
+
+Establish one authoritative machine-wide persistence domain while retaining independent user-owned host execution.
+
+Implementation proceeds through the following increments:
+
+###### 7D.1.4A.1 — Native resource configuration and host ownership
+
+- Establish platform-defined machine-wide application storage.
+- Establish protected per-user native runtime resources.
+- Make HostOwnershipProvider responsible for per-user instance ownership independently of persistence configuration.
+- Remove persistence-directory-based host ownership contracts.
+- Preserve native kernel-managed ownership and automatic release upon process termination.
+- Reject competing host instances before acquiring application or communication resources.
+- Remove production persistence directory overrides.
+- Retain isolated resource configuration through test composition.
+- Verify unavailable, invalid and insufficiently provisioned native resource behavior.
+
+###### 7D.1.4A.2 — Shared SQLite persistence
+
+- Configure every production host to use the same authoritative SQLite database.
+- Preserve independently owned persistence connection lifecycles.
+- Preserve trusted owner-scoped submission namespaces, history restoration and workflow processing.
+- Audit existing inbox, rejection, quarantine, history, projection and submission resolution queries for cross-owner isolation.
+- Verify safe concurrent database initialization and schema compatibility.
+- Verify SQLite transaction contention and multi-process execution.
+- Establish the shared database and auxiliary-file permission requirements.
+- Preserve non-initializing read behavior and durable workflow outcomes.
+- Retain existing per-host post-commit notification ownership.
+- Reserve the shared transactional persistence domain for future machine-wide filesystem reservations.
+
+**Gate:** Different trusted operating-system users can execute independent host lifecycles against the same database without violating workflow ownership, submission isolation or persistence integrity. Competing host instances belonging to the same user are rejected.
+
+##### 7D.1.4B — Internal communication transport architecture
+
+- Make Communication responsible for internal transport registration and default selection.
+- Establish deterministic activation and disposal of enabled listening transports.
+- Preserve explicit transport selection for client connections.
+- Encapsulate native endpoint defaults within concrete transport implementations.
+- Support explicit socket endpoint overrides.
+- Keep socket endpoint configuration independent of exclusive host ownership and application persistence.
+- Remove concrete transport selection from RudraHost and host application composition.
+- Remove HostTransportFactory.
+- Preserve transport substitution through appropriate testing contracts.
+- Retain existing native peer credential verification and application authorization.
+- Preserve framing, typed messaging, bounded sessions and admitted-handler draining.
+- Implement only native Unix-domain socket connectivity on macOS.
+
+Additional transports and composable authentication mechanisms remain deferred.
+
+**Gate:** Communication establishes default and explicitly configured authenticated connectivity through the same session infrastructure. Host execution remains independent of concrete transport implementations and endpoint configuration.
+
+##### 7D.1.4C — SDK connection API simplification
+
+- Remove mandatory ClientConnectionSetup.
+- Configure connectivity during explicit connection establishment.
+- Delegate default transport selection and explicit transport execution to Communication.
+- Preserve one non-nullable SDK-owned ClientConnection.
+- Preserve stable filesystem, workflow and state observation services.
+- Preserve target validation and authoritative application operation contracts.
+- Preserve connection admission, replacement and confirmed resource disposal.
+- Preserve session-bound multi-request filesystem execution.
+- Preserve explicit unavailable-connection behavior.
+- Prevent implicit application operation retries.
+
+The public SDK connection contract supports default native connectivity and explicitly selected configured transports.
+
+The precise public API is established against the implemented Communication contract.
+
+**Gate:** Independent SDK consumers establish authenticated connections without knowing the host persistence location, native endpoint conventions or trusted native identity resolution mechanics.
+
+##### Coordinated migration boundary
+
+Rudra remains pre-release.
+
+Superseded contracts are replaced directly without temporary compatibility constructors, delegation layers or duplicate execution architectures.
+
+Intermediate source incompatibilities are permitted during the coordinated implementation.
+
+Affected tests are migrated to the final contracts within their respective increments.
+
+Full workspace verification is required after production frontend cutover.
+
 #### 7D.2 — Production frontend cutover completion
 
-- Complete trusted host connectivity configuration at the CLI
-  composition boundary.
+- Establish default authenticated connectivity through the
+  public RudraSdk connection API.
+- Keep native endpoint resolution, transport selection and
+  trusted peer identity mechanics encapsulated.
 - Ensure filesystem commands, workflow commands, Welcome and Explorer
   consume the connected RudraSdk application facade.
 - Route workflow Start and Stop through the same SDK application
   operations regardless of frontend entry point.
-- Explicitly establish the production host endpoint and persistence
-  scope before cutover.
+- Consume the machine-wide persistence and per-user host
+  architecture established in 7D.1.4.
 - Remove remaining frontend-local persistence composition, native
   target inspection composition and obsolete dependencies.
 - Verify application connection ownership, unavailable-host behavior
   and resource disposal across command execution.
 - Preserve non-operational CLI commands without requiring unnecessary
   host connectivity.
-
-Necessary composition changes may be completed during 7D.1.3.
-This increment may be closed through verification when its remaining
-requirements have already been satisfied.
 
 **Gate:** Official production frontend application operations execute
 through the configured authenticated host, and frontend processes
