@@ -1,4 +1,5 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
 /// Verifies mandatory SDK connection composition and lifecycle.
@@ -11,13 +12,17 @@ void main() {
       connection_setup: () {
         resolutions++;
 
-        return (scope_directory: '/unused-scope', os_user_id: 'trusted-owner');
-      },
-      communication_factory: ({required codecs, required handlers}) {
-        throw StateError(
-          'Communication must not be constructed during initialization.',
+        return const MacOsUnixTransport(
+          scope_directory: '/unused-scope',
+          os_user_id: 'trusted-owner',
         );
       },
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            throw StateError(
+              'Communication must not be constructed during initialization.',
+            );
+          },
     );
 
     addTearDown(sdk.close);

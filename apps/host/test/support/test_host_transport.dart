@@ -10,12 +10,7 @@ import 'package:rudra_communication/rudra_communication.dart';
 /// Example:
 /// ```dart
 /// final transport = TestHostTransport();
-///
-/// final listener = await transport.listen(
-///   scope_directory: '/fixture',
-///   os_user_id: 'test-owner',
-/// );
-///
+/// final listener = await transport.listen();
 /// await listener.close();
 /// ```
 final class TestHostTransport implements Transport {
@@ -35,17 +30,11 @@ final class TestHostTransport implements Transport {
   /// Number of successfully disposed test listeners.
   int close_count = 0;
 
-  /// Creates a controlled listener for the supplied scope.
-  ///
-  /// [scope_directory] and [os_user_id] represent the trusted
-  /// configuration supplied by host composition.
+  /// Creates a controlled listening endpoint.
   ///
   /// Returns an idle listener with no incoming connections.
   @override
-  Future<TransportListener> listen({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportListener> listen() async {
     listen_count++;
 
     return _TestTransportListener(() {
@@ -59,16 +48,10 @@ final class TestHostTransport implements Transport {
 
   /// Rejects outbound connection establishment for this fixture.
   ///
-  /// [scope_directory] and [os_user_id] identify the requested
-  /// connection configuration.
-  ///
   /// Throws [UnsupportedError] because host composition tests
   /// exercise listener and exclusive ownership lifecycles.
   @override
-  Future<TransportConnection> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportConnection> connect() async {
     throw UnsupportedError('Outbound connectivity is outside this fixture.');
   }
 }

@@ -24,7 +24,7 @@ void main() {
 
     final scope = await directory.resolveSymbolicLinks();
 
-    final transport = LoopbackHostTransport();
+    final transport = LoopbackHostTransport(os_user_id: owner);
     final ownership = TestHostOwnershipProvider();
 
     final composition = HostComposition(
@@ -33,14 +33,21 @@ void main() {
       data_directory: directory,
       target_id: 'local-macos',
       inspector: const UnusedTargetInspector(),
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-          options: const MessageSessionOptions(request_timeout: timeout),
-        );
+      transport_factory: ({required scope_directory, required os_user_id}) {
+        expect(scope_directory, scope);
+        expect(os_user_id, owner);
+
+        return transport;
       },
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+              options: const MessageSessionOptions(request_timeout: timeout),
+            );
+          },
     );
 
     final shutdown = Completer<void>();
@@ -86,21 +93,20 @@ void main() {
     RudraSdk create_sdk(List<Communication> connections) {
       final sdk = RudraSdk(
         target_id: 'local-macos',
-        connection_setup: () {
-          return (scope_directory: scope, os_user_id: owner);
-        },
-        communication_factory: ({required codecs, required handlers}) {
-          final communication = Communication(
-            transport: transport,
-            codecs: codecs,
-            handlers: handlers,
-            options: const MessageSessionOptions(request_timeout: timeout),
-          );
+        connection_setup: () => transport,
+        communication_factory:
+            ({required transport, required codecs, required handlers}) {
+              final communication = Communication(
+                transport: transport,
+                codecs: codecs,
+                handlers: handlers,
+                options: const MessageSessionOptions(request_timeout: timeout),
+              );
 
-          connections.add(communication);
+              connections.add(communication);
 
-          return communication;
-        },
+              return communication;
+            },
       );
 
       addTearDown(() => sdk.close().timeout(timeout));

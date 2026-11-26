@@ -300,11 +300,7 @@ void main() {
 /// Owns an independently configured host integration environment.
 final class _HostFixture {
   /// Creates a fixture retaining its configured host resources.
-  _HostFixture({
-    required this.composition,
-    required this.transport,
-    required this.scope,
-  });
+  _HostFixture({required this.composition, required this.transport});
 
   /// Maximum duration of controlled lifecycle operations.
   static const Duration timeout = Duration(seconds: 15);
@@ -320,9 +316,6 @@ final class _HostFixture {
 
   /// Controlled authenticated host communication transport.
   final LoopbackHostTransport transport;
-
-  /// Canonical communication scope.
-  final String scope;
 
   /// Starts a host using the supplied filesystem [inspector].
   ///
@@ -344,6 +337,7 @@ final class _HostFixture {
     final scope = await directory.resolveSymbolicLinks();
 
     final transport = LoopbackHostTransport(
+      os_user_id: owner,
       server_peer_override: server_peer_override,
     );
 
@@ -355,14 +349,21 @@ final class _HostFixture {
       data_directory: directory,
       target_id: target_id,
       inspector: inspector,
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-          options: const MessageSessionOptions(request_timeout: timeout),
-        );
+      transport_factory: ({required scope_directory, required os_user_id}) {
+        expect(scope_directory, scope);
+        expect(os_user_id, owner);
+
+        return transport;
       },
+      communication_factory:
+          ({required codecs, required handlers, required transport}) {
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+              options: const MessageSessionOptions(request_timeout: timeout),
+            );
+          },
     );
 
     final shutdown = Completer<void>();
@@ -397,11 +398,7 @@ final class _HostFixture {
       }),
     ]).timeout(timeout);
 
-    return _HostFixture(
-      composition: composition,
-      transport: transport,
-      scope: scope,
-    );
+    return _HostFixture(composition: composition, transport: transport);
   }
 
   /// Establishes an independently owned authenticated SDK connection.
@@ -412,17 +409,16 @@ final class _HostFixture {
   Future<RudraSdk> connect({String target_id = _HostFixture.target_id}) async {
     final sdk = RudraSdk(
       target_id: target_id,
-      connection_setup: () {
-        return (scope_directory: scope, os_user_id: owner);
-      },
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-          options: const MessageSessionOptions(request_timeout: timeout),
-        );
-      },
+      connection_setup: () => transport,
+      communication_factory:
+          ({required codecs, required handlers, required transport}) {
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+              options: const MessageSessionOptions(request_timeout: timeout),
+            );
+          },
     );
 
     addTearDown(() => sdk.close().timeout(timeout));

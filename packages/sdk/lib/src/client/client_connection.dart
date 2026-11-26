@@ -10,22 +10,26 @@ import 'contracts/client_connection_setup.dart';
 
 /// Constructs an independent communication subsystem.
 ///
+/// [transport] supplies the resolved authenticated connectivity.
+///
 /// [codecs] and [handlers] contain validated application messaging
 /// configuration supplied by the SDK.
 ///
-/// Returns an unused Communication instance whose execution and
-/// disposal lifecycle transfers to the client connection owner.
+/// Returns an unused Communication instance retaining the supplied
+/// transport and registries. Its execution and disposal lifecycle
+/// transfers to the client connection owner.
 ///
 /// The factory must not establish connections or execute handlers.
 typedef ClientCommunicationFactory = Communication Function({
+  required Transport transport,
   required MessageCodecRegistry codecs,
   required RequestHandlerRegistry handlers,
 });
 
 /// Owns successive authenticated SDK communication lifecycles.
 ///
-/// Each connection attempt resolves trusted endpoint configuration
-/// and constructs an independent Communication instance.
+/// Each connection attempt resolves a configured authenticated
+/// transport and constructs an independent Communication instance.
 ///
 /// Connection replacement requires confirmed disposal of previously
 /// owned communication resources.
@@ -50,7 +54,8 @@ typedef ClientCommunicationFactory = Communication Function({
 final class ClientConnection {
   /// Creates an inactive connection lifecycle owner.
   ///
-  /// [setup] resolves trusted configuration for each connection attempt.
+  /// [setup] resolves a configured authenticated transport for
+  /// each connection attempt.
   /// [runtime] supplies the immutable application serialization configuration.
   /// [communication_factory] optionally replaces default Communication
   /// construction while preserving SDK-owned messaging configuration.
@@ -85,7 +90,7 @@ final class ClientConnection {
          modules: standard_messaging_modules(workflow_runtime: runtime),
        );
 
-  /// Trusted endpoint and peer identity resolution capability.
+  /// Trusted configured transport resolution capability.
   final ClientConnectionSetup _setup;
 
   /// Optional substitution for default communication construction.
@@ -149,7 +154,7 @@ final class ClientConnection {
 
   /// Replaces the current communication lifecycle.
   ///
-  /// Resolves trusted configuration again after the previous
+  /// Resolves a configured transport again after the previous
   /// connection's resources have been released.
   ///
   /// Returns after establishing an independent authenticated session.
@@ -244,18 +249,17 @@ final class ClientConnection {
 
   /// Establishes a new connection after releasing previous resources.
   ///
-  /// Resolves and validates trusted configuration before constructing
-  /// Communication, then transfers the resulting lifecycle into
-  /// [_owned] before beginning session establishment.
+  /// Resolves a configured transport before constructing Communication.
   ///
-  /// Failed establishment drains any acquired resources before
+  /// Transfers the resulting lifecycle into [_owned] before beginning
+  /// authenticated session establishment.
+  ///
+  /// Failed establishment drains acquired resources before
   /// propagating the failure.
   Future<void> _open_connection() async {
     await _release_connection();
 
-    final configuration = await _setup();
-
-    _validate_configuration(configuration);
+    final transport = await _setup();
 
     final handlers = RequestHandlerRegistry();
 
@@ -266,27 +270,21 @@ final class ClientConnection {
     final factory = _communication_factory;
 
     final communication = factory == null
-        ? Communication(codecs: _codecs, handlers: handlers)
-        : factory(codecs: _codecs, handlers: handlers);
+        ? Communication(
+            transport: transport,
+            codecs: _codecs,
+            handlers: handlers,
+          )
+        : factory(transport: transport, codecs: _codecs, handlers: handlers);
 
     final owned = _OwnedConnection(communication: communication);
 
     _owned = owned;
 
     try {
-      final session = await communication.connect(
-        scope_directory: configuration.scope_directory,
-        os_user_id: configuration.os_user_id,
-      );
+      final session = await communication.connect();
 
-      // Retain the session before validating its authenticated
-      // identity so unsuccessful validation can still dispose of it.
       owned.session = session;
-
-      if (session.os_user_id != configuration.os_user_id) {
-        throw StateError('Unexpected authenticated host identity.');
-      }
-
       owned.available = true;
 
       // Session termination invalidates request admission independently
@@ -305,25 +303,6 @@ final class ClientConnection {
       await _release_connection();
 
       rethrow;
-    }
-  }
-
-  /// Validates trusted [configuration] before acquiring resources.
-  ///
-  /// Throws [ArgumentError] for a blank endpoint or expected peer
-  /// identity. Values retain their original spelling.
-  static void _validate_configuration(
-    ClientConnectionConfiguration configuration,
-  ) {
-    if (configuration.scope_directory.trim().isEmpty) {
-      throw ArgumentError.value(
-        configuration.scope_directory,
-        'scope_directory',
-      );
-    }
-
-    if (configuration.os_user_id.trim().isEmpty) {
-      throw ArgumentError.value(configuration.os_user_id, 'os_user_id');
     }
   }
 

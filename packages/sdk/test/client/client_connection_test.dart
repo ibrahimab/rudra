@@ -12,45 +12,50 @@ import 'package:test/test.dart';
 void main() {
   late ClientConnection connection;
   late List<_TestCommunication> created;
-  late ClientConnectionConfiguration configuration;
+  late _TestTransport configured_transport;
 
   late int resolution_count;
 
+  Object? next_resolution_error;
   Object? next_connection_error;
-  String? next_peer_override;
 
   setUp(() {
     created = [];
     resolution_count = 0;
 
-    configuration = (
-      scope_directory: '/first-scope',
-      os_user_id: 'trusted-owner',
-    );
+    configured_transport = const _TestTransport(os_user_id: 'trusted-owner');
 
+    next_resolution_error = null;
     next_connection_error = null;
-    next_peer_override = null;
 
     connection = ClientConnection(
       setup: () {
         resolution_count++;
 
-        return configuration;
+        final error = next_resolution_error;
+
+        if (error != null) {
+          throw error;
+        }
+
+        return configured_transport;
       },
       runtime: WorkflowRuntime.standard(),
-      communication_factory: ({required codecs, required handlers}) {
-        expect(codecs.is_frozen, isTrue);
-        expect(handlers.is_frozen, isTrue);
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            expect(codecs.is_frozen, isTrue);
+            expect(handlers.is_frozen, isTrue);
+            expect(transport, same(configured_transport));
 
-        final communication = _TestCommunication(
-          os_user_id: next_peer_override ?? configuration.os_user_id,
-          connection_error: next_connection_error,
-        );
+            final communication = _TestCommunication(
+              transport: transport as _TestTransport,
+              connection_error: next_connection_error,
+            );
 
-        created.add(communication);
+            created.add(communication);
 
-        return communication;
-      },
+            return communication;
+          },
     );
   });
 
@@ -70,7 +75,7 @@ void main() {
     expect(connection.resources_released, isTrue);
   });
 
-  test('establishes a connection using trusted configuration', () async {
+  test('establishes a connection using the resolved transport', () async {
     await connection.connect();
 
     expect(resolution_count, 1);
@@ -78,7 +83,8 @@ void main() {
 
     final communication = created.single;
 
-    expect(communication.configuration, configuration);
+    expect(communication.transport, same(configured_transport));
+    expect(communication.session.os_user_id, configured_transport.os_user_id);
     expect(connection.is_connected, isTrue);
     expect(connection.resources_released, isFalse);
 
@@ -89,29 +95,37 @@ void main() {
   });
 
   test(
-    'rejects invalid configuration before constructing communication',
+    'failed transport resolution acquires no communication resources',
     () async {
-      configuration = (scope_directory: ' ', os_user_id: 'trusted-owner');
+      final failure = StateError('Configured transport could not be resolved.');
 
-      await expectLater(connection.connect(), throwsArgumentError);
+      next_resolution_error = failure;
 
-      configuration = (scope_directory: '/first-scope', os_user_id: ' ');
+      await expectLater(connection.connect(), throwsA(same(failure)));
 
-      await expectLater(connection.connect(), throwsArgumentError);
-
+      expect(resolution_count, 1);
       expect(created, isEmpty);
       expect(connection.is_connected, isFalse);
       expect(connection.resources_released, isTrue);
+
+      next_resolution_error = null;
+
+      await connection.connect();
+
+      expect(resolution_count, 2);
+      expect(created, hasLength(1));
+      expect(created.single.transport, same(configured_transport));
+      expect(connection.is_connected, isTrue);
     },
   );
 
-  test('resolves configuration again when replacing a connection', () async {
+  test('resolves a configured transport again during replacement', () async {
     await connection.connect();
 
     final previous = created.single;
+    final original_transport = configured_transport;
 
-    configuration = (
-      scope_directory: '/replacement-scope',
+    configured_transport = const _TestTransport(
       os_user_id: 'replacement-owner',
     );
 
@@ -123,8 +137,15 @@ void main() {
     expect(previous.session.is_closed, isTrue);
     expect(previous.resources_released, isTrue);
 
-    expect(created.last.configuration, configuration);
+    expect(previous.transport, same(original_transport));
+    expect(created.last.transport, same(configured_transport));
+
+    expect(created.last.transport, isNot(same(original_transport)));
+
     expect(created.last.session, isNot(same(previous.session)));
+
+    expect(created.last.session.os_user_id, 'replacement-owner');
+
     expect(connection.is_connected, isTrue);
   });
 
@@ -189,15 +210,24 @@ void main() {
   });
 
   test(
-    'rejects a session reporting unexpected authenticated identity',
+    'authentication failure prevents application request admission',
     () async {
-      next_peer_override = 'unexpected-owner';
+      final failure = StateError('Transport peer authentication failed.');
 
-      await expectLater(connection.connect(), throwsStateError);
+      next_connection_error = failure;
 
-      expect(created.single.session.is_closed, isTrue);
+      await expectLater(connection.connect(), throwsA(same(failure)));
+
+      expect(created, hasLength(1));
       expect(connection.resources_released, isTrue);
       expect(connection.is_connected, isFalse);
+
+      await expectLater(
+        connection.request(const StateReadRequest()),
+        throwsStateError,
+      );
+
+      expect(created.single.session.request_count, 0);
     },
   );
 
@@ -278,6 +308,34 @@ void main() {
     expect(created.single.session.request_count, 1);
   });
 
+  test('session-bound requests cannot execute through a replacement', () async {
+    await connection.connect();
+
+    final original = connection.require_session();
+
+    await connection.reconnect();
+
+    final replacement = connection.require_session();
+
+    expect(replacement, isNot(same(original)));
+
+    await expectLater(
+      connection.request(const StateReadRequest(), session: original),
+      throwsStateError,
+    );
+
+    expect(created.first.session.request_count, 0);
+    expect(created.last.session.request_count, 0);
+
+    final response = await connection.request(
+      const StateReadRequest(),
+      session: replacement,
+    );
+
+    expect(response.state.workflows.current_workflow, isNull);
+    expect(created.last.session.request_count, 1);
+  });
+
   test(
     'does not implicitly repeat unsuccessful application requests',
     () async {
@@ -331,6 +389,39 @@ void main() {
   );
 }
 
+/// Retains synthetic authenticated connectivity configuration.
+///
+/// Communication lifecycle tests substitute actual endpoint
+/// establishment with controlled message session execution.
+///
+/// Example:
+/// ```dart
+/// const transport = _TestTransport(
+///   os_user_id: 'trusted-owner',
+/// );
+/// ```
+final class _TestTransport implements Transport {
+  /// Creates a configured inactive test transport.
+  ///
+  /// [os_user_id] identifies the synthetic authenticated peer.
+  const _TestTransport({required this.os_user_id});
+
+  /// Trusted synthetic peer identity.
+  final String os_user_id;
+
+  /// Rejects listening endpoint execution in this fixture.
+  @override
+  Future<TransportListener> listen() async {
+    throw UnsupportedError('Unexpected fixture listener establishment.');
+  }
+
+  /// Rejects direct transport execution in this fixture.
+  @override
+  Future<TransportConnection> connect() async {
+    throw UnsupportedError('Unexpected fixture connection establishment.');
+  }
+}
+
 /// Supplies controlled communication completion for lifecycle tests.
 ///
 /// Session termination and admitted-handler draining can complete
@@ -339,7 +430,9 @@ void main() {
 /// Example:
 /// ```dart
 /// final communication = _TestCommunication(
-///   os_user_id: 'trusted-owner',
+///   transport: const _TestTransport(
+///     os_user_id: 'trusted-owner',
+///   ),
 /// );
 ///
 /// final barrier = communication.hold_drain();
@@ -348,21 +441,23 @@ void main() {
 final class _TestCommunication implements Communication {
   /// Creates a controlled communication lifecycle.
   ///
-  /// [os_user_id] supplies authenticated peer identity.
-  /// [connection_error] optionally prevents connection establishment.
-  _TestCommunication({required String os_user_id, this.connection_error})
-    : session = _TestSession(os_user_id) {
+  /// [transport] supplies the retained synthetic authenticated
+  /// connectivity configuration.
+  ///
+  /// [connection_error] optionally prevents session establishment.
+  _TestCommunication({required this.transport, this.connection_error})
+    : session = _TestSession(transport.os_user_id) {
     _completion.future.ignore();
   }
+
+  /// Configured transport retained by this communication lifecycle.
+  final _TestTransport transport;
 
   /// Controlled authenticated message session.
   final _TestSession session;
 
   /// Optional failure during connection establishment.
   final Object? connection_error;
-
-  /// Configuration supplied during connection establishment.
-  ClientConnectionConfiguration? configuration;
 
   /// Whether execution has started.
   bool _started = false;
@@ -396,22 +491,17 @@ final class _TestCommunication implements Communication {
     return _drain_barrier = Completer<void>();
   }
 
-  /// Establishes the controlled session using trusted configuration.
+  /// Establishes the configured controlled session.
   ///
   /// Returns the configured session or propagates [connection_error].
   /// Throws [StateError] for repeated execution.
   @override
-  Future<MessageSession> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<MessageSession> connect() async {
     if (_started) {
       throw StateError('Test communication already executed.');
     }
 
     _started = true;
-
-    configuration = (scope_directory: scope_directory, os_user_id: os_user_id);
 
     final error = connection_error;
 
@@ -436,8 +526,6 @@ final class _TestCommunication implements Communication {
   /// Rejects listening endpoint execution in this client-only fixture.
   @override
   Future<void> run({
-    required String scope_directory,
-    required String os_user_id,
     required Future<void> shutdown,
     Future<void> Function()? on_startup,
   }) async {

@@ -459,6 +459,7 @@ final class _HostFixture {
     );
 
     final transport = LoopbackHostTransport(
+      os_user_id: owner,
       server_peer_override: server_peer_override,
     );
 
@@ -469,21 +470,22 @@ final class _HostFixture {
         target_id: 'local-macos',
         inspector: const UnusedTargetInspector(),
       ),
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-          options: const MessageSessionOptions(request_timeout: timeout),
-        );
-      },
+      transport: transport,
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+              options: const MessageSessionOptions(request_timeout: timeout),
+            );
+          },
     );
 
     final shutdown = Completer<void>();
     final ready = Completer<void>();
 
     final running = host.run(
-      scope_directory: directory.path,
       shutdown: shutdown.future,
       on_ready: (_) {
         ready.complete();
@@ -540,10 +542,7 @@ final class _HostFixture {
       options: const MessageSessionOptions(request_timeout: timeout),
     );
 
-    final session = await communication.connect(
-      scope_directory: directory.path,
-      os_user_id: owner,
-    );
+    final session = await communication.connect();
 
     addTearDown(() async {
       try {

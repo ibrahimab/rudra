@@ -589,7 +589,7 @@ final class _HostFixture {
     _persistence = persistence;
 
     control = ControlledWorkflowPersistence(persistence);
-    transport = LoopbackHostTransport();
+    transport = LoopbackHostTransport(os_user_id: owner);
     _shutdown = Completer<void>();
 
     final ready = Completer<void>();
@@ -613,17 +613,10 @@ final class _HostFixture {
         target_id: target_id,
         inspector: const UnusedTargetInspector(),
       ),
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-        );
-      },
+      transport: transport,
     );
 
     final running = host.run(
-      scope_directory: directory.absolute.path,
       shutdown: _shutdown.future,
       on_startup: (application) async {
         await application.read_state();
@@ -659,10 +652,7 @@ final class _HostFixture {
       options: const MessageSessionOptions(request_timeout: operation_timeout),
     );
 
-    final session = await communication.connect(
-      scope_directory: directory.absolute.path,
-      os_user_id: owner,
-    );
+    final session = await communication.connect();
 
     final client = _Client(communication: communication, session: session);
 

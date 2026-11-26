@@ -40,6 +40,7 @@ void main() {
     final ownership = TestHostOwnershipProvider();
 
     final transport = LoopbackHostTransport(
+      os_user_id: owner,
       server_peer_override: server_peer_override,
     );
 
@@ -52,16 +53,23 @@ void main() {
       data_directory: directory,
       target_id: target_id,
       inspector: const UnusedTargetInspector(),
-      communication_factory: ({required codecs, required handlers}) {
-        expect(codecs.is_frozen, isTrue);
-        expect(handlers.is_frozen, isTrue);
+      transport_factory: ({required scope_directory, required os_user_id}) {
+        expect(scope_directory, scope);
+        expect(os_user_id, owner);
 
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-        );
+        return transport;
       },
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            expect(codecs.is_frozen, isTrue);
+            expect(handlers.is_frozen, isTrue);
+
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+            );
+          },
     );
 
     final running = composition.run(
@@ -103,10 +111,7 @@ void main() {
       options: const MessageSessionOptions(request_timeout: operation_timeout),
     );
 
-    final session = await communication.connect(
-      scope_directory: scope,
-      os_user_id: owner,
-    );
+    final session = await communication.connect();
 
     addTearDown(() async {
       try {

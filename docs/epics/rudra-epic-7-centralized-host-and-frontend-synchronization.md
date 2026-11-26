@@ -978,6 +978,34 @@ defined authentication and authorization policy.
 Existing communication protocol, correlation, session execution
 and resource disposal guarantees remain unchanged.
 
+SDK connection resolution returns a configured authenticated
+Transport for each explicit connection attempt.
+
+ClientConnection retains responsibility for connection admission,
+replacement, invalidation and confirmed resource disposal.
+
+Native endpoint configuration validation and remote peer
+authentication belong to the configured transport implementation.
+
+RudraHost receives configured transport connectivity at construction.
+Host runtime execution remains independent of endpoint configuration.
+
+Host application composition resolves trusted identity and canonical
+application scope, acquires exclusive ownership, and only then
+constructs its configured transport.
+
+Failed transport resolution releases acquired host ownership without
+initializing persistence or acquiring communication resources.
+
+Communication substitution factories receive the configured transport
+alongside validated application messaging registries.
+
+Host-side application authorization continues verifying authenticated
+peer identity against trusted application ownership.
+
+Session-bound application requests cannot migrate to replacement
+communication sessions.
+
 **Gate:** Independent SDK consumers execute filesystem and workflow
 operations through one authoritative host. Unavailable communication
 never activates frontend-local execution.

@@ -42,15 +42,33 @@ final class LoopbackResponseBarrier {
 /// Communication facade, framing, codecs and message sessions.
 ///
 /// Each connection receives independently owned client and server
-/// endpoints.
+/// endpoints within the configured in-memory communication environment.
+///
+/// Example:
+/// ```dart
+/// final transport = LoopbackHostTransport(
+///   os_user_id: 'trusted-owner',
+/// );
+///
+/// final listener = await transport.listen();
+/// final connection = await transport.connect();
+///
+/// await connection.close();
+/// await listener.close();
+/// ```
 final class LoopbackHostTransport implements Transport {
-  /// Creates an inactive loopback transport.
+  /// Creates a configured inactive loopback transport.
+  ///
+  /// [os_user_id] identifies the trusted synthetic peer.
   ///
   /// [server_peer_override] deliberately substitutes the identity
   /// reported to the server. It is used exclusively to verify that
   /// application handlers fail closed when transport authentication
   /// evidence disagrees with trusted application ownership.
-  LoopbackHostTransport({this.server_peer_override});
+  LoopbackHostTransport({required this.os_user_id, this.server_peer_override});
+
+  /// Trusted synthetic operating-system identity.
+  final String os_user_id;
 
   /// Optional deliberately inconsistent server-side peer identity.
   final String? server_peer_override;
@@ -64,28 +82,19 @@ final class LoopbackHostTransport implements Transport {
   /// Current listening endpoint.
   _LoopbackListener? _listener;
 
-  /// Canonical communication scope supplied during listener creation.
-  String? _scope_directory;
-
-  /// Trusted owner authorized by the listening endpoint.
-  String? _owner;
-
-  /// Opens a controlled listener for [scope_directory] and [os_user_id].
+  /// Opens the configured controlled listening endpoint.
+  ///
+  /// Returns an independently owned listener.
   ///
   /// Throws [StateError] when this transport already owns a listener.
   @override
-  Future<TransportListener> listen({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportListener> listen() async {
     if (_listener != null) {
       throw StateError('Loopback transport already owns a listener.');
     }
 
     final listener = _LoopbackListener();
 
-    _scope_directory = scope_directory;
-    _owner = os_user_id;
     _listener = listener;
 
     return listener;
@@ -93,24 +102,15 @@ final class LoopbackHostTransport implements Transport {
 
   /// Creates an independent connection to the configured test listener.
   ///
-  /// [scope_directory] and [os_user_id] must match the trusted
-  /// listener configuration.
-  ///
   /// Returns the client endpoint after delivering its server
   /// counterpart to the listener.
   ///
-  /// Throws [StateError] for unavailable or mismatched configuration.
+  /// Throws [StateError] when no active listener is available.
   @override
-  Future<TransportConnection> connect({
-    required String scope_directory,
-    required String os_user_id,
-  }) async {
+  Future<TransportConnection> connect() async {
     final listener = _listener;
 
-    if (listener == null ||
-        listener.is_closed ||
-        scope_directory != _scope_directory ||
-        os_user_id != _owner) {
+    if (listener == null || listener.is_closed) {
       throw StateError('Loopback connection is unavailable.');
     }
 

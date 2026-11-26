@@ -19,7 +19,7 @@ import 'workflow/workflow_runtime.dart';
 /// host connection owned by this SDK.
 ///
 /// Trusted application composition supplies the selected target
-/// and host connection resolution capability.
+/// and configured host transport resolution capability.
 ///
 /// Construction retains configuration without acquiring external
 /// resources or executing application operations.
@@ -51,7 +51,8 @@ final class RudraSdk {
   ///
   /// [target_id] identifies the selected filesystem environment.
   ///
-  /// [connection_setup] supplies trusted host endpoint resolution.
+  /// [connection_setup] resolves a configured authenticated transport
+  /// for each host connection attempt.
   ///
   /// [workflow_runtime] optionally supplies application messaging
   /// serialization configuration. The standard runtime is selected

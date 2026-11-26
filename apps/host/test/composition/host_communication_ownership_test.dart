@@ -31,12 +31,15 @@ void main() {
 
   /// Constructs a host composition with controlled communication.
   ///
-  /// [communication_factory] supplies the communication implementation
-  /// using the host's validated application messaging configuration.
+  /// [transport] supplies configured authenticated connectivity.
+  ///
+  /// [communication_factory] constructs the communication subsystem
+  /// using the supplied transport and host-owned messaging configuration.
   ///
   /// Returns a composition sharing the fixture's exclusive ownership
   /// provider and isolated persistence directory.
   HostComposition create_composition(
+    Transport transport,
     HostCommunicationFactory communication_factory,
   ) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
@@ -44,6 +47,11 @@ void main() {
     data_directory: directory,
     target_id: 'test-target',
     inspector: const UnusedTargetInspector(),
+    transport_factory: ({required scope_directory, required os_user_id}) {
+      expect(ownership.is_owned, isTrue);
+
+      return transport;
+    },
     communication_factory: communication_factory,
   );
 
@@ -57,7 +65,8 @@ void main() {
 
     late final Communication communication;
 
-    final composition = create_composition(({
+    final composition = create_composition(transport, ({
+      required transport,
       required codecs,
       required handlers,
     }) {
@@ -99,7 +108,8 @@ void main() {
 
     late final Communication communication;
 
-    final composition = create_composition(({
+    final composition = create_composition(transport, ({
+      required transport,
       required codecs,
       required handlers,
     }) {
@@ -125,11 +135,13 @@ void main() {
     final competing_transport = TestHostTransport();
 
     final competing = create_composition(
-      ({required codecs, required handlers}) => Communication(
-        transport: competing_transport,
-        codecs: codecs,
-        handlers: handlers,
-      ),
+      competing_transport,
+      ({required transport, required codecs, required handlers}) =>
+          Communication(
+            transport: transport,
+            codecs: codecs,
+            handlers: handlers,
+          ),
     );
 
     // Unconfirmed communication disposal must prevent a competing

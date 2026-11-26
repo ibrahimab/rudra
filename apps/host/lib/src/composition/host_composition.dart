@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:rudra_persistence_sqlite/rudra_persistence_sqlite.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 
 import 'host_workflow_identity_provider.dart';
 
@@ -46,6 +47,36 @@ final class HostStartupWorkflowException implements Exception {
   }
 }
 
+/// Constructs authenticated connectivity for an exclusively owned
+/// host application environment.
+///
+/// [scope_directory] identifies the canonical application scope.
+///
+/// [os_user_id] identifies the trusted operating-system owner.
+///
+/// Returns a configured inactive transport selected by trusted
+/// application composition.
+///
+/// Implementations retain configuration without binding endpoints
+/// or acquiring communication resources.
+///
+/// Example:
+/// ```dart
+/// final HostTransportFactory factory = ({
+///   required scope_directory,
+///   required os_user_id,
+/// }) {
+///   return MacOsUnixTransport(
+///     scope_directory: scope_directory,
+///     os_user_id: os_user_id,
+///   );
+/// };
+/// ```
+typedef HostTransportFactory = Transport Function({
+  required String scope_directory,
+  required String os_user_id,
+});
+
 /// Composes the application resources owned by a Rudra host.
 ///
 /// Establishes trusted ownership and constructs a shared workflow
@@ -66,6 +97,8 @@ final class HostStartupWorkflowException implements Exception {
 ///   ownership_provider: ownership_provider,
 ///   data_directory: development_directory,
 ///   target_id: 'local-macos',
+///   inspector: inspector,
+///   transport_factory: transport_factory,
 /// );
 ///
 /// await composition.run(
@@ -87,6 +120,9 @@ final class HostComposition {
   /// [target_id] identifies the configured filesystem target.
   /// [inspector] supplies read-only inspection for the configured
   /// filesystem target.
+  /// [transport_factory] constructs configured authenticated
+  /// connectivity after trusted identity and exclusive application
+  /// ownership have been established.
   /// [communication_factory] optionally substitutes the host-owned
   /// communication implementation using its assembled messaging
   /// configuration.
@@ -99,6 +135,7 @@ final class HostComposition {
     required this.data_directory,
     required this.target_id,
     required this.inspector,
+    required this.transport_factory,
     this.communication_factory,
   });
 
@@ -120,10 +157,16 @@ final class HostComposition {
   /// Its concrete implementation is selected by native host composition.
   final TargetInspector inspector;
 
+  /// Constructs configured connectivity for the trusted host environment.
+  ///
+  /// Invoked after canonical scope resolution and successful exclusive
+  /// ownership acquisition.
+  final HostTransportFactory transport_factory;
+
   /// Optional factory substituting the host-owned communication subsystem.
   ///
-  /// The constructed host supplies its validated application messaging
-  /// configuration to this factory.
+  /// Receives the configured transport and validated application
+  /// messaging configuration assembled by the host.
   final HostCommunicationFactory? communication_factory;
 
   /// Filename reserved for the standalone development host.
@@ -204,6 +247,13 @@ final class HostComposition {
     RudraHost? host;
 
     try {
+      // Configure connectivity only after the canonical application
+      // scope is exclusively owned by the trusted host.
+      final transport = transport_factory(
+        scope_directory: scope_directory,
+        os_user_id: os_user_id,
+      );
+
       final runtime = WorkflowRuntime.standard();
 
       final persistence = RudraSqlitePersistence(
@@ -233,11 +283,11 @@ final class HostComposition {
           application: application,
           filesystem_application: filesystem_application,
           validate_start: _validate_start,
+          transport: transport,
           communication_factory: communication_factory,
         );
 
         await host.run(
-          scope_directory: scope_directory,
           shutdown: shutdown,
           on_startup: (application) async {
             // Explicit startup is a new user intention, identified once before

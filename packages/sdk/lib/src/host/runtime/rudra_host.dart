@@ -20,14 +20,18 @@ import '../../filesystem/messaging/list/filesystem_list_handlers.dart';
 /// Creates a substitute communication subsystem using host-owned
 /// application messaging configuration.
 ///
+/// [transport] supplies configured authenticated connectivity.
+///
 /// [codecs] and [handlers] contain the validated, frozen application
 /// registrations assembled by the host.
 ///
-/// Returns an unused communication instance retaining both registries.
-/// Its execution lifecycle transfers to the host.
+/// Returns an unused communication instance retaining the supplied
+/// transport and registries. Its execution lifecycle transfers
+/// to the host.
 ///
 /// The factory must not bind endpoints or execute application handlers.
 typedef HostCommunicationFactory = Communication Function({
+  required Transport transport,
   required MessageCodecRegistry codecs,
   required RequestHandlerRegistry handlers,
 });
@@ -47,19 +51,21 @@ typedef HostCommunicationFactory = Communication Function({
 /// ```dart
 /// final host = RudraHost(
 ///   application: application,
+///   filesystem_application: filesystem_application,
 ///   validate_start: validate_target_root,
+///   transport: transport,
 /// );
 ///
-/// await host.run(
-///   scope_directory: scope,
-///   shutdown: shutdown.future,
-/// );
+/// await host.run(shutdown: shutdown.future);
 /// ```
 final class RudraHost {
   /// Creates a host bound to the configured [application].
   ///
   /// [validate_start] supplies trusted target-specific validation
   /// for workflow establishment requests.
+  ///
+  /// [transport] supplies configured authenticated endpoint
+  /// establishment for this host lifecycle.
   ///
   /// [communication_factory] optionally substitutes the default
   /// communication implementation using the host-owned registries.
@@ -76,6 +82,7 @@ final class RudraHost {
     required WorkflowApplication application,
     required FilesystemApplication filesystem_application,
     required WorkflowStartValidator validate_start,
+    required Transport transport,
     HostCommunicationFactory? communication_factory,
   }) {
     // Use the same immutable runtime for execution and state codecs.
@@ -119,8 +126,16 @@ final class RudraHost {
     handlers.freeze(codecs: codecs);
 
     final communication = communication_factory == null
-        ? Communication(codecs: codecs, handlers: handlers)
-        : communication_factory(codecs: codecs, handlers: handlers);
+        ? Communication(
+            transport: transport,
+            codecs: codecs,
+            handlers: handlers,
+          )
+        : communication_factory(
+            transport: transport,
+            codecs: codecs,
+            handlers: handlers,
+          );
 
     return RudraHost._(
       application: application,
@@ -187,9 +202,6 @@ final class RudraHost {
 
   /// Executes the configured host lifecycle.
   ///
-  /// [scope_directory] identifies the exclusively owned communication
-  /// scope established by trusted application composition.
-  ///
   /// [shutdown] supplies the external termination notification.
   ///
   /// [on_startup] optionally initializes the retained application
@@ -198,8 +210,8 @@ final class RudraHost {
   /// [on_ready] receives the first available verified application
   /// state before client sessions are admitted.
   ///
-  /// Communication authorization uses the application's authenticated
-  /// operating-system owner.
+  /// Application request authorization verifies authenticated peers
+  /// against the retained application's trusted operating-system owner.
   ///
   /// Returns after communication disposal, admitted-handler draining
   /// and authoritative publication disposal.
@@ -208,7 +220,6 @@ final class RudraHost {
   /// Application initialization, observation, communication and
   /// resource disposal failures propagate.
   Future<void> run({
-    required String scope_directory,
     required Future<void> shutdown,
     Future<void> Function(WorkflowApplication)? on_startup,
     void Function(RudraState)? on_ready,
@@ -228,8 +239,6 @@ final class RudraHost {
 
     try {
       await communication.run(
-        scope_directory: scope_directory,
-        os_user_id: _application.os_user_id,
         shutdown: termination,
         on_startup: () async {
           await on_startup?.call(_application);

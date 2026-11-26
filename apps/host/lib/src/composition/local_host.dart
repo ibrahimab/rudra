@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:rudra_host_macos/rudra_host_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:rudra_target_macos/rudra_target_macos.dart';
+import 'package:rudra_communication/rudra_communication.dart';
 
 import 'host_composition.dart';
 
@@ -74,6 +75,12 @@ Future<void> run_local_host({
     data_directory: data_directory,
     target_id: 'local-macos',
     inspector: MacOsTargetInspector(),
+    transport_factory: ({required scope_directory, required os_user_id}) {
+      return MacOsUnixTransport(
+        scope_directory: scope_directory,
+        os_user_id: os_user_id,
+      );
+    },
   );
 
   // Only an explicitly requested development operation may

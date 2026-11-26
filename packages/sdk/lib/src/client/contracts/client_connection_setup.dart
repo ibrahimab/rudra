@@ -1,43 +1,27 @@
 import 'dart:async';
 
-/// Trusted endpoint configuration for an authenticated connection.
-///
-/// [scope_directory] identifies the configured communication endpoint.
-/// [os_user_id] identifies the expected authenticated remote peer.
-///
-/// Both values originate from trusted application composition rather
-/// than application operation payloads.
-///
-/// Example:
-/// ```dart
-/// final ClientConnectionConfiguration configuration = (
-///   scope_directory: trusted_scope,
-///   os_user_id: trusted_owner,
-/// );
-/// ```
-typedef ClientConnectionConfiguration = ({
-  String scope_directory,
-  String os_user_id,
-});
+import 'package:rudra_communication/rudra_communication.dart';
 
-/// Resolves trusted configuration for one outbound SDK connection.
-///
-/// Returns configuration for the selected host without establishing
-/// communication or acquiring ownership of the host.
+/// Resolves a configured authenticated transport for an SDK connection.
 ///
 /// Each connection attempt invokes this capability independently,
-/// allowing trusted composition to resolve updated endpoint information.
+/// allowing trusted composition to resolve updated endpoint and
+/// authentication configuration.
+///
+/// Returns a transport ready for communication establishment.
+///
+/// Transport construction must retain configuration without
+/// establishing connections or acquiring native resources.
 ///
 /// Configuration and platform-resolution failures propagate.
 ///
 /// Example:
 /// ```dart
 /// final ClientConnectionSetup setup = () async {
-///   return (
+///   return MacOsUnixTransport(
 ///     scope_directory: await resolve_host_scope(),
 ///     os_user_id: await resolve_trusted_owner(),
 ///   );
 /// };
 /// ```
-typedef ClientConnectionSetup =
-    FutureOr<ClientConnectionConfiguration> Function();
+typedef ClientConnectionSetup = FutureOr<Transport> Function();

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host/src/composition/host_composition.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -32,12 +31,8 @@ void main() {
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: TestHostOwnershipProvider(),
     inspector: const UnusedTargetInspector(),
-    communication_factory: ({required codecs, required handlers}) {
-      return Communication(
-        transport: TestHostTransport(),
-        codecs: codecs,
-        handlers: handlers,
-      );
+    transport_factory: ({required scope_directory, required os_user_id}) {
+      return TestHostTransport();
     },
     data_directory: directory,
     target_id: 'test-target',

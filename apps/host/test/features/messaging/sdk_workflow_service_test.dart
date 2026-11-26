@@ -573,7 +573,7 @@ final class _HostFixture {
       throw StateError('Fixture host is already running.');
     }
 
-    transport = LoopbackHostTransport();
+    transport = LoopbackHostTransport(os_user_id: owner);
 
     final composition = HostComposition(
       identity_provider: const _TestIdentityProvider(owner),
@@ -581,14 +581,21 @@ final class _HostFixture {
       data_directory: directory,
       target_id: target_id,
       inspector: const UnusedTargetInspector(),
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-          options: const MessageSessionOptions(request_timeout: timeout),
-        );
+      transport_factory: ({required scope_directory, required os_user_id}) {
+        expect(scope_directory, scope);
+        expect(os_user_id, owner);
+
+        return transport;
       },
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+              options: const MessageSessionOptions(request_timeout: timeout),
+            );
+          },
     );
 
     final shutdown = Completer<void>();
@@ -627,17 +634,16 @@ final class _HostFixture {
   Future<RudraSdk> connect() async {
     final sdk = RudraSdk(
       target_id: target_id,
-      connection_setup: () {
-        return (scope_directory: scope, os_user_id: owner);
-      },
-      communication_factory: ({required codecs, required handlers}) {
-        return Communication(
-          transport: transport,
-          codecs: codecs,
-          handlers: handlers,
-          options: const MessageSessionOptions(request_timeout: timeout),
-        );
-      },
+      connection_setup: () => transport,
+      communication_factory:
+          ({required transport, required codecs, required handlers}) {
+            return Communication(
+              transport: transport,
+              codecs: codecs,
+              handlers: handlers,
+              options: const MessageSessionOptions(request_timeout: timeout),
+            );
+          },
     );
 
     _clients.add(sdk);

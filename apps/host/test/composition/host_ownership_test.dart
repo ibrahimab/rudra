@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host/rudra_host.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -32,20 +31,119 @@ void main() {
   ///
   /// [scope] optionally supplies an alternative spelling of the
   /// persistence directory.
-  HostComposition create_composition({Directory? scope}) => HostComposition(
+  ///
+  /// [transport_factory] optionally substitutes configured transport
+  /// resolution to exercise composition failure boundaries.
+  HostComposition create_composition({
+    Directory? scope,
+    HostTransportFactory? transport_factory,
+  }) => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: ownership,
-    communication_factory: ({required codecs, required handlers}) {
-      return Communication(
-        transport: TestHostTransport(),
-        codecs: codecs,
-        handlers: handlers,
-      );
-    },
+    transport_factory:
+        transport_factory ??
+        ({required scope_directory, required os_user_id}) {
+          return TestHostTransport();
+        },
     data_directory: scope ?? directory,
     target_id: 'test-target',
     inspector: const UnusedTargetInspector(),
   );
+
+  test('resolves transport only after acquiring canonical ownership', () async {
+    final canonical = await directory.resolveSymbolicLinks();
+
+    var resolutions = 0;
+
+    final transport = TestHostTransport();
+
+    final composition = create_composition(
+      scope: Directory('${directory.path}/.'),
+      transport_factory: ({required scope_directory, required os_user_id}) {
+        resolutions++;
+
+        expect(ownership.is_owned, isTrue);
+        expect(ownership.acquired_scopes, [canonical]);
+        expect(scope_directory, canonical);
+        expect(os_user_id, 'test-owner');
+
+        expect(transport.listen_count, 0);
+
+        return transport;
+      },
+    );
+
+    expect(resolutions, 0);
+
+    await composition.run(
+      shutdown: Future<void>.value(),
+      on_ready: (_, _) {
+        expect(resolutions, 1);
+        expect(transport.listen_count, 1);
+      },
+    );
+
+    expect(resolutions, 1);
+    expect(transport.close_count, 1);
+    expect(ownership.is_owned, isFalse);
+  });
+
+  test('occupied scope prevents transport resolution', () async {
+    final canonical = await directory.resolveSymbolicLinks();
+
+    final lease = await ownership.acquire(scope_directory: canonical);
+
+    try {
+      final composition = create_composition(
+        transport_factory: ({required scope_directory, required os_user_id}) {
+          fail('Competing host must not resolve connectivity.');
+        },
+      );
+
+      await expectLater(
+        composition.run(
+          shutdown: Future<void>.value(),
+          on_ready: (_, _) {
+            fail('Competing host must not report readiness.');
+          },
+        ),
+        throwsA(isA<HostAlreadyOwnedException>()),
+      );
+
+      expect(await composition.database_file.exists(), isFalse);
+
+      expect(ownership.is_owned, isTrue);
+    } finally {
+      await lease.release();
+    }
+  });
+
+  test('failed transport resolution releases acquired ownership', () async {
+    final failure = StateError('Controlled transport resolution failure.');
+
+    final composition = create_composition(
+      transport_factory: ({required scope_directory, required os_user_id}) {
+        expect(ownership.is_owned, isTrue);
+
+        throw failure;
+      },
+    );
+
+    await expectLater(
+      composition.run(
+        shutdown: Future<void>.value(),
+        on_ready: (_, _) {
+          fail('Failed configuration must not report readiness.');
+        },
+      ),
+      throwsA(same(failure)),
+    );
+
+    expect(await composition.database_file.exists(), isFalse);
+
+    expect(ownership.is_owned, isFalse);
+    expect(ownership.release_count, 1);
+  });
 
   test('ownership remains acquired throughout execution', () async {
     final composition = create_composition();
