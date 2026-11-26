@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A, 7B, 7C.1, 7C.2, 7C.3.1 and 7C.3.2 complete; 7C.3.3 in progress
+**Status:** In progress — 7A, 7B and 7C complete; 7D.1 planned
 **Created:** 24 November 2026
 **Updated:** 26 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -219,6 +219,60 @@ A workflow persists independently of the host process, client connection, termin
 
 One host per trusted user/scope is **process and resource ownership**, not a new domain session. The current one-unfinished-workflow-per-user rule continues to be enforced by SDK/persistence, not merely by the host's request queue.
 
+### 2.9 Unified authenticated application execution
+
+Rudra has one frontend application execution model: authenticated
+execution through RudraHost.
+
+RudraSdk remains the single public application facade. Its application
+services share one mandatory, SDK-owned ClientConnection. Trusted
+connection configuration is supplied by application composition.
+
+SDK construction remains side-effect-free. Connection establishment,
+replacement and closure remain explicit lifecycle operations.
+Disconnected is a connection lifecycle condition, not an alternative
+application execution mode.
+
+FilesystemService and WorkflowService expose frontend-facing application
+operations through feature-owned typed messaging contracts. RudraHost
+coordinates authoritative execution through the corresponding SDK
+application implementations.
+
+FilesystemApplication owns filesystem inspection orchestration.
+Concrete TargetInspector implementations are selected by host composition
+and remain isolated behind existing target contracts.
+
+Target identifiers identify configured filesystem environments.
+The authoritative host validates requested target identities before
+executing target-specific operations. Target-native paths retain their
+original spelling and semantics across communication.
+
+Read-only filesystem inspection requires an authenticated host connection
+but remains independent of workflow existence and workflow persistence.
+Inspection does not create workflows, initialize absent workflow storage
+or authorize destructive execution.
+
+Filesystem observations preserve successful entries, typed inspection
+issues, nullable metadata and explicit completion semantics.
+Communication failures remain distinct from incomplete filesystem
+observations.
+
+Communication retains bounded transport and request lifecycle guarantees.
+Filesystem result transfer must respect those guarantees without silent
+truncation or fabricated observations.
+
+The SDK remains platform-agnostic. Native target inspection, trusted
+identity resolution, communication mechanisms and service management
+retain their existing adapter ownership boundaries.
+
+Frontend-local application execution and persistence fallback are
+prohibited following the 7D cutover.
+
+This decision supersedes earlier provisions permitting independent
+frontend-local filesystem inspection or frontend composition of native
+target inspectors, including the corresponding historical composition
+guidance in ADR 0004 and ADR 0005.
+
 ## 3. Target topology
 
 ```text
@@ -264,7 +318,7 @@ The host is a **new headless Dart application in the existing monorepo**. Do not
 - Explicit optional platform plugins and distinct install-step contributions, introduced only when needed by their slices.
 - Local IPC for multiple CLI processes (Unix-domain socket is a leading design; verify support and security on each target platform before coding).
 - Authenticated/trusted local owner resolution and socket/path permission controls.
-- Application-facing **read current state**, **observe state**, **Start** and **Stop** operations, with typed outcomes and errors.
+- Application-facing **filesystem inspection**, **read current state**, **observe state**, **Start** and **Stop** operations, executed through authenticated host connectivity with typed results and errors.
 - Shared host-side SDK processing/persistence and post-commit state distribution.
 - Integration of existing CLI workflow commands and Explorer action/display paths.
 - Safe initial subscription, disconnect, cancellation, reconnection/re-synchronization and host shutdown behavior.
@@ -569,8 +623,9 @@ Extend the existing `RudraSdk` public application facade with host-backed capabi
 - Communication retains ownership of native transport selection, authentication, individual session execution and generic messaging.
 - Trusted endpoint resolution and expected peer identity originate from application composition.
 - Connection establishment never installs, starts, enables or repairs an operating-system host service.
-- Local read-only filesystem inspection remains independent of host availability.
-- Host-backed workflow operations must never fall back to frontend-local persistence.
+- All frontend application operations execute through an authenticated RudraHost connection.
+- Read-only filesystem inspection is an operational safety property, not an independent SDK execution mode.
+- Frontend-local filesystem execution and workflow persistence are prohibited following the unified execution cutover in 7D.
 - Composite state observation preserves the existing `Stream<RudraState>` application contract.
 - Remote subscription identities, generations, revisions and acknowledgments remain implementation details.
 - Synchronization availability is represented independently of immutable domain state.
@@ -663,6 +718,23 @@ Complete the receiving side of authoritative application-state observation benea
 
 No changes to the communication protocol, authoritative workflow processing or persistence schema are required.
 
+**Verification:** Completed and verified at
+`96e10c3ac1391f1d3dd2da71f04202c9425629b3`.
+
+SDK and host integration verification establish authoritative
+remote state observation, independent bounded local listeners,
+subscription handshake reconciliation, explicit reconnection,
+session replacement isolation and synchronization availability
+independent of domain state.
+
+**Architectural refinement:** Review following completion of 7C.3.3
+identified unnecessary dual-mode SDK composition. Independent
+frontend-local filesystem inspection is superseded by the unified
+authenticated host execution architecture defined in 7D.
+
+Existing connection lifecycle, workflow application and reactive
+state observation contracts remain the foundation of that architecture.
+
 ##### Migration boundary
 
 Rudra remains pre-release. Superseded interfaces and implementations may be replaced directly without temporary compatibility layers.
@@ -673,18 +745,143 @@ Production frontend migration may include necessary composition changes earlier 
 
 Production CLI and Explorer host integration remains primarily within 7D. Native service installation and process-level acceptance remain within 7E.
 
-### 7D — CLI and Explorer host-client cutover
+### 7D — Unified application execution and reactive frontend cutover
 
-**Goal:** Official frontend entry points all use the host as the sole workflow application/persistence owner.
+**Goal:** Establish authenticated host execution as the sole frontend
+application execution model, remove frontend-local execution and
+persistence ownership, and integrate authoritative reactive state
+observation into Explorer.
 
-- Route `./rudra workflow start|stop` through the configured `RudraSdk` workflow service.
-- Route Explorer **S/X** through the same SDK application operations; use `RudraSdk.observe_state()` for reactive header and action presentation.
-- Preserve physical input decoding, feature action registry, focused view models and stateless widgets.
-- Serialize interactive input and observation-triggered renders to avoid redraw races.
-- Cancel subscriptions and release connections on Q, EOF, interrupt, error and terminal restoration.
-- Remove production frontend-local workflow SQLite/processor composition rather than retaining a hidden fallback.
+#### 7D.1 — Unified SDK execution architecture
 
-**Gate:** Two independently running Explorers and a CLI command share one host, render committed changes correctly and never open workflow persistence in their own processes.
+RudraSdk requires trusted host connection configuration and owns one
+non-nullable ClientConnection shared by its application services.
+
+Read-only filesystem inspection remains a safety property of filesystem
+operations rather than an independent SDK execution mode.
+
+##### 7D.1.1 — Filesystem messaging contracts
+
+- Introduce feature-owned typed filesystem messaging contracts.
+- Preserve existing DirectoryListing, InspectionIssue and target
+  filesystem contracts across serialization.
+- Preserve nullable metadata, filesystem identity, permissions,
+  timestamps, enumeration ordering and target-native path spelling.
+- Establish bounded result-transfer semantics compatible with existing
+  communication frame limits and request deadlines.
+- Reject malformed payloads without fabricating filesystem observations.
+- Introduce feature-local serialization and protocol tests.
+
+**Gate:** Filesystem observations can be transferred through typed,
+bounded messaging contracts without information loss or silent
+truncation.
+
+##### 7D.1.2 — Authoritative filesystem application
+
+- Relocate existing filesystem inspection orchestration into
+  FilesystemApplication.
+- Preserve existing enumeration, per-entry inspection, partial failure
+  and completion semantics.
+- Introduce feature-owned filesystem messaging registration and request
+  handlers using the existing application messaging infrastructure.
+- Require authenticated peer authorization and validate the requested
+  target before inspection.
+- Compose native TargetInspector implementations at the host application
+  composition boundary.
+- Preserve portable SDK execution and existing target adapter packages.
+- Verify filesystem execution through the actual host communication
+  lifecycle.
+
+Filesystem inspection remains independent of workflow existence.
+Inspection does not initialize absent workflow persistence or publish
+workflow state changes.
+
+**Gate:** Authenticated host requests execute filesystem inspection
+through the configured target adapter and return faithful observations,
+including partial failures, without modifying workflow persistence.
+
+##### 7D.1.3 — Unified SDK and mandatory frontend composition
+
+- Make ClientConnectionSetup mandatory for RudraSdk.
+- Retain one non-nullable ClientConnection and remove conditional
+  connection composition and _require_connection().
+- Compose FilesystemService and WorkflowService unconditionally.
+- Replace frontend-facing filesystem execution with host-backed
+  application requests.
+- Remove TargetInspector injection from the public SDK constructor.
+- Preserve target-bound application services and their identities across
+  connection replacement.
+- Preserve explicit connection establishment, reconnection and disposal.
+- Migrate affected frontend composition and application operations
+  within this increment where required for architectural coherence.
+- Remove obsolete standalone SDK execution tests and replace them with
+  connected execution verification.
+- Remove frontend-local native filesystem execution and workflow
+  persistence rather than introduce compatibility adapters.
+
+Disconnected and unavailable SDK instances reject application operations
+through the existing connection admission boundary. Local
+synchronization availability observation remains independent of
+connection availability.
+
+**Gate:** Independent SDK consumers execute filesystem and workflow
+operations through one authoritative host. Unavailable communication
+never activates frontend-local execution.
+
+#### 7D.2 — Production frontend cutover completion
+
+- Complete trusted host connectivity configuration at the CLI
+  composition boundary.
+- Ensure filesystem commands, workflow commands, Welcome and Explorer
+  consume the connected RudraSdk application facade.
+- Route workflow Start and Stop through the same SDK application
+  operations regardless of frontend entry point.
+- Explicitly establish the production host endpoint and persistence
+  scope before cutover.
+- Remove remaining frontend-local persistence composition, native
+  target inspection composition and obsolete dependencies.
+- Verify application connection ownership, unavailable-host behavior
+  and resource disposal across command execution.
+- Preserve non-operational CLI commands without requiring unnecessary
+  host connectivity.
+
+Necessary composition changes may be completed during 7D.1.3.
+This increment may be closed through verification when its remaining
+requirements have already been satisfied.
+
+**Gate:** Official production frontend application operations execute
+through the configured authenticated host, and frontend processes
+neither open workflow persistence nor execute native filesystem
+inspection.
+
+#### 7D.3 — Reactive Explorer integration
+
+- Establish authenticated connectivity and initial verified application
+  state observation.
+- Replace manual application-state refreshes with RudraSdk.observe_state().
+- Serialize terminal input and observation-driven presentation updates.
+- Preserve physical input decoding, feature-owned action contributions,
+  focused view models and stateless widgets.
+- Distinguish verified workflow absence from unavailable application
+  state.
+- Preserve explicit workflow identity when executing selected actions.
+- Cancel observations and release owned connections on Quit, EOF,
+  interrupt and error.
+- Preserve terminal restoration and verified resource disposal.
+- Verify independent Explorer sessions observing the same authoritative
+  host.
+
+Explorer presentation ownership must accommodate future filesystem
+observation without coupling filesystem navigation to workflow state
+publication.
+
+Automatic filesystem change observation is deferred. Native service
+installation and lifecycle management remain within 7E.
+
+**Gate:** Two independently running Explorers and a CLI command share
+one host, render committed workflow changes correctly and never open
+workflow persistence or execute native filesystem inspection in their
+own processes.
 
 ### 7E — Platform plugins, explicit installation and end-to-end verification
 
@@ -726,7 +923,7 @@ At every completed slice, run formatting, affected tests, full `./rudra verify a
 - **Feature-owned native extensions:** Communication infrastructure belongs to the independent communication package. Native host identity and ownership capabilities remain separate from optional `plugins/` and explicit `install/steps/`. New capabilities and installation steps should primarily add code and one registration.
 - **No implicit host installation:** Registration, SDK construction, observation and `host.run()` do not install or configure OS services; install/uninstall actions are separate, explicit and auditable.
 - **Portability by construction:** Adding Windows or Linux support should involve adapter implementations and composition registration, not edits to portable SDK host behavior.
-- **One persistence owner:** Host composition owns SQLite and its notification channel; frontends use transport clients.
+- **One application execution owner:** RudraHost coordinates authoritative application execution. Host composition owns SQLite, its notification channel and configured native target inspection capabilities. Frontends consume connected RudraSdk services without local execution fallback.
 - **Feature isolation:** A future operation such as Pause primarily adds its domain feature, a host-exposed application operation/registration, its frontend feature contribution and isolated tests—not workflow branches throughout generic runners or transport decoders.
 - **No premature framework:** Implement only contracts required for the local MVP. Avoid general-purpose RPC, event buses, entity repositories or a second application state hierarchy without concrete need.
 - **No hidden policy:** The host coordinates application access and transport; it does not introduce business transition rules or weaken SDK persistence guards.
@@ -759,7 +956,9 @@ These are **design checkpoints**, not permission to replace the agreed SDK-first
 - **7B:** Minimal message envelope, protocol evolution, idempotency-key handling across lost responses and whether command handling is queued or otherwise safely serialized.
 - **7C:** Host-stream generation/revision representation, bounded subscriber queues and registered serialization of future typed SDK state slices.
 - **7C.3:** Host-backed application capabilities belong beneath the existing `RudraSdk` facade. Shared connection ownership and remote observation remain independently owned SDK infrastructure.
-- **7D:** Trusted frontend connection composition and Explorer's serialized input/observation event loop.
+- **7D.1:** Unified SDK composition, host-authoritative target validation, filesystem messaging and bounded result transfer.
+- **7D.2:** Trusted production frontend connectivity, authoritative persistence scope and removal of superseded frontend execution dependencies.
+- **7D.3:** Explorer's serialized input/observation event loop, initial verified presentation and resource ownership.
 - **7E:** Plugin versus install-step contract shapes, registry/installation plan and failure semantics, concrete launchd service/install integration, packaging, restart policy, verification and treatment of unavailable/disabled hosts. A power plugin remains optional and requires an explicit need.
 
 Decide these from inspected code and real platform constraints immediately before implementation. Do not present proposed wire APIs or service mechanics as existing capabilities.
