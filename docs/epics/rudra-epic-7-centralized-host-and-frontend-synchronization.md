@@ -772,6 +772,35 @@ operations rather than an independent SDK execution mode.
 - Reject malformed payloads without fabricating filesystem observations.
 - Introduce feature-local serialization and protocol tests.
 
+###### 7D.1.1A — Filesystem observation serialization
+
+Introduce reusable feature-owned codecs for filesystem entries
+and typed inspection issues.
+
+- Preserve original target-native paths and entry classifications.
+- Preserve nullable metadata, filesystem identities and permissions.
+- Preserve canonical UTC timestamps with microsecond precision.
+- Reject malformed, incomplete or unexpected representation fields.
+- Verify representations through JSON round-trip tests.
+- Retain existing filesystem domain constructors and invariants.
+
+###### 7D.1.1B — Bounded filesystem messaging
+
+Introduce typed filesystem operation messages using the existing
+application messaging registration infrastructure.
+
+Directory listings may exceed the communication frame limit.
+Transfer bounded observations belonging to one logical inspection
+and reconstruct the existing DirectoryListing result within the
+frontend-facing filesystem service.
+
+Transfer ownership, admission, request deadlines, cancellation,
+session termination and completion must have explicit semantics.
+
+Transport interruption or resource exhaustion must never be
+represented as successful or partially successful filesystem
+inspection.
+
 **Gate:** Filesystem observations can be transferred through typed,
 bounded messaging contracts without information loss or silent
 truncation.
