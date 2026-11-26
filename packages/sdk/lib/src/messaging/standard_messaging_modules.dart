@@ -1,5 +1,7 @@
 import 'application_messaging_module.dart';
 
+import '../filesystem/messaging/filesystem_messaging_module.dart';
+
 import '../state/messaging/state_messaging_module.dart';
 import '../state/messaging/subscription/state_subscription_messaging_module.dart';
 
@@ -34,6 +36,7 @@ List<ApplicationMessagingModule> standard_messaging_modules({
   WorkflowRuntime? workflow_runtime,
 }) {
   return [
+    const FilesystemMessagingModule(),
     const WorkflowMessagingModule(),
     StateMessagingModule(runtime: workflow_runtime),
     StateSubscriptionMessagingModule(runtime: workflow_runtime),

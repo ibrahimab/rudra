@@ -784,6 +784,16 @@ and typed inspection issues.
 - Verify representations through JSON round-trip tests.
 - Retain existing filesystem domain constructors and invariants.
 
+**Verification:** Completed and verified at
+`4ce415d00186252079b71d1cbe7b6256c873b87a`.
+
+Filesystem entry and inspection issue codecs preserve target-native
+paths, typed observation classifications, nullable metadata,
+filesystem identities, permissions and canonical UTC timestamps.
+
+Feature-local JSON round-trip tests establish representation fidelity
+and malformed payload rejection.
+
 ###### 7D.1.1B — Bounded filesystem messaging
 
 Introduce typed filesystem operation messages using the existing
@@ -794,8 +804,45 @@ Transfer bounded observations belonging to one logical inspection
 and reconstruct the existing DirectoryListing result within the
 frontend-facing filesystem service.
 
-Transfer ownership, admission, request deadlines, cancellation,
-session termination and completion must have explicit semantics.
+The filesystem messaging protocol uses pull-based bounded observation
+transfer over the existing authenticated request-response infrastructure.
+
+- The client allocates an opaque, session-scoped inspection identifier.
+- Opening an inspection establishes admission independently of
+  observation delivery.
+- Each subsequent request advances the retained lazy enumeration.
+- Batch sequences begin at one and advance monotonically.
+- Concurrent advancement of one inspection is prohibited.
+- Successful entries and typed inspection issues retain their
+  respective observation ordering.
+- Non-terminal batches contain at least one observation.
+- Terminal batches explicitly establish complete or incomplete
+  inspection status across the entire logical operation.
+- Each batch contains at most 128 combined entries and issues.
+- The version 1 batch payload has a canonical UTF-8 JSON ceiling
+  of 256 KiB, leaving headroom under the standard communication
+  frame configuration.
+- An individually oversized observation causes explicit failure
+  rather than truncation.
+- Cancellation confirms retirement of session-owned inspection
+  resources.
+- Session termination retires all associated inspections.
+- Failed application requests are never implicitly repeated.
+
+The public FilesystemService.list() operation retains its existing
+Future<DirectoryListing> result contract.
+
+The existing native lazy enumeration and cancellation machinery
+remain the foundation of authoritative incremental inspection.
+Explorer viewport management remains independent of communication
+batching.
+
+Actual inspection ownership, admission capacity, idle expiration,
+per-request work budgets, cancellation coordination and native
+resource disposal are implemented within 7D.1.2.
+
+Client-side batch validation, ordered accumulation and final result
+reconstruction are implemented within 7D.1.3.
 
 Transport interruption or resource exhaustion must never be
 represented as successful or partially successful filesystem
