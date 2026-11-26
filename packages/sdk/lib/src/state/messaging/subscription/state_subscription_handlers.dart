@@ -14,6 +14,25 @@ import 'state_subscription_messages.dart';
 ///
 /// Authorization is established by the application request-handler
 /// contribution before invoking this adapter.
+///
+/// Example:
+/// ```dart
+/// final handlers = StateSubscriptionHandlers(
+///   publication: publication,
+/// );
+///
+/// final accepted = handlers.subscribe(
+///   StateSubscribeRequest(subscription_id: subscription_id),
+///   authorized_session,
+/// );
+///
+/// await handlers.unsubscribe(
+///   StateUnsubscribeRequest(
+///     subscription_id: accepted.subscription_id,
+///   ),
+///   authorized_session,
+/// );
+/// ```
 final class StateSubscriptionHandlers {
   /// Creates a session adapter borrowing [publication].
   ///
@@ -88,6 +107,18 @@ typedef _SubscriptionBinding = ({String id, StateSubscription subscription});
 ///
 /// The session remains owned by Communication. This component borrows
 /// its messaging and termination capabilities.
+///
+/// Example:
+/// ```dart
+/// final binding = _SessionSubscription(session);
+///
+/// binding.subscribe(
+///   subscription_id: subscription_id,
+///   publication: publication,
+/// );
+///
+/// await binding.unsubscribe(subscription_id);
+/// ```
 final class _SessionSubscription {
   /// Establishes a coordination lifecycle for [_session].
   ///

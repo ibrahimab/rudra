@@ -55,8 +55,9 @@ final class HostStartupWorkflowException implements Exception {
 /// The configured development directory isolates host persistence
 /// from the existing frontend-owned production database.
 ///
-/// Exclusive ownership remains established until communication
-/// and persistence resource disposal have been confirmed.
+/// Exclusive ownership remains established until communication,
+/// authoritative state publication and persistence resource disposal
+/// have been confirmed.
 ///
 /// Example:
 /// ```dart
@@ -135,11 +136,12 @@ final class HostComposition {
   /// [startup_root] optionally requests explicit workflow establishment
   /// at a validated target-native filesystem location.
   /// [on_ready] receives the trusted owner and verified current
-  /// workflow after communication binding and application initialization.
+  /// workflow after initial authoritative state publication and
+  /// before client session admission.
   ///
   /// Acquires ownership before constructing application resources
-  /// and retains it until communication and persistence disposal
-  /// have both been confirmed.
+  /// and retains it until communication, authoritative state
+  /// publication and persistence disposal have been confirmed.
   ///
   /// Returns after graceful termination and resource disposal.
   ///
@@ -147,8 +149,8 @@ final class HostComposition {
   /// already has an owner, or [StateError] for repeated execution,
   /// unavailable storage or invalid trusted identity.
   ///
-  /// Application, communication, ownership and persistence failures
-  /// propagate to the caller.
+  /// Application, communication, state publication, ownership and
+  /// persistence failures propagate to the caller.
   /// Throws [HostStartupWorkflowException] when an explicitly requested
   /// workflow operation does not complete successfully.
   Future<void> run({

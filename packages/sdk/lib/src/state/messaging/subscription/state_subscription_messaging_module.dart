@@ -14,6 +14,15 @@ import 'state_subscription_messages.dart';
 /// Host composition registers establishment and cancellation handlers.
 /// Client composition consumes the same codecs and supplies its
 /// delivery receiver independently.
+///
+/// Example:
+/// ```dart
+/// final codecs = create_application_message_codecs(
+///   modules: [
+///     StateSubscriptionMessagingModule(runtime: runtime),
+///   ],
+/// );
+/// ```
 final class StateSubscriptionMessagingModule
     implements ApplicationRequestHandlerModule {
   /// Creates a subscription messaging contribution using [runtime].

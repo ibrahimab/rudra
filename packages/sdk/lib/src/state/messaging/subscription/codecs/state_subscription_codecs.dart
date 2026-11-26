@@ -8,6 +8,17 @@ import '../../serialization/rudra_state_codec.dart';
 import '../state_subscription_messages.dart';
 
 /// Serializes state subscription establishment requests.
+///
+/// Example:
+/// ```dart
+/// const codec = StateSubscribeRequestCodec();
+///
+/// final request = codec.decode({
+///   'subscription_id': 'subscription-1',
+/// });
+///
+/// print(request.subscription_id);
+/// ```
 final class StateSubscribeRequestCodec
     implements MessageCodec<StateSubscribeRequest> {
   /// Creates the stateless subscription request codec.
@@ -37,6 +48,18 @@ final class StateSubscribeRequestCodec
 }
 
 /// Serializes subscription acceptance responses.
+///
+/// Example:
+/// ```dart
+/// const codec = StateSubscribeResponseCodec();
+///
+/// final response = codec.decode({
+///   'subscription_id': 'subscription-1',
+///   'generation': 'generation-1',
+/// });
+///
+/// print(response.generation);
+/// ```
 final class StateSubscribeResponseCodec
     implements MessageCodec<StateSubscribeResponse> {
   /// Creates the stateless subscription response codec.
@@ -72,6 +95,16 @@ final class StateSubscribeResponseCodec
 /// Serializes verified composite application-state deliveries.
 ///
 /// Domain-state serialization is delegated to [RudraStateCodec].
+///
+/// Example:
+/// ```dart
+/// final codec = StateDeliveryRequestCodec(runtime: runtime);
+///
+/// final payload = codec.encode(request);
+/// final restored = codec.decode(payload);
+///
+/// print(restored.publication.state.workflows.current_workflow);
+/// ```
 final class StateDeliveryRequestCodec
     implements MessageCodec<StateDeliveryRequest> {
   /// Creates a delivery codec using the supplied [runtime].
@@ -137,6 +170,19 @@ final class StateDeliveryRequestCodec
 }
 
 /// Serializes exact publication acknowledgments.
+///
+/// Example:
+/// ```dart
+/// const codec = StateDeliveryResponseCodec();
+///
+/// final acknowledgment = codec.decode({
+///   'subscription_id': 'subscription-1',
+///   'generation': 'generation-1',
+///   'revision': 7,
+/// });
+///
+/// print(acknowledgment.revision);
+/// ```
 final class StateDeliveryResponseCodec
     implements MessageCodec<StateDeliveryResponse> {
   /// Creates the stateless delivery acknowledgment codec.
@@ -176,6 +222,17 @@ final class StateDeliveryResponseCodec
 }
 
 /// Serializes explicit subscription cancellation requests.
+///
+/// Example:
+/// ```dart
+/// const codec = StateUnsubscribeRequestCodec();
+///
+/// final request = codec.decode({
+///   'subscription_id': 'subscription-1',
+/// });
+///
+/// print(request.subscription_id);
+/// ```
 final class StateUnsubscribeRequestCodec
     implements MessageCodec<StateUnsubscribeRequest> {
   /// Creates the stateless cancellation request codec.
@@ -205,6 +262,17 @@ final class StateUnsubscribeRequestCodec
 }
 
 /// Serializes completed subscription cancellation responses.
+///
+/// Example:
+/// ```dart
+/// const codec = StateUnsubscribeResponseCodec();
+///
+/// final response = codec.decode({
+///   'subscription_id': 'subscription-1',
+/// });
+///
+/// print(response.subscription_id);
+/// ```
 final class StateUnsubscribeResponseCodec
     implements MessageCodec<StateUnsubscribeResponse> {
   /// Creates the stateless cancellation response codec.

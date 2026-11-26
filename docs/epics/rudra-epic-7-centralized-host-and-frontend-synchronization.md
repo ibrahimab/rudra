@@ -1,8 +1,8 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A, 7B and 7C.1 complete; 7C.2 in progress
+**Status:** In progress — 7A, 7B, 7C.1 and 7C.2 complete; 7C.3.1 in progress
 **Created:** 24 November 2026
-**Updated:** 25 November 2026
+**Updated:** 26 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
 **Planning baseline:** `86cb08462467260afee8beba5f90d05be3aab33b`
 **Predecessors:** [Epic 6 — Architectural Realignment](rudra-epic-6-architectural-realignment.md) and [Epic 6C — Observability and Future Trusted Host Direction](rudra-epic-6c-observability-and-trusted-host-direction.md)
@@ -548,20 +548,86 @@ Expose authoritative state publication through the existing bidirectional typed 
 
 No communication protocol, transport, workflow transition or persistence schema changes are required.
 
-#### 7C.3 — Client synchronization and reconnection (planned)
+**Verification:** Completed and verified at
+`e2c8b1b07d0e1af315b0ba960aca5f750bb31c7a`.
 
-Introduce reusable SDK client-side subscription consumption, bounded local state acceptance, synchronization status and explicit reconnection.
+SDK and host integration verification establish authenticated
+subscription delivery, independent subscriber lifecycles,
+bounded fan-out and authoritative host observation disposal
+through the existing communication protocol.
 
-Reconnection establishes a new communication session and subscription. Host recreation establishes a new publication generation restored from authoritative committed evidence.
+#### 7C.3 — SDK application connectivity and synchronization
 
-**Gate:** Independent clients observe committed Start and Stop operations, including overlapping subscription establishment, communication interruption and host recreation. Reconnection never implicitly repeats an application operation.
+Extend the existing `RudraSdk` public application facade with host-backed capabilities. Preserve the SDK-first architecture rather than introduce an independent public client facade.
+
+##### Architectural decisions
+
+- `RudraSdk` remains the single application-facing entry point for frontend consumers.
+- The existing `WorkflowApplication` retains authoritative execution, processing and persistence coordination within RudraHost.
+- Feature-owned SDK services translate application operations into the existing typed messaging contracts.
+- One SDK-owned connection lifecycle serves all host-backed application capabilities.
+- Communication retains ownership of native transport selection, authentication, individual session execution and generic messaging.
+- Trusted endpoint resolution and expected peer identity originate from application composition.
+- Connection establishment never installs, starts, enables or repairs an operating-system host service.
+- Local read-only filesystem inspection remains independent of host availability.
+- Host-backed workflow operations must never fall back to frontend-local persistence.
+- Composite state observation preserves the existing `Stream<RudraState>` application contract.
+- Remote subscription identities, generations, revisions and acknowledgments remain implementation details.
+- Synchronization availability is represented independently of immutable domain state.
+- Independent local observers share one remote subscription with bounded per-listener delivery.
+- Reconnection establishes an independent communication lifecycle and retrieves fresh authoritative state.
+- Interrupted application operations are never implicitly repeated.
+
+##### 7C.3.1 — SDK connection lifecycle
+
+Introduce the shared SDK connection lifecycle owner.
+
+- `ClientConnectionSetup` resolves trusted endpoint configuration for each connection attempt.
+- `ClientConnection` constructs and owns independent Communication instances.
+- Standard application messaging codecs are assembled through existing feature-owned contributions.
+- Explicit lifecycle operations serialize connection establishment, replacement and disposal.
+- Connection replacement waits for confirmed previous resource disposal, including admitted-handler draining.
+- Session termination immediately invalidates subsequent request admission when observed by the SDK.
+- A terminal execution failure permits replacement only after successful resource disposal.
+- `RudraSdk` exposes connection establishment, reconnection, availability and closure.
+- Connection configuration and generic application request forwarding remain encapsulated beneath the public application facade.
+
+**Gate:** Independently configured SDK instances establish, release and replace authenticated host connections without initializing workflow persistence. Unconfirmed resource disposal prevents replacement.
+
+##### 7C.3.2 — Host-backed application capabilities (planned)
+
+Introduce feature-owned workflow operations and authoritative state reads through `RudraSdk`.
+
+Preserve existing durable operation outcomes, idempotency semantics and submission-resolution contracts. The receiving frontend does not construct application messaging requests or reproduce authoritative execution behavior.
+
+**Gate:** Independent SDK consumers perform Start, Stop, submission-resolution queries and verified state reads through the same authoritative host.
+
+##### 7C.3.3 — Reactive state consumption and reconnection (planned)
+
+Implement remote composite state observation using the existing subscription messaging protocol and shared SDK connection lifecycle.
+
+Preserve initial-publication reconciliation, exact delivery acknowledgment, generation and revision validation, bounded local observation, cancellation and explicit synchronization availability.
+
+A failed observation terminates with an error. An explicit reconnect permits fresh observation through the same SDK instance.
+
+**Gate:** Multiple independent SDK consumers observe committed Start and Stop operations without manual refresh, including overlapping subscription establishment, communication interruption, paused listeners and host recreation.
+
+##### Migration boundary
+
+Rudra remains pre-release. Superseded interfaces and implementations may be replaced directly without temporary compatibility layers.
+
+Every completed implementation increment must remain internally coherent and pass its verification gate.
+
+Production frontend migration may include necessary composition changes earlier than originally planned when doing so avoids disposable intermediate architecture.
+
+Production CLI and Explorer host integration remains primarily within 7D. Native service installation and process-level acceptance remain within 7E.
 
 ### 7D — CLI and Explorer host-client cutover
 
 **Goal:** Official frontend entry points all use the host as the sole workflow application/persistence owner.
 
-- Route `./rudra workflow start|stop` through a host client adapter.
-- Route Explorer **S/X** through the same client operations; use the host state stream for header/actions.
+- Route `./rudra workflow start|stop` through the configured `RudraSdk` workflow service.
+- Route Explorer **S/X** through the same SDK application operations; use `RudraSdk.observe_state()` for reactive header and action presentation.
 - Preserve physical input decoding, feature action registry, focused view models and stateless widgets.
 - Serialize interactive input and observation-triggered renders to avoid redraw races.
 - Cancel subscriptions and release connections on Q, EOF, interrupt, error and terminal restoration.
@@ -641,7 +707,8 @@ These are **design checkpoints**, not permission to replace the agreed SDK-first
 - **7A:** Names/signatures of SDK host runtime, platform contracts and `apps/host` composition root; minimum registry/required-capability boundaries; macOS socket placement, exclusive ownership mechanism, trusted peer verification and explicit development launch command.
 - **7B:** Minimal message envelope, protocol evolution, idempotency-key handling across lost responses and whether command handling is queued or otherwise safely serialized.
 - **7C:** Host-stream generation/revision representation, bounded subscriber queues and registered serialization of future typed SDK state slices.
-- **7D:** Reusable client interface location and Explorer's serialized input/observation event loop.
+- **7C.3:** Host-backed application capabilities belong beneath the existing `RudraSdk` facade. Shared connection ownership and remote observation remain independently owned SDK infrastructure.
+- **7D:** Trusted frontend connection composition and Explorer's serialized input/observation event loop.
 - **7E:** Plugin versus install-step contract shapes, registry/installation plan and failure semantics, concrete launchd service/install integration, packaging, restart policy, verification and treatment of unavailable/disabled hosts. A power plugin remains optional and requires an explicit need.
 
 Decide these from inspected code and real platform constraints immediately before implementation. Do not present proposed wire APIs or service mechanics as existing capabilities.

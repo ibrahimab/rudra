@@ -6,6 +6,17 @@ import '../../publication/state_publication_snapshot.dart';
 ///
 /// The client prepares its receiver before sending this request,
 /// because initial delivery may precede the acceptance response.
+///
+/// Example:
+/// ```dart
+/// final response = await session.request(
+///   StateSubscribeRequest(
+///     subscription_id: prepared_subscription_id,
+///   ),
+/// );
+///
+/// print(response.generation);
+/// ```
 final class StateSubscribeRequest implements Request<StateSubscribeResponse> {
   /// Creates a subscription request identified by [subscription_id].
   ///
@@ -23,6 +34,14 @@ final class StateSubscribeRequest implements Request<StateSubscribeResponse> {
 /// Confirms that the host has admitted a state subscription.
 ///
 /// Acceptance and initial state delivery are independent.
+///
+/// Example:
+/// ```dart
+/// final response = StateSubscribeResponse(
+///   subscription_id: request.subscription_id,
+///   generation: publication.generation,
+/// );
+/// ```
 final class StateSubscribeResponse implements Response {
   /// Confirms admission of [subscription_id] to [generation].
   ///
@@ -46,6 +65,18 @@ final class StateSubscribeResponse implements Response {
 ///
 /// Delivery is initiated by the host through an existing bidirectional
 /// communication session.
+///
+/// Example:
+/// ```dart
+/// final response = await session.request(
+///   StateDeliveryRequest(
+///     subscription_id: subscription_id,
+///     publication: snapshot,
+///   ),
+/// );
+///
+/// assert(response.revision == snapshot.revision);
+/// ```
 final class StateDeliveryRequest implements Request<StateDeliveryResponse> {
   /// Creates a delivery of [publication] to [subscription_id].
   ///
@@ -68,6 +99,15 @@ final class StateDeliveryRequest implements Request<StateDeliveryResponse> {
 ///
 /// Acknowledgment establishes acceptance by the client-side state
 /// consumer, independently of frontend rendering.
+///
+/// Example:
+/// ```dart
+/// final acknowledgment = StateDeliveryResponse(
+///   subscription_id: request.subscription_id,
+///   generation: request.publication.generation,
+///   revision: request.publication.revision,
+/// );
+/// ```
 final class StateDeliveryResponse implements Response {
   /// Acknowledges [revision] within [generation] for [subscription_id].
   ///
@@ -97,6 +137,19 @@ final class StateDeliveryResponse implements Response {
 }
 
 /// Requests cancellation of a subscription on the current session.
+///
+/// Local state acceptance is retired before requesting host
+/// cancellation. Valid outstanding deliveries remain acknowledged
+/// until the host confirms cancellation.
+///
+/// Example:
+/// ```dart
+/// final response = await session.request(
+///   StateUnsubscribeRequest(
+///     subscription_id: retired_subscription_id,
+///   ),
+/// );
+/// ```
 final class StateUnsubscribeRequest
     implements Request<StateUnsubscribeResponse> {
   /// Creates a cancellation request for [subscription_id].
@@ -111,6 +164,13 @@ final class StateUnsubscribeRequest
 }
 
 /// Confirms subscription termination and completion of admitted delivery.
+///
+/// Example:
+/// ```dart
+/// final response = StateUnsubscribeResponse(
+///   subscription_id: drained_subscription_id,
+/// );
+/// ```
 final class StateUnsubscribeResponse implements Response {
   /// Confirms cancellation of [subscription_id].
   ///

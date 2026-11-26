@@ -70,6 +70,10 @@ export 'src/messaging/standard_messaging_modules.dart';
 /// Portable host runtime and platform contracts.
 export 'src/host/host.dart';
 
+/// Trusted client connection composition contracts.
+export 'src/client/contracts/client_connection_setup.dart';
+export 'src/client/client_connection.dart' show ClientCommunicationFactory;
+
 /// Main SDK application facade.
 export 'src/rudra_sdk.dart';
 
