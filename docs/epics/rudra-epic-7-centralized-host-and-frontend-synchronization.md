@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** In progress — 7A, 7B, 7C.1 and 7C.2 complete; 7C.3.1 in progress
+**Status:** In progress — 7A, 7B, 7C.1, 7C.2 and 7C.3.1 complete; 7C.3.2 in progress
 **Created:** 24 November 2026
 **Updated:** 26 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -594,13 +594,37 @@ Introduce the shared SDK connection lifecycle owner.
 
 **Gate:** Independently configured SDK instances establish, release and replace authenticated host connections without initializing workflow persistence. Unconfirmed resource disposal prevents replacement.
 
-##### 7C.3.2 — Host-backed application capabilities (planned)
+**Verification:** Completed and verified at
+`213355e6f35a6e50db5c9209967e1f7554d39277`.
 
-Introduce feature-owned workflow operations and authoritative state reads through `RudraSdk`.
+SDK and host integration verification establish independent
+connection ownership, trusted configuration resolution,
+explicit connection replacement, admitted-handler draining
+and fail-closed resource disposal.
 
-Preserve existing durable operation outcomes, idempotency semantics and submission-resolution contracts. The receiving frontend does not construct application messaging requests or reproduce authoritative execution behavior.
+##### 7C.3.2 — Host-backed application capabilities
 
-**Gate:** Independent SDK consumers perform Start, Stop, submission-resolution queries and verified state reads through the same authoritative host.
+Expose host-backed application operations through the existing `RudraSdk` facade.
+
+- `WorkflowService` provides target-bound Start, Stop and durable submission-resolution operations.
+- `RudraSdk.workflows` retains one service instance across communication replacement.
+- Workflow establishment uses the SDK's configured target without requiring consumers to repeat its identity.
+- Application services borrow the shared SDK connection without owning its lifecycle.
+- Existing typed messaging contracts translate application requests into authoritative host execution.
+- Existing durable operation outcomes, rejection classifications, idempotency conflicts and submission receipts remain unchanged.
+- Explicit retries preserve the original logical operation identity and request data within the same durable submission scope.
+- Historical operation outcomes remain independent of current workflow state.
+- Stop operations preserve their explicitly selected workflow identity.
+- `RudraSdk.read_state()` performs a fresh authoritative composite state query.
+- Unavailable communication and unsuccessful state restoration remain explicit failures rather than verified workflow absence.
+- Read-only state and submission-resolution queries do not initialize absent persistence.
+- Connection replacement and host recreation preserve access to durable application outcomes without implicitly repeating operations.
+
+**Gate:** Independent SDK consumers perform Start, Stop, submission-resolution queries and verified state reads through the same authoritative host. Lost responses remain recoverable through explicit idempotent retries, including after host recreation.
+
+**Boundary:** Reactive subscription consumption and synchronization availability are introduced in 7C.3.3. Production CLI and Explorer integration remains within 7D.
+
+No changes to authoritative workflow processing, communication protocol or persistence schema are required.
 
 ##### 7C.3.3 — Reactive state consumption and reconnection (planned)
 
