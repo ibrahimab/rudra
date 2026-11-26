@@ -15,7 +15,6 @@ void main() {
 
     sdk = RudraSdk(
       target_id: 'test-target',
-      inspector: _UnusedInspector(),
       connection_setup: () {
         resolution_count++;
 
@@ -38,24 +37,6 @@ void main() {
     expect(sdk.is_connected, isFalse);
     expect(resolution_count, 0);
   });
-
-  test(
-    'rejects workflow access without configured host connectivity',
-    () async {
-      final local_sdk = RudraSdk(
-        target_id: 'test-target',
-        inspector: _UnusedInspector(),
-      );
-
-      try {
-        expect(() => local_sdk.workflows, throwsStateError);
-
-        await expectLater(local_sdk.read_state(), throwsStateError);
-      } finally {
-        await local_sdk.close();
-      }
-    },
-  );
 
   test('Start requires an available authenticated connection', () async {
     await expectLater(
@@ -141,25 +122,4 @@ void main() {
     expect(sdk.resources_released, isTrue);
     expect(resolution_count, 0);
   });
-}
-
-/// Rejects filesystem inspection in workflow capability tests.
-///
-/// Example:
-/// ```dart
-/// final sdk = RudraSdk(
-///   target_id: 'test-target',
-///   inspector: _UnusedInspector(),
-/// );
-/// ```
-final class _UnusedInspector implements TargetInspector {
-  /// Rejects the unexpected target operation in [invocation].
-  ///
-  /// Throws [UnsupportedError] for every inspection operation.
-  @override
-  Never noSuchMethod(Invocation invocation) {
-    throw UnsupportedError(
-      'Unexpected filesystem inspection: ${invocation.memberName}',
-    );
-  }
 }

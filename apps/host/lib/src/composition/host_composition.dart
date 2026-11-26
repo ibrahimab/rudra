@@ -85,6 +85,8 @@ final class HostComposition {
   /// [data_directory] identifies an existing, dedicated development
   /// persistence directory.
   /// [target_id] identifies the configured filesystem target.
+  /// [inspector] supplies read-only inspection for the configured
+  /// filesystem target.
   /// [communication_factory] optionally substitutes the host-owned
   /// communication implementation using its assembled messaging
   /// configuration.
@@ -96,6 +98,7 @@ final class HostComposition {
     required this.ownership_provider,
     required this.data_directory,
     required this.target_id,
+    required this.inspector,
     this.communication_factory,
   });
 
@@ -111,6 +114,11 @@ final class HostComposition {
 
   /// Configured filesystem target used by explicit startup operations.
   final String target_id;
+
+  /// Platform-independent inspection capability for the configured target.
+  ///
+  /// Its concrete implementation is selected by native host composition.
+  final TargetInspector inspector;
 
   /// Optional factory substituting the host-owned communication subsystem.
   ///
@@ -216,8 +224,14 @@ final class HostComposition {
           os_user_id: os_user_id,
         );
 
+        final filesystem_application = FilesystemApplication(
+          target_id: target_id,
+          inspector: inspector,
+        );
+
         host = RudraHost(
           application: application,
+          filesystem_application: filesystem_application,
           validate_start: _validate_start,
           communication_factory: communication_factory,
         );

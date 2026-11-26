@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../../support/loopback_host_transport.dart';
 import '../../support/test_host_ownership_provider.dart';
+import '../../support/unused_target_inspector.dart';
 
 /// Verifies independently composed SDK connections against a real host.
 void main() {
@@ -31,6 +32,7 @@ void main() {
       ownership_provider: ownership,
       data_directory: directory,
       target_id: 'local-macos',
+      inspector: const UnusedTargetInspector(),
       communication_factory: ({required codecs, required handlers}) {
         return Communication(
           transport: transport,
@@ -84,7 +86,6 @@ void main() {
     RudraSdk create_sdk(List<Communication> connections) {
       final sdk = RudraSdk(
         target_id: 'local-macos',
-        inspector: _UnusedInspector(),
         connection_setup: () {
           return (scope_directory: scope, os_user_id: owner);
         },
@@ -186,25 +187,4 @@ final class _TestIdentityProvider implements HostIdentityProvider {
   /// Returns the retained trusted operating-system identity.
   @override
   Future<String> resolve() async => os_user_id;
-}
-
-/// Rejects filesystem inspection in a connection-only integration test.
-///
-/// Example:
-/// ```dart
-/// final sdk = RudraSdk(
-///   target_id: 'local-macos',
-///   inspector: _UnusedInspector(),
-/// );
-/// ```
-final class _UnusedInspector implements TargetInspector {
-  /// Rejects the unexpected inspection operation in [invocation].
-  ///
-  /// Throws [UnsupportedError] for every target operation.
-  @override
-  Never noSuchMethod(Invocation invocation) {
-    throw UnsupportedError(
-      'Unexpected filesystem inspection: ${invocation.memberName}',
-    );
-  }
 }

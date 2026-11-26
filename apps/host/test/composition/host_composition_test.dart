@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../support/test_host_ownership_provider.dart';
 import '../support/test_host_transport.dart';
+import '../support/unused_target_inspector.dart';
 
 /// Verifies host resource ownership and workflow restoration
 /// using isolated development persistence.
@@ -30,6 +31,7 @@ void main() {
   HostComposition create_composition() => HostComposition(
     identity_provider: const _TestIdentityProvider(),
     ownership_provider: TestHostOwnershipProvider(),
+    inspector: const UnusedTargetInspector(),
     communication_factory: ({required codecs, required handlers}) {
       return Communication(
         transport: TestHostTransport(),

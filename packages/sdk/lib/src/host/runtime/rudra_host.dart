@@ -14,6 +14,9 @@ import '../../messaging/standard_messaging_modules.dart';
 
 import '../../workflow/application/workflow_application.dart';
 
+import '../../filesystem/application/filesystem_application.dart';
+import '../../filesystem/messaging/list/filesystem_list_handlers.dart';
+
 /// Creates a substitute communication subsystem using host-owned
 /// application messaging configuration.
 ///
@@ -61,6 +64,9 @@ final class RudraHost {
   /// [communication_factory] optionally substitutes the default
   /// communication implementation using the host-owned registries.
   ///
+  /// [filesystem_application] supplies authoritative filesystem
+  /// inspection against the configured target environment.
+  ///
   /// Throws [StateError] for incompatible messaging configuration.
   /// Registration and communication construction failures propagate.
   ///
@@ -68,6 +74,7 @@ final class RudraHost {
   /// initializing SQLite or executing application operations.
   factory RudraHost({
     required WorkflowApplication application,
+    required FilesystemApplication filesystem_application,
     required WorkflowStartValidator validate_start,
     HostCommunicationFactory? communication_factory,
   }) {
@@ -83,10 +90,15 @@ final class RudraHost {
       observe_state: application.observe_state,
     );
 
+    final filesystem_handlers = FilesystemListHandlers(
+      application: filesystem_application,
+    );
+
     final context = ApplicationRequestContext(
       application: application,
       publication: publication,
       validate_start: validate_start,
+      filesystem_handlers: filesystem_handlers,
     );
 
     final handlers = RequestHandlerRegistry();
@@ -113,6 +125,7 @@ final class RudraHost {
     return RudraHost._(
       application: application,
       publication: publication,
+      filesystem_handlers: filesystem_handlers,
       communication: communication,
     );
   }
@@ -122,20 +135,29 @@ final class RudraHost {
   /// [application] supplies authoritative application execution.
   /// [publication] owns verified application-state observation.
   /// [communication] owns authenticated communication execution.
+  /// [filesystem_handlers] owns session-scoped filesystem inspections.
   ///
   /// Configuration has been validated before construction.
   RudraHost._({
     required WorkflowApplication application,
     required StatePublication publication,
+    required FilesystemListHandlers filesystem_handlers,
     required this.communication,
   }) : _application = application,
-       _publication = publication;
+       _publication = publication,
+       _filesystem_handlers = filesystem_handlers;
 
   /// Authoritative application retained throughout host execution.
   final WorkflowApplication _application;
 
   /// Authoritative state publication owned by this host lifecycle.
   final StatePublication _publication;
+
+  /// Authoritative filesystem inspection resources owned by this host.
+  ///
+  /// Retains active and draining inspections until resource disposal
+  /// has been confirmed.
+  final FilesystemListHandlers _filesystem_handlers;
 
   /// Whether publication resource disposal has been confirmed.
   ///
@@ -156,7 +178,9 @@ final class RudraHost {
   /// Trusted composition uses this boundary before releasing
   /// exclusive host ownership.
   bool get resources_released =>
-      communication.resources_released && _publication_released;
+      communication.resources_released &&
+      _publication_released &&
+      _filesystem_handlers.resources_released;
 
   /// Whether this host has entered its execution lifecycle.
   bool _has_run = false;
@@ -226,11 +250,16 @@ final class RudraHost {
         },
       );
     } finally {
-      // Communication termination settles outstanding delivery
-      // requests before publication drains its owned resources.
-      await _publication.close();
+      // Communication termination prevents additional remote admission.
+      // Filesystem inspection and publication resources must both
+      // be drained before exclusive host ownership can be released.
+      try {
+        await _filesystem_handlers.close();
+      } finally {
+        await _publication.close();
 
-      _publication_released = true;
+        _publication_released = true;
+      }
     }
 
     // Preserve an authoritative failure even when external shutdown

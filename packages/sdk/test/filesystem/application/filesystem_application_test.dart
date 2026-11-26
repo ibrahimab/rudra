@@ -1,17 +1,11 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-/// Verifies the platform-independent filesystem listing service.
-///
-/// These tests use a deterministic fake TargetInspector.
-///
-/// No real filesystem operations or cleanup actions are performed.
-///
-/// The tests establish that SDK orchestration remains independent
-/// of native filesystem implementations and CLI presentation.
+/// Verifies authoritative filesystem observation orchestration
+/// using deterministic platform-independent inspection fixtures.
 void main() {
-  group('FilesystemService', () {
-    test('lists and inspects immediate directory children', () async {
+  group('FilesystemApplication', () {
+    test('observes immediate directory children lazily', () async {
       final directory = TargetPath('/tmp');
 
       final file = _create_entry(
@@ -30,44 +24,50 @@ void main() {
         entries: {file.path.value: file, folder.path.value: folder},
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
-      final listing = await service.list(directory: directory);
+      final stream = application.observe_directory(directory: directory);
 
-      expect(listing.target_id, 'local-macos');
-      expect(listing.directory, same(directory));
-      expect(listing.is_complete, isTrue);
-      expect(listing.issues, isEmpty);
-      expect(listing.entries, [same(file), same(folder)]);
+      expect(application.target_id, 'local-macos');
+      expect(inspector.listed_directories, isEmpty);
+      expect(inspector.inspected_paths, isEmpty);
+
+      final observations = await stream.toList();
+
+      expect(observations.map((item) => item.entry), [
+        same(file),
+        same(folder),
+      ]);
+
+      expect(observations.map((item) => item.issue), everyElement(isNull));
 
       expect(inspector.listed_directories, [same(directory)]);
       expect(inspector.inspected_paths, [same(file.path), same(folder.path)]);
 
-      expect(listing.entries.first.metadata.logical_size_bytes, 1024);
+      expect(observations.first.entry!.metadata.logical_size_bytes, 1024);
     });
 
-    test('returns a complete result for an empty directory', () async {
+    test('produces no observations for an empty directory', () async {
       final inspector = _FakeTargetInspector();
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
-      final listing = await service.list(directory: TargetPath('/tmp/empty'));
+      final observations = await application
+          .observe_directory(directory: TargetPath('/tmp/empty'))
+          .toList();
 
-      expect(listing.entries, isEmpty);
-      expect(listing.issues, isEmpty);
-      expect(listing.is_complete, isTrue);
-
+      expect(observations, isEmpty);
       expect(inspector.listed_directories, hasLength(1));
       expect(inspector.inspected_paths, isEmpty);
     });
 
-    test('preserves successful entries after child failure', () async {
+    test('continues inspection after a typed child failure', () async {
       final failed_path = TargetPath('/tmp/restricted.txt');
 
       final successful_entry = _create_entry(
@@ -89,31 +89,35 @@ void main() {
         inspection_failures: {failed_path.value: failure},
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
-      final listing = await service.list(directory: TargetPath('/tmp'));
+      final observations = await application
+          .observe_directory(directory: TargetPath('/tmp'))
+          .toList();
 
-      expect(listing.is_complete, isFalse);
-      expect(listing.entries, [same(successful_entry)]);
-      expect(listing.issues, hasLength(1));
+      expect(observations, hasLength(2));
+      expect(observations.first.entry, isNull);
 
-      final issue = listing.issues.single;
+      final issue = observations.first.issue!;
 
-      expect(issue.code, TargetInspectionErrorCode.permissionDenied);
-
-      expect(issue.operation, TargetInspectionOperation.inspect);
-
+      expect(issue.code, failure.code);
+      expect(issue.operation, failure.operation);
       expect(issue.path, same(failed_path));
-      expect(issue.message, 'Permission denied.');
+      expect(issue.message, failure.message);
 
-      // Both children must have been attempted.
-      expect(inspector.inspected_paths, hasLength(2));
+      expect(observations.last.entry, same(successful_entry));
+      expect(observations.last.issue, isNull);
+
+      expect(inspector.inspected_paths, [
+        same(failed_path),
+        same(successful_entry.path),
+      ]);
     });
 
-    test('preserves entries after enumeration failure', () async {
+    test('preserves observations before enumeration failure', () async {
       final directory = TargetPath('/tmp');
 
       final entry = _create_entry(
@@ -135,26 +139,28 @@ void main() {
         fail_after_children: 1,
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
-      final listing = await service.list(directory: directory);
+      final observations = await application
+          .observe_directory(directory: directory)
+          .toList();
 
-      expect(listing.is_complete, isFalse);
-      expect(listing.entries, [same(entry)]);
-      expect(listing.issues, hasLength(1));
+      expect(observations, hasLength(2));
+      expect(observations.first.entry, same(entry));
+      expect(observations.last.entry, isNull);
 
-      expect(
-        listing.issues.single.operation,
-        TargetInspectionOperation.listDirectory,
-      );
+      final issue = observations.last.issue!;
 
-      expect(listing.issues.single.code, TargetInspectionErrorCode.ioFailure);
+      expect(issue.code, failure.code);
+      expect(issue.operation, failure.operation);
+      expect(issue.path, same(directory));
+      expect(issue.message, failure.message);
     });
 
-    test('reports failure when enumeration cannot begin', () async {
+    test('reports a typed failure when enumeration cannot begin', () async {
       final directory = TargetPath('/tmp/restricted');
 
       final failure = TargetInspectionException(
@@ -169,22 +175,19 @@ void main() {
         fail_after_children: 0,
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
-      final listing = await service.list(directory: directory);
+      final observations = await application
+          .observe_directory(directory: directory)
+          .toList();
 
-      expect(listing.is_complete, isFalse);
-      expect(listing.entries, isEmpty);
-      expect(listing.issues, hasLength(1));
-
-      expect(
-        listing.issues.single.code,
-        TargetInspectionErrorCode.permissionDenied,
-      );
-
+      expect(observations, hasLength(1));
+      expect(observations.single.entry, isNull);
+      expect(observations.single.issue!.code, failure.code);
+      expect(observations.single.issue!.operation, failure.operation);
       expect(inspector.inspected_paths, isEmpty);
     });
 
@@ -201,25 +204,29 @@ void main() {
         entries: {entry.path.value: entry},
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-windows',
         inspector: inspector,
       );
 
-      final listing = await service.list(directory: directory);
+      final observations = await application
+          .observe_directory(directory: directory)
+          .toList();
 
-      expect(listing.target_id, 'local-windows');
-      expect(listing.directory, same(directory));
+      expect(application.target_id, 'local-windows');
+      expect(inspector.listed_directories, [same(directory)]);
+      expect(observations.single.entry, same(entry));
 
-      expect(listing.entries.single.path.value, r'C:\Users\example\file.txt');
-
-      expect(listing.is_complete, isTrue);
+      expect(
+        observations.single.entry!.path.value,
+        r'C:\Users\example\file.txt',
+      );
     });
 
     test('rejects blank target identifiers', () {
-      for (final target_id in ['', ' ', '\t', '\n']) {
+      for (final target_id in ['', ' ', '\t\n']) {
         expect(
-          () => FilesystemService(
+          () => FilesystemApplication(
             target_id: target_id,
             inspector: _FakeTargetInspector(),
           ),
@@ -233,38 +240,40 @@ void main() {
 
       final inspector = _FakeTargetInspector(
         children: [path],
-        inspection_failures: {path.value: StateError('Unexpected failure')},
+        inspection_failures: {
+          path.value: StateError('Unexpected inspection failure.'),
+        },
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
       await expectLater(
-        service.list(directory: TargetPath('/tmp')),
-        throwsA(isA<StateError>()),
+        application.observe_directory(directory: TargetPath('/tmp')).toList(),
+        throwsStateError,
       );
     });
 
     test('propagates unexpected enumeration failures', () async {
       final inspector = _FakeTargetInspector(
-        listing_failure: StateError('Unexpected enumeration failure'),
+        listing_failure: StateError('Unexpected enumeration failure.'),
         fail_after_children: 0,
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
       await expectLater(
-        service.list(directory: TargetPath('/tmp')),
-        throwsA(isA<StateError>()),
+        application.observe_directory(directory: TargetPath('/tmp')).toList(),
+        throwsStateError,
       );
     });
 
-    test('uses only read-only inspection operations', () async {
+    test('uses only the required read-only inspection operations', () async {
       final entry = _create_entry(
         '/tmp/example.txt',
         FilesystemEntryKind.regularFile,
@@ -275,20 +284,49 @@ void main() {
         entries: {entry.path.value: entry},
       );
 
-      final service = FilesystemService(
+      final application = FilesystemApplication(
         target_id: 'local-macos',
         inspector: inspector,
       );
 
-      await service.list(directory: TargetPath('/tmp'));
+      await application
+          .observe_directory(directory: TargetPath('/tmp'))
+          .toList();
 
       expect(inspector.listed_directories, hasLength(1));
       expect(inspector.inspected_paths, hasLength(1));
 
-      // The service has no reason to discover capabilities or
-      // resolve symbolic-link destinations during basic listing.
       expect(inspector.capability_calls, 0);
       expect(inspector.symbolic_link_calls, 0);
+    });
+
+    test('cancellation prevents inspection of remaining children', () async {
+      final first = _create_entry(
+        '/tmp/first.txt',
+        FilesystemEntryKind.regularFile,
+      );
+
+      final second = _create_entry(
+        '/tmp/second.txt',
+        FilesystemEntryKind.regularFile,
+      );
+
+      final inspector = _FakeTargetInspector(
+        children: [first.path, second.path],
+        entries: {first.path.value: first, second.path.value: second},
+      );
+
+      final application = FilesystemApplication(
+        target_id: 'local-macos',
+        inspector: inspector,
+      );
+
+      final observation = await application
+          .observe_directory(directory: TargetPath('/tmp'))
+          .first;
+
+      expect(observation.entry, same(first));
+      expect(inspector.inspected_paths, [same(first.path)]);
     });
   });
 }

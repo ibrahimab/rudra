@@ -7,6 +7,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
 import '../../support/loopback_host_transport.dart';
+import '../../support/unused_target_inspector.dart';
 
 /// Verifies authenticated state subscription delivery through
 /// an authoritative host and real SQLite persistence.
@@ -464,6 +465,10 @@ final class _HostFixture {
     final host = RudraHost(
       application: application,
       validate_start: (target_id, root) {},
+      filesystem_application: FilesystemApplication(
+        target_id: 'local-macos',
+        inspector: const UnusedTargetInspector(),
+      ),
       communication_factory: ({required codecs, required handlers}) {
         return Communication(
           transport: transport,

@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../support/test_host_ownership_provider.dart';
 import '../support/test_host_transport.dart';
+import '../support/unused_target_inspector.dart';
 
 /// Verifies exclusive ownership at the host composition boundary.
 ///
@@ -43,6 +44,7 @@ void main() {
     },
     data_directory: scope ?? directory,
     target_id: 'test-target',
+    inspector: const UnusedTargetInspector(),
   );
 
   test('ownership remains acquired throughout execution', () async {

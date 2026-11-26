@@ -13,3 +13,7 @@ export 'platform/contracts/host_ownership_lease.dart';
 
 /// Portable host execution lifecycle.
 export 'runtime/rudra_host.dart';
+
+/// Authoritative filesystem inspection application.
+export '../filesystem/application/filesystem_application.dart';
+export '../filesystem/application/filesystem_observation.dart';

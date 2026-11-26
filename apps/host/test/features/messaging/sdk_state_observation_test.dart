@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../../support/loopback_host_transport.dart';
 import '../../support/test_host_ownership_provider.dart';
+import '../../support/unused_target_inspector.dart';
 
 /// Verifies public SDK observation against an authoritative host.
 ///
@@ -486,6 +487,7 @@ final class _HostFixture {
       ownership_provider: _ownership,
       data_directory: directory,
       target_id: target_id,
+      inspector: const UnusedTargetInspector(),
       communication_factory: ({required codecs, required handlers}) {
         return Communication(
           transport: _transport,
@@ -529,7 +531,6 @@ final class _HostFixture {
   Future<RudraSdk> connect() async {
     final sdk = RudraSdk(
       target_id: target_id,
-      inspector: _UnusedInspector(),
       connection_setup: () {
         return (scope_directory: scope, os_user_id: owner);
       },
@@ -622,20 +623,4 @@ final class _IdentityProvider implements HostIdentityProvider {
   /// Returns the retained trusted identity.
   @override
   Future<String> resolve() async => os_user_id;
-}
-
-/// Rejects unexpected filesystem inspection in observation tests.
-///
-/// Example:
-/// ```dart
-/// final inspector = _UnusedInspector();
-/// ```
-final class _UnusedInspector implements TargetInspector {
-  /// Rejects the unexpected target operation in [invocation].
-  @override
-  Never noSuchMethod(Invocation invocation) {
-    throw UnsupportedError(
-      'Unexpected filesystem inspection: ${invocation.memberName}',
-    );
-  }
 }

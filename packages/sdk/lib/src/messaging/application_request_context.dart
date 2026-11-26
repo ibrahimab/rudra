@@ -5,6 +5,8 @@ import '../workflow/application/workflow_application.dart';
 
 import '../state/publication/state_publication.dart';
 
+import '../filesystem/messaging/list/filesystem_list_handlers.dart';
+
 /// Validates a requested workflow establishment against trusted
 /// target configuration.
 ///
@@ -35,10 +37,13 @@ final class ApplicationRequestContext {
   /// backed by the same application.
   /// [validate_start] supplies trusted target-specific validation
   /// before an explicit workflow establishment is accepted.
+  /// [filesystem_handlers] supplies authoritative filesystem request
+  /// execution and session-owned inspection coordination.
   const ApplicationRequestContext({
     required this.application,
     required this.publication,
     required this.validate_start,
+    required this.filesystem_handlers,
   });
 
   /// Authoritative owner-scoped workflow application.
@@ -51,6 +56,12 @@ final class ApplicationRequestContext {
 
   /// Trusted target and root validation capability.
   final WorkflowStartValidator validate_start;
+
+  /// Host-owned filesystem inspection lifecycle and request execution.
+  ///
+  /// Retains inspection resources across authenticated requests
+  /// until their disposal has been confirmed.
+  final FilesystemListHandlers filesystem_handlers;
 
   /// Verifies that [session] belongs to this application's owner.
   ///

@@ -872,6 +872,52 @@ Filesystem inspection remains independent of workflow existence.
 Inspection does not initialize absent workflow persistence or publish
 workflow state changes.
 
+Implementation proceeds through the following coordinated increments:
+
+- 7D.1.2A — Extract lazy filesystem observation production and
+  bounded inspection advancement.
+- 7D.1.2B — Directly replace frontend-local filesystem execution
+  with host-backed FilesystemService and mandatory SDK connectivity.
+- 7D.1.2C — Establish authenticated host inspection ownership,
+  resource limits, expiration, cancellation and native composition.
+
+Filesystem inspection resource ownership is established independently
+of durable workflow processing.
+
+Initial host resource policy:
+
+- At most four active or draining inspections per authenticated session.
+- At most 32 active or draining inspections across the host.
+- Idle inspections expire after 30 seconds.
+- Admitted advancement expires after 20 seconds.
+- Batch production uses a one-second cooperative work budget.
+- Resource capacity remains reserved until disposal is confirmed.
+- Cancellation of an absent inspection confirms its absence within
+  the requesting session.
+- Failed disposal prevents confirmation of host resource release.
+
+Expiration initiates cancellation. Native filesystem operations that
+cannot be interrupted may delay actual resource disposal.
+
+Native filesystem adapters are selected exclusively at host application
+composition after the coordinated frontend cutover.
+
+Multi-request filesystem operations retain one authenticated session
+throughout their execution. Connection replacement invalidates the
+original inspection rather than transferring it to a new session.
+
+Rudra remains pre-release. Superseded execution implementations
+are replaced directly. Intermediate source incompatibilities are
+permitted during the coordinated implementation of 7D.1.2 and
+7D.1.3.
+
+Existing consumers and tests are migrated to the final architecture
+without temporary delegation, compatibility constructors or
+frontend-local execution adapters.
+
+Full workspace verification is required upon completion of the
+coordinated cutover.
+
 **Gate:** Authenticated host requests execute filesystem inspection
 through the configured target adapter and return faithful observations,
 including partial failures, without modifying workflow persistence.

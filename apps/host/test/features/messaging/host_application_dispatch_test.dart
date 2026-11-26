@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../../support/loopback_host_transport.dart';
 import '../../support/test_host_ownership_provider.dart';
+import '../../support/unused_target_inspector.dart';
 
 /// Verifies authoritative application dispatch through the public
 /// communication API and real host-owned SQLite persistence.
@@ -50,6 +51,7 @@ void main() {
       ownership_provider: ownership,
       data_directory: directory,
       target_id: target_id,
+      inspector: const UnusedTargetInspector(),
       communication_factory: ({required codecs, required handlers}) {
         expect(codecs.is_frozen, isTrue);
         expect(handlers.is_frozen, isTrue);

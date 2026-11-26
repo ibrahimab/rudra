@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:rudra_host_macos/rudra_host_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
+import 'package:rudra_target_macos/rudra_target_macos.dart';
 
 import 'host_composition.dart';
 
@@ -72,6 +73,7 @@ Future<void> run_local_host({
     ownership_provider: const MacOsHostOwnershipProvider(),
     data_directory: data_directory,
     target_id: 'local-macos',
+    inspector: MacOsTargetInspector(),
   );
 
   // Only an explicitly requested development operation may

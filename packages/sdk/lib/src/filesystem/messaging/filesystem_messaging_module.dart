@@ -1,6 +1,7 @@
 import 'package:rudra_communication/rudra_communication.dart';
 
-import '../../messaging/application_messaging_module.dart';
+import '../../messaging/application_request_context.dart';
+import '../../messaging/application_request_handler_module.dart';
 
 import 'list/codecs/filesystem_list_codecs.dart';
 import 'list/filesystem_list_messages.dart';
@@ -18,7 +19,8 @@ import 'list/filesystem_list_messages.dart';
 ///
 /// registry.freeze();
 /// ```
-final class FilesystemMessagingModule implements ApplicationMessagingModule {
+final class FilesystemMessagingModule
+    implements ApplicationRequestHandlerModule {
   /// Creates the stateless filesystem messaging contribution.
   const FilesystemMessagingModule();
 
@@ -55,5 +57,46 @@ final class FilesystemMessagingModule implements ApplicationMessagingModule {
       ..register_response<FilesystemListCancelResponse>(
         const FilesystemListCancelResponseCodec(),
       );
+  }
+
+  /// Contributes authoritative filesystem handlers to [registry].
+  ///
+  /// [context] supplies trusted peer authorization and the retained
+  /// filesystem inspection owner.
+  ///
+  /// Every operation verifies its authenticated peer before accessing
+  /// inspection admission, advancement or cancellation.
+  ///
+  /// Registration does not acquire inspection resources.
+  @override
+  void register_handlers(
+    RequestHandlerRegistry registry,
+    ApplicationRequestContext context,
+  ) {
+    registry
+      ..register<FilesystemListOpenResponse, FilesystemListOpenRequest>((
+        request,
+        session,
+      ) {
+        context.require_authorized_peer(session);
+
+        return context.filesystem_handlers.open(request, session);
+      })
+      ..register<FilesystemListBatchResponse, FilesystemListNextRequest>((
+        request,
+        session,
+      ) {
+        context.require_authorized_peer(session);
+
+        return context.filesystem_handlers.next(request, session);
+      })
+      ..register<FilesystemListCancelResponse, FilesystemListCancelRequest>((
+        request,
+        session,
+      ) {
+        context.require_authorized_peer(session);
+
+        return context.filesystem_handlers.cancel(request, session);
+      });
   }
 }

@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import '../../support/controlled_workflow_persistence.dart';
 import '../../support/loopback_host_transport.dart';
+import '../../support/unused_target_inspector.dart';
 
 /// Verifies independent clients competing for one authoritative host.
 ///
@@ -608,6 +609,10 @@ final class _HostFixture {
           throw ArgumentError('Invalid fixture target or root.');
         }
       },
+      filesystem_application: FilesystemApplication(
+        target_id: target_id,
+        inspector: const UnusedTargetInspector(),
+      ),
       communication_factory: ({required codecs, required handlers}) {
         return Communication(
           transport: transport,

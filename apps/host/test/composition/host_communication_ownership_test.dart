@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 
 import '../support/test_host_ownership_provider.dart';
 import '../support/test_host_transport.dart';
+import '../support/unused_target_inspector.dart';
 
 /// Verifies exclusive host ownership across communication disposal.
 ///
@@ -42,6 +43,7 @@ void main() {
     ownership_provider: ownership,
     data_directory: directory,
     target_id: 'test-target',
+    inspector: const UnusedTargetInspector(),
     communication_factory: communication_factory,
   );
 

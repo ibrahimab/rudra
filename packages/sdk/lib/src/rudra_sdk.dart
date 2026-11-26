@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:rudra_target_contracts/rudra_target_contracts.dart';
-
 import 'client/client_connection.dart';
 import 'client/contracts/client_connection_setup.dart';
 
@@ -17,48 +15,33 @@ import 'workflow/workflow_runtime.dart';
 
 /// Public application facade for Rudra's shared SDK.
 ///
-/// Exposes application capabilities consumed by CLI, Flutter and
-/// other frontends through one configured SDK instance.
+/// All application operations execute through one authenticated
+/// host connection owned by this SDK.
 ///
-/// [filesystem] provides read-only target inspection.
-/// [workflows] provides host-backed workflow operations.
-/// [read_state] retrieves verified composite application state.
-/// [observe_state] delivers its verified initial and subsequent states.
-/// [observe_synchronization_status] reports observation availability.
+/// Trusted application composition supplies the selected target
+/// and host connection resolution capability.
 ///
-/// Host-backed application capabilities share an authenticated
-/// connection owned by this SDK.
-///
-/// Trusted application composition supplies target configuration
-/// and optional host connection resolution.
-///
-/// Construction performs no filesystem inspection, connection
-/// establishment, persistence access or host service activation.
+/// Construction retains configuration without acquiring external
+/// resources or executing application operations.
 ///
 /// Example:
 /// ```dart
 /// final sdk = RudraSdk(
 ///   target_id: 'local-macos',
-///   inspector: target_inspector,
 ///   connection_setup: resolve_host_connection,
 /// );
 ///
 /// try {
 ///   await sdk.connect();
 ///
-///   final outcome = await sdk.workflows.start(
-///     root: TargetPath('/workspace'),
-///     idempotency_key: operation_id,
+///   final listing = await sdk.filesystem.list(
+///     directory: TargetPath('/workspace'),
 ///   );
 ///
 ///   final state = await sdk.read_state();
-///   print(state.workflows.current_workflow?.identity.workflow_id);
 ///
-///   final subscription = sdk.observe_state().listen((state) {
-///     print(state.workflows.current_workflow?.identity.workflow_id);
-///   });
-///
-///   await subscription.cancel();
+///   print(listing.is_complete);
+///   print(state.workflows.current_workflow);
 /// } finally {
 ///   await sdk.close();
 /// }
@@ -66,67 +49,69 @@ import 'workflow/workflow_runtime.dart';
 final class RudraSdk {
   /// Creates an SDK configured for one filesystem target.
   ///
-  /// [target_id] identifies the configured target environment.
-  /// [inspector] supplies its read-only filesystem observation capability.
+  /// [target_id] identifies the selected filesystem environment.
   ///
-  /// [connection_setup] optionally configures trusted host endpoint
-  /// resolution. Omitting it configures independent local filesystem
-  /// inspection without host-backed application capabilities.
+  /// [connection_setup] supplies trusted host endpoint resolution.
   ///
   /// [workflow_runtime] optionally supplies application messaging
-  /// serialization configuration for host-backed capabilities.
-  /// The standard workflow runtime is used when omitted.
+  /// serialization configuration. The standard runtime is selected
+  /// when omitted.
   ///
   /// [communication_factory] optionally substitutes default
-  /// communication construction for configured host connectivity.
+  /// communication construction.
   ///
-  /// Throws [ArgumentError] for a blank target identifier or
-  /// connection-specific options without a connection setup capability.
-  ///
+  /// Throws [ArgumentError] for a blank target identifier.
   /// Application messaging configuration failures propagate.
+  ///
   /// Construction does not acquire external resources.
   RudraSdk({
-    required String target_id,
-    required TargetInspector inspector,
-    ClientConnectionSetup? connection_setup,
+    required this.target_id,
+    required ClientConnectionSetup connection_setup,
     WorkflowRuntime? workflow_runtime,
     ClientCommunicationFactory? communication_factory,
-  }) : filesystem = FilesystemService(
-         target_id: target_id,
-         inspector: inspector,
-       ) {
-    if (connection_setup == null &&
-        (workflow_runtime != null || communication_factory != null)) {
-      throw ArgumentError(
-        'Host communication options require a connection setup capability.',
+  }) {
+    if (target_id.trim().isEmpty) {
+      throw ArgumentError.value(
+        target_id,
+        'target_id',
+        'The target identifier must not be blank.',
       );
     }
 
-    _connection = connection_setup == null
-        ? null
-        : ClientConnection(
-            setup: connection_setup,
-            runtime: workflow_runtime ?? WorkflowRuntime.standard(),
-            communication_factory: communication_factory,
-            register_handlers: _state_observer.register_handlers,
-            on_session_available: _state_observer.attach_session,
-            on_session_unavailable: _state_observer.detach_session,
-          );
+    _connection = ClientConnection(
+      setup: connection_setup,
+      runtime: workflow_runtime ?? WorkflowRuntime.standard(),
+      communication_factory: communication_factory,
+      register_handlers: _state_observer.register_handlers,
+      on_session_available: _state_observer.attach_session,
+      on_session_unavailable: _state_observer.detach_session,
+    );
+
+    filesystem = FilesystemService(
+      target_id: target_id,
+      connection: _connection,
+    );
+
+    workflows = WorkflowService(target_id: target_id, connection: _connection);
   }
 
-  /// Provides platform-independent filesystem operations.
+  /// Identifier of the selected filesystem environment.
   ///
-  /// The service performs read-only inspection through the configured
-  /// target adapter and exposes standardized filesystem results.
-  ///
-  /// Accessing this property performs no filesystem operations.
-  final FilesystemService filesystem;
+  /// The identifier is scoped to the host's configured targets.
+  final String target_id;
 
-  /// Shared connection lifecycle for host-backed application capabilities.
+  /// Provides host-backed read-only filesystem operations.
   ///
-  /// Absent when the SDK is configured exclusively for independent
-  /// local filesystem inspection.
-  late final ClientConnection? _connection;
+  /// Its identity remains stable across communication replacement.
+  late final FilesystemService filesystem;
+
+  /// Provides host-backed workflow application operations.
+  ///
+  /// Its identity remains stable across communication replacement.
+  late final WorkflowService workflows;
+
+  /// Shared authenticated application connection owned by this SDK.
+  late final ClientConnection _connection;
 
   /// Remote state observation owned by this SDK.
   ///
@@ -134,46 +119,23 @@ final class RudraSdk {
   /// and distributes verified state to independent local listeners.
   final RemoteStateObserver _state_observer = RemoteStateObserver();
 
-  /// Provides host-backed workflow application operations.
-  ///
-  /// The service shares this SDK's configured target and connection.
-  /// Its identity remains stable across communication replacement.
-  ///
-  /// Throws [StateError] when host connectivity is not configured.
-  ///
-  /// Accessing the service does not establish a connection or
-  /// execute a workflow operation.
-  late final WorkflowService workflows = WorkflowService(
-    target_id: target_id,
-    connection: _require_connection(),
-  );
+  /// Whether an authenticated host connection is available.
+  bool get is_connected => _connection.is_connected;
 
-  /// Identifies the filesystem target associated with this SDK.
-  ///
-  /// Delegates to the configured filesystem service.
-  /// The identifier is scoped to the application's configured targets.
-  String get target_id => filesystem.target_id;
-
-  /// Whether this SDK has an available authenticated host connection.
-  bool get is_connected => _connection?.is_connected ?? false;
-
-  /// Whether owned host communication resources have been released.
-  ///
-  /// Returns true for an SDK without configured host connectivity.
-  bool get resources_released => _connection?.resources_released ?? true;
+  /// Whether owned communication resources have been released.
+  bool get resources_released => _connection.resources_released;
 
   /// Establishes the configured authenticated host connection.
   ///
   /// Returns after successful connection establishment.
   ///
-  /// Throws [StateError] when host connectivity is not configured,
-  /// already connected, permanently closed or a connection lifecycle
-  /// operation is executing.
+  /// Throws [StateError] when already connected, permanently closed
+  /// or a connection lifecycle operation is executing.
   ///
   /// Configuration, authentication and connection failures propagate.
   /// Connecting does not start or install a host service.
   Future<void> connect() async {
-    await _require_connection().connect();
+    await _connection.connect();
   }
 
   /// Replaces the current host communication lifecycle.
@@ -181,41 +143,34 @@ final class RudraSdk {
   /// Returns after previous resources have been released and an
   /// independent authenticated connection has been established.
   ///
-  /// Throws [StateError] when host connectivity is not configured,
-  /// permanently closed or a lifecycle operation is executing.
+  /// Throws [StateError] when permanently closed or a connection
+  /// lifecycle operation is executing.
   ///
   /// Connection and resource disposal failures propagate.
   /// Previously submitted application requests are not repeated.
   Future<void> reconnect() async {
-    await _require_connection().reconnect();
+    await _connection.reconnect();
   }
 
-  /// Reads the latest verified composite application state from the host.
+  /// Reads the latest verified composite application state.
   ///
-  /// Returns a non-null [RudraState]. A null current workflow within
-  /// that state represents verified absence of an unfinished workflow.
+  /// Returns an authoritative [RudraState]. A null current workflow
+  /// represents verified absence of an unfinished workflow.
   ///
   /// Each invocation performs an independent authoritative query.
   ///
-  /// Throws [StateError] when host connectivity is not configured
-  /// or the authenticated connection is unavailable.
-  ///
+  /// Throws [StateError] when authenticated connectivity is unavailable.
   /// Communication, restoration and remote execution failures propagate.
-  /// Unavailable state is never represented as verified workflow absence.
   ///
-  /// Reading does not submit a command or initialize absent persistence.
+  /// Reading does not initialize absent workflow persistence.
   ///
   /// Example:
   /// ```dart
   /// final state = await sdk.read_state();
-  /// final current = state.workflows.current_workflow;
-  ///
-  /// print(current?.identity.workflow_id);
+  /// print(state.workflows.current_workflow);
   /// ```
   Future<RudraState> read_state() async {
-    final response = await _require_connection().request(
-      const StateReadRequest(),
-    );
+    final response = await _connection.request(const StateReadRequest());
 
     return response.state;
   }
@@ -228,14 +183,14 @@ final class RudraSdk {
 
   /// Observes initial and subsequent verified application state.
   ///
-  /// Each listener receives state through the SDK's shared remote
-  /// subscription. Rapid publications may be coalesced.
+  /// Returns an independent local observation stream sharing the SDK's
+  /// remote subscription. Rapid publications may be coalesced.
   ///
-  /// Unavailable communication and synchronization failures terminate
-  /// observation with an error rather than reporting verified absence.
+  /// Communication and synchronization failures terminate affected
+  /// observations with an error.
   ///
-  /// Following reconnection, consumers establish a fresh observation.
-  /// Cancelling the last local listener retires the remote subscription.
+  /// Following reconnection, consumers establish fresh observations.
+  /// Cancelling the last listener retires the remote subscription.
   ///
   /// Example:
   /// ```dart
@@ -254,8 +209,8 @@ final class RudraSdk {
   /// Returns an independent local status stream. Intermediate status
   /// changes may be coalesced for slow or paused listeners.
   ///
-  /// Unlike application-state observation, status observation remains
-  /// available across connection replacement.
+  /// Status observation remains available across connection
+  /// replacement and terminates upon permanent SDK closure.
   ///
   /// Example:
   /// ```dart
@@ -277,29 +232,13 @@ final class RudraSdk {
   /// have drained and local observation has terminated.
   ///
   /// Paused frontend listeners do not delay resource disposal.
-  ///
   /// Repeated successful closure has no additional effect.
-  /// An SDK configured exclusively for local inspection has no
-  /// communication resources to release.
   ///
-  /// Connection resource disposal failures propagate.
+  /// Resource disposal failures propagate.
   /// Closing a frontend connection does not terminate RudraHost.
   Future<void> close() async {
-    await _connection?.close();
+    await _connection.close();
 
     _state_observer.close();
-  }
-
-  /// Returns the configured host connection capability.
-  ///
-  /// Throws [StateError] when host connectivity is not configured.
-  ClientConnection _require_connection() {
-    final connection = _connection;
-
-    if (connection == null) {
-      throw StateError('SDK host connectivity is not configured.');
-    }
-
-    return connection;
   }
 }

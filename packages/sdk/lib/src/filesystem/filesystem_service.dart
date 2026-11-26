@@ -1,217 +1,164 @@
 import 'package:rudra_target_contracts/rudra_target_contracts.dart';
+import 'package:uuid/uuid.dart';
+
+import '../client/client_connection.dart';
 
 import 'directory_listing.dart';
 import 'inspection_issue.dart';
 
-/// Provides platform-independent filesystem inspection operations.
+import 'messaging/list/filesystem_list_messages.dart';
+
+/// Provides host-backed read-only filesystem inspection.
 ///
-/// FilesystemService is an application-level SDK service.
+/// Filesystem operations execute through the SDK's shared authenticated
+/// connection against one configured filesystem target.
 ///
-/// It coordinates filesystem observations through an injected
-/// [TargetInspector] without depending on its implementation.
-///
-/// The service does not depend on CLI frameworks, Flutter,
-/// native filesystem APIs, or persistence implementations.
-///
-/// Each instance operates against one configured filesystem
-/// target, identified by [target_id].
-///
-/// All operations are read-only.
-///
-/// The service does not:
-/// - Modify or delete filesystem entries.
-/// - Decide whether filesystem entries are safe to remove.
-/// - Follow symbolic links implicitly.
-/// - Create or manage inspection sessions.
-/// - Interpret paths using the frontend host's platform.
-/// - Infer unavailable metadata.
-/// - Treat incomplete observations as complete.
+/// Bounded observation batches are assembled into immutable directory
+/// listings independently of frontend presentation.
 ///
 /// Example:
 /// ```dart
-/// final service = FilesystemService(
-///   target_id: 'local-macos',
-///   inspector: target_inspector,
+/// final listing = await sdk.filesystem.list(
+///   directory: TargetPath('/workspace'),
 /// );
 ///
-/// final listing = await service.list(
-///   directory: TargetPath('/Users/example'),
-/// );
-///
-/// if (listing.is_complete) {
-///   print('Directory inspection completed.');
-/// }
-///
-/// for (final entry in listing.entries) {
-///   print(entry.path.value);
-/// }
+/// print(listing.entries.length);
+/// print(listing.is_complete);
 /// ```
 final class FilesystemService {
-  /// Creates a filesystem service for one configured target.
+  /// Creates a filesystem service for the configured [target_id].
   ///
-  /// [target_id] identifies the target within the application's
-  /// configured target registry.
+  /// [connection] supplies authenticated application request execution.
+  /// Its lifecycle remains owned by the composing SDK.
   ///
-  /// [inspector] implements the platform-independent filesystem
-  /// inspection contract for that target.
-  ///
-  /// The caller must ensure that [target_id] identifies the same
-  /// target environment represented by [inspector].
-  ///
-  /// Throws [ArgumentError] when [target_id] is blank.
-  ///
-  /// Construction does not inspect or modify filesystem content.
+  /// Throws [ArgumentError] for a blank target identifier.
+  /// Construction does not establish communication or inspect files.
   FilesystemService({
-    required String target_id,
-    required TargetInspector inspector,
-  }) : target_id = _validate_target_id(target_id),
-       _inspector = inspector;
-
-  /// Identifies the filesystem target served by this instance.
-  ///
-  /// The identifier is preserved without normalization.
-  ///
-  /// It is scoped to the application's configured targets and
-  /// must not be assumed globally unique.
-  final String target_id;
-
-  /// Platform-independent filesystem inspection adapter.
-  ///
-  /// The concrete implementation is supplied by the application
-  /// composition boundary.
-  ///
-  /// SDK services must not instantiate native adapters directly.
-  final TargetInspector _inspector;
-
-  /// Lists and inspects the immediate children of [directory].
-  ///
-  /// The directory must be expressed as an absolute path using
-  /// the target platform's native filesystem syntax.
-  ///
-  /// Relative path resolution belongs to a separate, explicitly
-  /// defined target-aware operation or application input boundary.
-  ///
-  /// Enumeration is performed through
-  /// [TargetInspector.list_directory].
-  ///
-  /// Every discovered child is inspected through
-  /// [TargetInspector.inspect].
-  ///
-  /// The resulting [DirectoryListing] contains:
-  /// - The configured target identifier.
-  /// - The originally requested directory.
-  /// - Successfully inspected filesystem entries.
-  /// - Typed inspection issues.
-  /// - An explicit completion indicator.
-  ///
-  /// A failure while inspecting an individual child does not
-  /// discard previously collected entries or prevent attempts
-  /// to inspect subsequent children.
-  ///
-  /// A directory-enumeration failure terminates enumeration.
-  /// Successfully collected entries are preserved, and the
-  /// result is marked incomplete.
-  ///
-  /// The listing is complete only when enumeration and every
-  /// required child inspection succeed without reported issues.
-  ///
-  /// Inspection failures represented by
-  /// [TargetInspectionException] are converted into
-  /// [InspectionIssue] response data.
-  ///
-  /// Unexpected exceptions are propagated rather than silently
-  /// classified as filesystem failures.
-  ///
-  /// Entry ordering follows the target inspector's enumeration
-  /// order and is not guaranteed to be sorted.
-  ///
-  /// The entire listing is collected in memory before returning.
-  /// Streaming SDK results and cancellation of large listings
-  /// will require separate API contracts.
-  ///
-  /// Filesystem observations are not atomic snapshots.
-  /// Entries may change while the listing is being produced.
-  ///
-  /// This operation is strictly read-only and never authorizes
-  /// cleanup or deletion.
-  ///
-  /// Example:
-  /// ```dart
-  /// final listing = await service.list(
-  ///   directory: TargetPath('/Users/example/Downloads'),
-  /// );
-  ///
-  /// for (final entry in listing.entries) {
-  ///   print(entry.path.value);
-  /// }
-  ///
-  /// for (final issue in listing.issues) {
-  ///   print(issue.code);
-  /// }
-  ///
-  /// if (!listing.is_complete) {
-  ///   print('The directory listing is incomplete.');
-  /// }
-  /// ```
-  Future<DirectoryListing> list({required TargetPath directory}) async {
-    final entries = <FilesystemEntry>[];
-    final issues = <InspectionIssue>[];
-
-    try {
-      // Enumerate only immediate children. Recursive traversal
-      // is a separate SDK responsibility.
-      await for (final child_path in _inspector.list_directory(directory)) {
-        try {
-          // Inspect each child without implicitly following its
-          // final symbolic-link component.
-          final entry = await _inspector.inspect(child_path);
-
-          entries.add(entry);
-        } on TargetInspectionException catch (error) {
-          // Preserve the typed failure and continue inspecting
-          // remaining directory entries.
-          //
-          // A failed entry must never be represented using
-          // fabricated metadata or silently omitted.
-          issues.add(InspectionIssue.from_target_exception(error));
-        }
-      }
-    } on TargetInspectionException catch (error) {
-      // Enumeration failed or could not begin.
-      //
-      // Previously inspected entries remain useful observations,
-      // but the directory inventory is now incomplete.
-      issues.add(InspectionIssue.from_target_exception(error));
-    }
-
-    // Completion depends on successful enumeration and inspection.
-    // Any captured issue makes the result incomplete.
-    return DirectoryListing(
-      target_id: target_id,
-      directory: directory,
-      entries: entries,
-      is_complete: issues.isEmpty,
-      issues: issues,
-    );
-  }
-
-  /// Validates a configured target identifier.
-  ///
-  /// The identifier must contain at least one non-whitespace
-  /// character.
-  ///
-  /// The original spelling is preserved.
-  ///
-  /// Throws [ArgumentError] when [value] is blank.
-  static String _validate_target_id(String value) {
-    if (value.trim().isEmpty) {
+    required this.target_id,
+    required ClientConnection connection,
+  }) : _connection = connection {
+    if (target_id.trim().isEmpty) {
       throw ArgumentError.value(
-        value,
+        target_id,
         'target_id',
         'The target identifier must not be blank.',
       );
     }
+  }
 
-    return value;
+  /// Identifier of the configured filesystem environment.
+  final String target_id;
+
+  /// Borrowed authenticated application request capability.
+  final ClientConnection _connection;
+
+  /// Lists and inspects the immediate children of [directory].
+  ///
+  /// The directory must use absolute target-native path syntax.
+  ///
+  /// Returns an immutable directory listing containing successful
+  /// entries, typed inspection issues and authoritative completion
+  /// status.
+  ///
+  /// All requests belonging to the inspection remain bound to
+  /// the same authenticated communication session.
+  ///
+  /// Throws [StateError] when connectivity is unavailable, replaced,
+  /// or the host returns inconsistent inspection metadata.
+  ///
+  /// Communication and remote execution failures propagate.
+  /// Failed transfers are explicitly retired where possible.
+  ///
+  /// The complete listing is accumulated in memory before returning.
+  /// Filesystem observations are not atomic snapshots.
+  Future<DirectoryListing> list({required TargetPath directory}) async {
+    final session = _connection.require_session();
+
+    final inspection_id = Uuid().v4();
+
+    final entries = <FilesystemEntry>[];
+    final issues = <InspectionIssue>[];
+
+    try {
+      final accepted = await _connection.request(
+        FilesystemListOpenRequest(
+          inspection_id: inspection_id,
+          target_id: target_id,
+          directory: directory,
+        ),
+        session: session,
+      );
+
+      if (accepted.inspection_id != inspection_id) {
+        throw StateError('Filesystem inspection admission mismatch.');
+      }
+
+      var sequence = 1;
+
+      while (true) {
+        final batch = await _connection.request(
+          FilesystemListNextRequest(
+            inspection_id: inspection_id,
+            sequence: sequence,
+          ),
+          session: session,
+        );
+
+        // Validate the logical inspection and batch position
+        // before accepting any returned observations.
+        if (batch.inspection_id != inspection_id ||
+            batch.sequence != sequence) {
+          throw StateError('Filesystem observation batch mismatch.');
+        }
+
+        entries.addAll(batch.entries);
+        issues.addAll(batch.issues);
+
+        if (batch.status.is_terminal) {
+          final is_complete =
+              batch.status == FilesystemListBatchStatus.complete;
+
+          if (is_complete && issues.isNotEmpty) {
+            throw StateError('Filesystem inspection completion mismatch.');
+          }
+
+          return DirectoryListing(
+            target_id: target_id,
+            directory: directory,
+            entries: entries,
+            issues: issues,
+            is_complete: is_complete,
+          );
+        }
+
+        sequence++;
+      }
+    } catch (_) {
+      // Admission may have succeeded even when its response
+      // was lost. Retire the original inspection identifier
+      // without submitting another inspection operation.
+      try {
+        final cancelled = await _connection.request(
+          FilesystemListCancelRequest(inspection_id: inspection_id),
+          session: session,
+        );
+
+        if (cancelled.inspection_id != inspection_id) {
+          throw StateError('Filesystem inspection cancellation mismatch.');
+        }
+      } catch (_) {
+        // When retirement cannot be confirmed, terminate the
+        // original session rather than leave an abandoned
+        // inspection attached to an otherwise usable session.
+        try {
+          await session.close();
+        } catch (_) {
+          // Preserve the original application failure.
+          // Connection ownership retains disposal verification.
+        }
+      }
+
+      rethrow;
+    }
   }
 }

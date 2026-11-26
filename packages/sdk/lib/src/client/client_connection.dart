@@ -162,23 +162,44 @@ final class ClientConnection {
     return _exclusive(_open_connection);
   }
 
-  /// Sends a typed application [request] through the current connection.
+  /// Returns the currently admitted authenticated session.
   ///
-  /// [R] identifies the associated response type.
-  /// Returns the correlated application response.
+  /// Throws [StateError] when no authenticated session is available.
   ///
-  /// Throws [StateError] when communication is unavailable.
-  /// Request and communication failures propagate unchanged.
-  ///
-  /// Failed requests are never implicitly retried.
-  Future<R> request<R extends Response>(Request<R> request) async {
+  /// The returned session is borrowed. Connection lifecycle ownership
+  /// remains with this component.
+  MessageSession require_session() {
     final owned = _owned;
 
     if (owned == null || !owned.available) {
       throw StateError('SDK connection is unavailable.');
     }
 
-    return owned.session!.request(request);
+    return owned.session!;
+  }
+
+  /// Executes an authenticated application [request].
+  ///
+  /// [session] optionally binds execution to a previously acquired
+  /// session for operations spanning multiple correlated requests.
+  ///
+  /// Returns the typed application response.
+  ///
+  /// Throws [StateError] when the connection is unavailable or the
+  /// supplied session is no longer the admitted session.
+  ///
+  /// Communication and remote execution failures propagate.
+  Future<R> request<R extends Response>(
+    Request<R> request, {
+    MessageSession? session,
+  }) async {
+    final current = require_session();
+
+    if (session != null && !identical(current, session)) {
+      throw StateError('SDK connection has been replaced.');
+    }
+
+    return current.request(request);
   }
 
   /// Permanently closes this connection lifecycle owner.
