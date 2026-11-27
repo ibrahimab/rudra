@@ -1,6 +1,8 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** 7A through 7D.3A implemented. Native multi-user provisioning verification, 7D.3B and 7E remain open.
+**Status:** 7A through 7D.3B implemented.
+Reactive Explorer acceptance demonstrated.
+Final workspace verification and 7E remain open.
 **Created:** 24 November 2026
 **Updated:** 27 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -1342,32 +1344,55 @@ Real macOS multi-user permissions remain an open acceptance gate.
 
 #### 7D.3B — Reactive Explorer integration
 
-- Establish authenticated connectivity and initial verified application
-  state observation.
-- Replace manual application-state refreshes with RudraSdk.observe_state().
-- Serialize terminal input and observation-driven presentation updates.
-- Preserve physical input decoding, feature-owned action contributions,
-  focused view models and stateless widgets.
-- Distinguish verified workflow absence from unavailable application
-  state.
-- Preserve explicit workflow identity when executing selected actions.
-- Cancel observations and release owned connections on Quit, EOF,
-  interrupt and error.
-- Preserve terminal restoration and verified resource disposal.
-- Verify independent Explorer sessions observing the same authoritative
-  host.
+**Implementation:** `0b806f37280d3b3c958963903217497b51cfe0a2`.
 
-Explorer presentation ownership must accommodate future filesystem
-observation without coupling filesystem navigation to workflow state
-publication.
+Explorer consumes authoritative application state through
+RudraSdk.observe_state() and observes synchronization availability
+through the public SDK.
 
-Automatic filesystem change observation is deferred. Native service
-installation and lifecycle management remain within 7E.
+The controller owns navigation, interaction admission, observation
+subscriptions and presentation preparation. The runner owns terminal
+input, serialized operation execution, rendering and termination.
 
-**Gate:** Two independently running Explorers and a CLI command share
-one host, render committed workflow changes correctly and never open
-workflow persistence or execute native filesystem inspection in their
-own processes.
+The controller retains the latest verified application snapshot and
+the snapshot incorporated into the last successful render.
+
+Registered actions require these snapshots to match. An intervening
+state change rejects the interaction locally and requests renewed
+user input. Admitted operations retain their explicit workflow
+identity and remain subject to authoritative host validation.
+
+Ordinary keyboard input is discarded while an asynchronous operation
+is executing. Termination stops further admission and allows the
+admitted operation to settle.
+
+Presentation invalidations are coalesced. Rendering never overlaps
+another render or an admitted asynchronous operation.
+
+Successful workflow actions await updated authoritative observation
+before further feature actions are admitted.
+
+Unavailable synchronization is distinguished from verified workflow
+absence. Explorer retains its directory presentation while disabling
+host-dependent interactions.
+
+Controller-owned observations are cancelled during disposal.
+Terminal restoration precedes product-owned SDK disposal.
+
+**Manual acceptance on 27 November 2026:**
+
+- Two independent Explorer processes connected to one isolated host.
+- Workflow Start and Stop initiated from either Explorer were
+  reflected in both presentations.
+- An independent CLI workflow command updated both running Explorers.
+- No frontend-local persistence or execution fallback was introduced.
+
+**Verification:** CLI verification passed. Final workspace verification
+and production build confirmation remain outstanding.
+
+Automatic filesystem change observation is deferred.
+Native installation, managed service lifecycle and real multi-user
+permission verification remain within 7E.
 
 ### 7E — Platform plugins, explicit installation and end-to-end verification
 
@@ -1444,7 +1469,6 @@ These are **design checkpoints**, not permission to replace the agreed SDK-first
 - **7C.3:** Host-backed application capabilities belong beneath the existing `RudraSdk` facade. Shared connection ownership and remote observation remain independently owned SDK infrastructure.
 - **7D.1:** Unified SDK composition, host-authoritative target validation, filesystem messaging and bounded result transfer.
 - **7D.2:** Trusted production frontend connectivity, authoritative persistence scope and removal of superseded frontend execution dependencies.
-- **7D.3B:** Explorer's serialized input/observation event loop and observation lifecycle.
 - **7E:** Plugin versus install-step contract shapes, registry/installation plan and failure semantics, concrete launchd service/install integration, packaging, restart policy, verification and treatment of unavailable/disabled hosts. A power plugin remains optional and requires an explicit need.
 
 Decide these from inspected code and real platform constraints immediately before implementation. Do not present proposed wire APIs or service mechanics as existing capabilities.

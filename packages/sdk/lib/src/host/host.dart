@@ -11,6 +11,10 @@ export 'platform/contracts/host_identity_provider.dart';
 export 'platform/contracts/host_ownership_provider.dart';
 export 'platform/contracts/host_ownership_lease.dart';
 
+/// Optional host platform capability contributions.
+export 'plugins/host_platform_plugin.dart';
+export 'plugins/host_platform_registry.dart';
+
 /// Portable host execution lifecycle.
 export 'runtime/rudra_host.dart';
 

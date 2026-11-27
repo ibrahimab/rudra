@@ -814,14 +814,17 @@ bare terminal rendering backend.
 
 `TerminalInput` converts raw input bytes into physical keys.
 
-`ExplorerRunner` forwards decoded keys to the controller, awaits each operation
-and redraws when requested. It supplies the available viewport rows and maps
-the controller's inspection outcome to a CLI exit status.
+`ExplorerRunner` coordinates decoded terminal input and controller
+presentation invalidations. It serializes admitted asynchronous
+operations and coalesces pending redraws.
 
-Explorer binds its navigation and exit keys to local controller operations.
-Feature actions declare their own shortcuts, which the action registry resolves
-from decoded keys. The controller awaits the matched operation and refreshes
-verified SDK state after a successful feature action.
+Ordinary keyboard input is discarded during asynchronous operations.
+Termination remains available and waits for the admitted operation
+to settle.
+
+Explorer binds navigation keys to local controller operations.
+Feature actions declare their own shortcuts, which the action
+registry resolves from decoded keys.
 
 DartExplorerTerminalHost manages terminal input modes, alternate
 screen activation, cursor visibility, input subscriptions, signal
@@ -838,10 +841,19 @@ filesystem inspection begins.
 The initial directory is inspected before interactive terminal
 modes are enabled.
 
-Navigation inspections and registered actions run sequentially within the
-guarded terminal lifecycle. The controller explicitly refreshes verified
-application state before the next frame after a successful action. Reactive
-state observation is scheduled for 7D.3B.
+Explorer observes verified application state and synchronization
+availability through the public SDK.
+
+The controller distinguishes the latest observed application snapshot
+from the snapshot incorporated into the last successful render.
+
+Feature actions require both snapshots to match before dispatch.
+The host remains authoritative for execution and workflow identity
+validation.
+
+Observation-driven presentation updates replace explicit post-action
+state reads. Synchronization loss retains the directory presentation
+and disables host-dependent interactions.
 
 All filesystem observations pass through RudraSdk.filesystem.
 
@@ -1561,7 +1573,8 @@ The repository contains:
 - Generic CLI rendering contract.
 - Bare terminal renderers.
 - Terminal text sanitization and semantic styling.
-- Explorer MVC with registered feature actions and explicit SDK state refresh.
+- Explorer MVC with registered feature actions and authoritative
+  reactive SDK state observation.
 - Explorer keyboard-input decoder.
 
 ### 16.2 CLI architecture
@@ -1597,7 +1610,7 @@ passes verification.
 
 The following remain future development work:
 
-- Reactive Explorer state synchronization and managed macOS host installation.
+- Managed macOS host installation and service lifecycle.
 - Persistent cleanup planning and execution audit beyond workflow lifecycle events.
 - Persistent dry-run cleanup candidate selection.
 - Cleanup-plan orchestration.
