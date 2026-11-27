@@ -1408,6 +1408,57 @@ permission verification remain within 7E.
 
 **Gate:** A deliberately configured macOS installation can run the two-terminal acceptance scenario; host restarts and client reconnects recover truthful state, no duplicate workflow commits occur, installer operations never modify workflow history, and the SDK host core remains portable. Native Windows/Linux support remains separately scoped.
 
+#### 7E.1A — Platform plugin contracts and registry
+
+**Implemented and developer-verified:** `9847e61`.
+
+The portable SDK exposes HostPlatformPlugin,
+HostPlatformRegistration and HostPlatformRegistry.
+
+Plugins contribute inactive capability implementations through
+restricted registration scopes. Capabilities are indexed by their
+declared contract types.
+
+The completed registry is immutable. Duplicate plugin identifiers,
+conflicting capability providers and reuse of closed registration
+scopes are rejected.
+
+Registration and capability resolution perform no operational
+activation. Native composition retains responsibility for
+selecting and consuming platform capabilities.
+
+#### 7E.1B — Portable installation contracts and orchestration
+
+The portable SDK defines independently contributed installation
+steps, immutable inspection plans and explicit execution results.
+
+HostInstallRegistry validates step identities and prerequisites,
+rejects cyclic dependencies and establishes deterministic
+execution ordering.
+
+HostInstaller provides read-only planning and verification,
+explicit installation and reverse-order uninstallation.
+
+Execution performs preflight inspection, immediate reinspection
+before mutation and verification after each applied change.
+
+Blocked preflight prevents mutation. Execution failures stop
+subsequent steps and retain explicit partial-completion evidence.
+Previously completed operations are not rolled back.
+
+Native implementations retain responsibility for resource
+ownership, permission validation, cross-process coordination
+and preservation of workflow persistence.
+
+Plugin registration and installation orchestration remain
+independent. Native composition injects required capabilities
+into the installation contributions that consume them.
+
+No changes to RudraHost execution, communication, workflow
+processing or persistence ownership are required.
+
+**Verification:** Pending local execution.
+
 ## 7. Test architecture and acceptance checklist
 
 Test at the feature's owning boundary. Prefer separate unit, contract, real-persistence integration and process-level tests. Do not expand generic terminal decoder tests for new workflow actions.

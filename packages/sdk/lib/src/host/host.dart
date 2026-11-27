@@ -15,6 +15,13 @@ export 'platform/contracts/host_ownership_lease.dart';
 export 'plugins/host_platform_plugin.dart';
 export 'plugins/host_platform_registry.dart';
 
+/// Explicit host installation contracts and orchestration.
+export 'install/host_install_step.dart';
+export 'install/host_install_registry.dart';
+export 'install/host_install_plan.dart';
+export 'install/host_install_result.dart';
+export 'install/host_installer.dart';
+
 /// Portable host execution lifecycle.
 export 'runtime/rudra_host.dart';
 
