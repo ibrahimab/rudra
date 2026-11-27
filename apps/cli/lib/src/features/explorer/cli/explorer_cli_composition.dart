@@ -16,7 +16,7 @@ import 'explorer_cli_module.dart';
 /// The composition supplies the default root and borrows an authenticated SDK
 /// after argument validation. [action_registry] supplies the product's chosen
 /// contributions. [error_output] receives diagnostics. [create_terminal_host]
-/// optionally supplies an isolated terminal after controller initialization.
+/// optionally supplies an isolated terminal for the runner.
 ///
 /// Returns the feature module. Connection and initialization errors propagate
 /// when the command executes. SDK disposal belongs to the caller.
@@ -37,7 +37,7 @@ ExplorerCliModule compose_explorer_cli({
 }) => ExplorerCliModule(
   working_directory: sdk_composition.working_directory,
   create_runner: (directory) async {
-    final controller = await ExplorerController.create(
+    final controller = ExplorerController(
       sdk: await sdk_composition.connect(),
       starting_directory: directory,
       action_registry: action_registry,

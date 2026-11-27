@@ -14,7 +14,6 @@ import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart'
 
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
-import 'package:rudra_cli/src/features/explorer/terminal/terminal_key.dart';
 
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
@@ -101,7 +100,7 @@ void main() {
             _entry('/root/docs', FilesystemEntryKind.directory),
             _entry('/root/docs/readme.md', FilesystemEntryKind.regularFile),
           ],
-          keys: '\r\x1B[D\r\bQ\r',
+          frame_keys: ['\r', '\x1B[D', '\r', '\b', 'Q\r'],
         );
 
         final status = await scenario.runner.run();
@@ -201,7 +200,7 @@ void main() {
             message: 'Permission denied.',
           ),
         },
-        keys: '\rq',
+        frame_keys: ['\r', 'q'],
       );
 
       final status = await scenario.runner.run();
@@ -238,7 +237,7 @@ void main() {
             message: 'Permission denied.',
           ),
         },
-        keys: '\r\x1B[Dq',
+        frame_keys: ['\r', '\x1B[D', 'q'],
       );
 
       final status = await scenario.runner.run();
@@ -555,61 +554,6 @@ void main() {
       expect(scenario.terminal.invocations, 0);
     });
 
-    test('renders verified state before dispatching the next action', () async {
-      final action_entered = Completer<void>();
-      final release_action = Completer<void>();
-      final dispatched = <RudraState>[];
-      final presented = <RudraState>[];
-
-      final registry = ExplorerActionRegistry([
-        _SyntheticContribution(
-          on_present: presented.add,
-          action: _SyntheticAction(
-            id: 'fixture.probe',
-            shortcut: 'p',
-            operation: (model, state) async {
-              expect(model.current_directory.value, '/root');
-              dispatched.add(state);
-              if (dispatched.length == 1) {
-                action_entered.complete();
-                await release_action.future;
-              }
-            },
-          ),
-        ),
-      ]);
-
-      final scenario = await _Scenario.create(
-        children: {'/root': []},
-        entries: [],
-        keys: 'pPq',
-        action_registry: registry,
-      );
-
-      final running = scenario.runner.run();
-      try {
-        await action_entered.future.timeout(const Duration(seconds: 5));
-        expect(scenario.renderer.frames, hasLength(1));
-        expect(dispatched, hasLength(1));
-        await expectLater(
-          scenario.controller.handle_key(const TerminalCharacterKey('p')),
-          throwsStateError,
-        );
-      } finally {
-        release_action.complete();
-      }
-
-      expect(await running, RudraExitCode.success.value);
-      expect(dispatched, hasLength(2));
-      expect(presented, hasLength(3));
-      expect(dispatched.first, same(presented[0]));
-      expect(dispatched.last, same(presented[1]));
-      expect(presented[1], isNot(same(presented[0])));
-      expect(presented[2], isNot(same(presented[1])));
-      expect(scenario.renderer.frames, hasLength(3));
-      expect(scenario.terminal.restored, isTrue);
-    });
-
     test('ignores printable keys without registered actions', () async {
       final scenario = await _Scenario.create(
         children: {'/root': []},
@@ -652,36 +596,6 @@ void main() {
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.is_closed, isTrue);
     });
-
-    test('restores terminal when application-state refresh fails', () async {
-      late final _Scenario scenario;
-      final registry = ExplorerActionRegistry([
-        ExplorerFeatureContribution(
-          id: 'fixture',
-          actions: [
-            _SyntheticAction(
-              id: 'fixture.refresh',
-              shortcut: 'r',
-              // Simulate lost connectivity before the controller can read state.
-              operation: (_, _) => scenario.sdk.close(),
-            ),
-          ],
-        ),
-      ]);
-
-      scenario = await _Scenario.create(
-        children: {'/root': []},
-        entries: [],
-        keys: 'rq',
-        action_registry: registry,
-      );
-
-      await expectLater(scenario.runner.run(), throwsStateError);
-
-      expect(scenario.renderer.frames, hasLength(1));
-      expect(scenario.terminal.restored, isTrue);
-      expect(scenario.controller.model?.is_closed, isTrue);
-    });
   });
 }
 
@@ -705,6 +619,8 @@ final class _Scenario {
   ///
   /// [keys] is the terminal input sequence used without a custom source.
   ///
+  /// [frame_keys] optionally sends one input chunk after each rendered frame.
+  ///
   /// [source] optionally supplies a custom terminal byte stream.
   ///
   /// [rows] is the terminal height for the initial frame.
@@ -715,6 +631,7 @@ final class _Scenario {
     required List<FilesystemEntry> entries,
     Map<String, TargetInspectionException> failures = const {},
     String keys = 'q',
+    List<String>? frame_keys,
     Stream<List<int>>? source,
     int rows = 24,
     ExplorerActionRegistry? action_registry,
@@ -730,20 +647,37 @@ final class _Scenario {
     final sdk = await client.connect();
     addTearDown(sdk.close);
 
+    final scripted_input = frame_keys == null
+        ? null
+        : StreamController<List<int>>();
+    if (scripted_input != null) addTearDown(() => scripted_input.close());
+
     final scenario = _Scenario._()
       ..sdk = sdk
       ..inspector = inspector
       ..terminal = _FakeTerminalHost(
-        source: source ?? Stream<List<int>>.fromIterable([ascii.encode(keys)]),
+        source:
+            source ??
+            scripted_input?.stream ??
+            Stream<List<int>>.fromIterable([ascii.encode(keys)]),
         rows: rows,
       )
       ..renderer = _RecordingRenderer()
       ..errors = StringBuffer()
-      ..controller = await ExplorerController.create(
+      ..controller = ExplorerController(
         sdk: sdk,
         starting_directory: TargetPath('/root'),
         action_registry: action_registry,
       );
+
+    if (scripted_input != null) {
+      scenario.renderer.on_render = (_) {
+        final index = scenario.renderer.frames.length - 1;
+        if (index < frame_keys!.length) {
+          scripted_input.add(ascii.encode(frame_keys[index]));
+        }
+      };
+    }
 
     scenario.runner = ExplorerRunner(
       controller: scenario.controller,
@@ -774,22 +708,6 @@ final class _Scenario {
 
   /// Interactive Explorer runner under test.
   late final ExplorerRunner runner;
-}
-
-/// Records the exact SDK snapshot used for each frame.
-final class _SyntheticContribution extends ExplorerFeatureContribution {
-  _SyntheticContribution({
-    required this.on_present,
-    required ExplorerAction action,
-  }) : super(id: 'fixture', actions: [action]);
-
-  final void Function(RudraState) on_present;
-
-  @override
-  ExplorerFeaturePresentation present(RudraState state) {
-    on_present(state);
-    return super.present(state);
-  }
 }
 
 /// Synthetic Explorer action for runner interaction tests.

@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 
 void main() {
   test(
-    'native host and independent CLI processes share authoritative state',
+    'native host, CLI commands and two Explorers share authoritative state',
     () async {
       final directory = await Directory('/private/tmp')
           .createTemp('rudra-app-');
@@ -72,6 +72,20 @@ void main() {
       expect(await lock.exists(), isTrue);
       expect(await File(database).exists(), isFalse);
 
+      final first_frontend_database = '$path/explorer-a.sqlite';
+      final second_frontend_database = '$path/explorer-b.sqlite';
+      final first_explorer = await _ProcessExplorer.start(
+        arguments(['explore'], database_override: first_frontend_database),
+      );
+      final second_explorer = await _ProcessExplorer.start(
+        arguments(['explore'], database_override: second_frontend_database),
+      );
+      await Future.wait([
+        first_explorer.wait_for_status('Workflow: NONE'),
+        second_explorer.wait_for_status('Workflow: NONE'),
+      ]);
+      expect(await File(database).exists(), isFalse);
+
       final competitor = await Process.run(
         Platform.resolvedExecutable,
         arguments(
@@ -112,6 +126,10 @@ void main() {
       final first_id = RegExp(r'ID: (\S+)')
           .firstMatch(winner.stdout as String)!
           .group(1)!;
+      await Future.wait([
+        first_explorer.wait_for_status('ID: $first_id'),
+        second_explorer.wait_for_status('ID: $first_id'),
+      ]);
       final listing = await cli(['ls', path]);
       expect(listing.exitCode, 0, reason: '${listing.stderr}');
       expect(listing.stdout, contains('$path/fixture.txt'));
@@ -119,28 +137,47 @@ void main() {
       final stopped = await cli(['workflow', 'stop']);
       expect(stopped.exitCode, 0, reason: '${stopped.stderr}');
       expect(stopped.stdout, contains('ID: $first_id'));
+      await Future.wait([
+        first_explorer.wait_for_status('Workflow: NONE'),
+        second_explorer.wait_for_status('Workflow: NONE'),
+      ]);
 
-      final next = await cli(['workflow', 'start']);
-      expect(next.exitCode, 0, reason: '${next.stderr}');
-      final next_id = RegExp(r'ID: (\S+)')
-          .firstMatch(next.stdout as String)!
-          .group(1)!;
+      first_explorer.press('s');
+      final next = await second_explorer.wait_for_status('Workflow: ACTIVE');
+      final next_id = RegExp(r'ID: (\S+)').firstMatch(next)!.group(1)!;
       expect(next_id, isNot(first_id));
+      await first_explorer.wait_for_status('ID: $next_id');
+
+      second_explorer.press('x');
+      await Future.wait([
+        first_explorer.wait_for_status('Workflow: NONE'),
+        second_explorer.wait_for_status('Workflow: NONE'),
+      ]);
+      first_explorer.press('s');
+      final retained = await first_explorer.wait_for_status('Workflow: ACTIVE');
+      final retained_id = RegExp(r'ID: (\S+)').firstMatch(retained)!.group(1)!;
+      expect(retained_id, isNot(next_id));
+      await second_explorer.wait_for_status('ID: $retained_id');
+      await first_explorer.quit();
+      expect(await File(first_frontend_database).exists(), isFalse);
+      expect(await File(second_frontend_database).exists(), isFalse);
 
       // Keep the committed WAL and a stale socket by terminating abruptly.
       expect(first_host.process.kill(ProcessSignal.sigkill), isTrue);
       expect(await first_host.process.exitCode, isNot(0));
+      await second_explorer.wait_for_status('Application state: UNAVAILABLE');
+      await second_explorer.quit();
       expect(await lock.exists(), isTrue);
       expect(await File('$database-wal').exists(), isTrue);
 
       final restored_host = await start_host();
       expect(restored_host.readiness, contains('Workflow restored'));
-      expect(restored_host.readiness, contains('Workflow ID: $next_id'));
+      expect(restored_host.readiness, contains('Workflow ID: $retained_id'));
       expect(restored_host.readiness, contains('Workflow version: 1'));
 
       final restored_stop = await cli(['workflow', 'stop']);
       expect(restored_stop.exitCode, 0, reason: '${restored_stop.stderr}');
-      expect(restored_stop.stdout, contains('ID: $next_id'));
+      expect(restored_stop.stdout, contains('ID: $retained_id'));
 
       expect(restored_host.process.kill(ProcessSignal.sigterm), isTrue);
       expect(
@@ -157,4 +194,72 @@ void main() {
     skip: !Platform.isMacOS,
     timeout: Timeout(Duration(minutes: 3)),
   );
+}
+
+/// Runs the production Explorer terminal path in a dedicated macOS PTY.
+final class _ProcessExplorer {
+  _ProcessExplorer(this._process)
+    : _errors = _process.stderr.transform(utf8.decoder).join();
+
+  final Process _process;
+  final Future<String> _errors;
+  late final _output = StreamIterator(
+    _process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
+  );
+  bool _exited = false;
+
+  static Future<_ProcessExplorer> start(List<String> arguments) async {
+    final process = await Process.start(
+      '/usr/bin/script',
+      [
+        '-e',
+        '-q',
+        '/dev/null',
+        '/bin/sh',
+        '-c',
+        r'stty rows 24 cols 180 && exec "$@"',
+        'rudra-explorer-pty',
+        Platform.resolvedExecutable,
+        ...arguments,
+      ],
+      environment: {'TERM': 'xterm-256color'},
+    );
+    final explorer = _ProcessExplorer(process);
+    addTearDown(explorer._dispose);
+    return explorer;
+  }
+
+  void press(String key) => _process.stdin.write(key);
+
+  Future<String> wait_for_status(String text) async {
+    while (await _output.moveNext()) {
+      final line = _output.current;
+      // Frames use color and cursor controls. Assertions concern visible text.
+      final plain = line.replaceAll(RegExp(r'\x1b\[[0-?]*[ -/]*[@-~]'), '');
+      if (plain.contains(text)) return plain;
+    }
+    throw StateError(
+      'Explorer exited before displaying $text. ${await _errors}',
+    );
+  }
+
+  Future<void> quit() async {
+    press('q');
+    // Drain remaining PTY output before waiting for the process to finish.
+    var restored = false;
+    while (await _output.moveNext()) {
+      restored = restored || _output.current.contains('\x1b[?1049l');
+    }
+    final code = await _process.exitCode;
+    _exited = true;
+    expect(code, 0, reason: await _errors);
+    expect(restored, isTrue);
+  }
+
+  Future<void> _dispose() async {
+    if (!_exited) _process.kill(ProcessSignal.sigkill);
+    await _process.exitCode;
+    await _output.cancel();
+    await _process.stdin.close();
+  }
 }

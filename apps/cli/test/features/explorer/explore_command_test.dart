@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/rudra_product_cli.dart';
@@ -31,7 +31,7 @@ void main() {
       final sdk = host.composition();
       addTearDown(sdk.sdk.close);
 
-      final state_read = host.hold_next_response();
+      final observation_response = host.hold_next_response();
       final cli = RudraCli()
         ..register_module(
           compose_explorer_cli(
@@ -45,13 +45,14 @@ void main() {
         );
 
       final invocation = cli.run(['explore']);
+      invocation.ignore();
       try {
-        await state_read.entered.timeout(const Duration(seconds: 5));
+        await observation_response.entered.timeout(const Duration(seconds: 5));
         expect(host.connect_count, 1);
-        expect(fixture.host_creations, 0);
+        expect(fixture.host_creations, 1);
         expect(fixture.terminal.entered, isFalse);
       } finally {
-        state_read.release();
+        observation_response.release();
       }
 
       expect(await invocation, RudraExitCode.success.value);
@@ -385,10 +386,13 @@ void main() {
         // This is a fresh database, with no existing workflow.
         final first = _Fixture(
           children: {'/fixture': []},
-          keys: 'sq',
           database_file: database,
         );
         final host = first.application_host;
+        first.terminal.press_on_frames([
+          ('Workflow: NONE', 's'),
+          ('Workflow: ACTIVE', 'q'),
+        ]);
 
         expect(database_file.existsSync(), isFalse);
 
@@ -478,11 +482,14 @@ void main() {
             FilesystemEntryKind.directory,
           ),
         },
-        // Enter directory, start workflow, then quit.
-        keys: '\rsq',
         database_file: database,
       );
       final host = fixture.application_host;
+      fixture.terminal.press_on_frames([
+        ('Directory: /fixture\x1b', '\r'),
+        ('Directory: /fixture/docs', 's'),
+        ('Workflow: ACTIVE', 'q'),
+      ]);
 
       expect(
         await fixture.create_cli().run(['explore']),
@@ -528,11 +535,11 @@ void main() {
       expect(original, isNotNull);
 
       // Explorer restores the workflow and processes explicit X.
-      final explorer = _Fixture(
-        children: {'/fixture': []},
-        keys: 'xq',
-        host: host,
-      );
+      final explorer = _Fixture(children: {'/fixture': []}, host: host);
+      explorer.terminal.press_on_frames([
+        ('Workflow: ACTIVE', 'x'),
+        ('Workflow: NONE', 'q'),
+      ]);
 
       expect(
         await explorer.create_cli().run(['explore']),
@@ -570,49 +577,52 @@ void main() {
     });
 
     test(
-      'Stop retains the displayed identity after an external change',
+      'renders an externally replaced workflow without keyboard input',
       () async {
         final starter = _Fixture();
         final host = starter.application_host;
         expect(await starter.create_cli().run(['workflow', 'start']), 0);
-        final displayed_id = (await host.current())!.identity.workflow_id;
+        final original_id = (await host.current())!.identity.workflow_id;
         final explorer = _Fixture(host: host);
-        final cli = explorer.create_cli();
-        String? replacement_id;
+        final initial = Completer<void>();
+        final stopped = Completer<void>();
+        final replacement = Completer<String>();
+        final input = StreamController<List<int>>();
+        addTearDown(() => input.close().ignore());
 
-        explorer.terminal.read_input = () async* {
-          expect(
-            explorer.terminal.output_buffer.toString(),
-            contains('ID: $displayed_id'),
-          );
+        explorer.terminal.read_input = () => input.stream;
+        explorer.terminal.on_frame = (frame) {
+          if (!initial.isCompleted && frame.contains('ID: $original_id')) {
+            initial.complete();
+          } else if (!stopped.isCompleted && frame.contains('Workflow: NONE')) {
+            stopped.complete();
+          } else if (stopped.isCompleted &&
+              !replacement.isCompleted &&
+              frame.contains('Workflow: ACTIVE')) {
+            replacement.complete(frame);
+          }
+        };
+
+        final running = explorer.create_cli().run(['explore']);
+        running.ignore();
+        try {
+          await initial.future;
           expect(
             await _Fixture(host: host).create_cli().run(['workflow', 'stop']),
             0,
           );
+          await stopped.future;
           expect(
             await _Fixture(host: host).create_cli().run(['workflow', 'start']),
             0,
           );
-          replacement_id = (await host.current())!.identity.workflow_id;
-          expect(replacement_id, isNot(displayed_id));
-          yield ascii.encode('x');
-        };
-
-        await expectLater(
-          cli.run(['explore']),
-          throwsA(
-            isA<WorkflowExplorerOperationException>().having(
-              (error) => error.outcome,
-              'outcome',
-              isA<WorkflowOperationResolved>().having(
-                (outcome) => outcome.resolution.rejection_code,
-                'rejection code',
-                WorkflowRejectionCode.workflow_id_mismatch,
-              ),
-            ),
-          ),
-        );
-        expect((await host.current())!.identity.workflow_id, replacement_id);
+          final replacement_id = (await host.current())!.identity.workflow_id;
+          expect(await replacement.future, contains('ID: $replacement_id'));
+          expect(replacement_id, isNot(original_id));
+        } finally {
+          input.add(ascii.encode('q'));
+          expect(await running, 0);
+        }
         expect(explorer.terminal.restored, isTrue);
         expect(explorer.sdk!.resources_released, isTrue);
       },
@@ -813,6 +823,27 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
   /// Optional input stream created after the first frame.
   Stream<List<int>> Function()? read_input;
 
+  /// Observes complete frames written by the production renderer.
+  void Function(String)? on_frame;
+
+  /// Sends explicit input chunks after the matching frames are rendered.
+  void press_on_frames(List<(String, String)> interactions) {
+    final input = StreamController<List<int>>();
+    addTearDown(() => input.close().ignore());
+    read_input = () => input.stream;
+
+    final remaining = interactions.iterator;
+    var has_next = remaining.moveNext();
+    on_frame = (frame) {
+      if (!has_next) return;
+      final (expected, keys) = remaining.current;
+      if (frame.contains(expected)) {
+        input.add(ascii.encode(keys));
+        has_next = remaining.moveNext();
+      }
+    };
+  }
+
   /// Checks invocation ownership during restoration.
   void Function()? on_restore;
 
@@ -838,7 +869,7 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
   int get terminal_rows => 24;
 
   @override
-  StringSink get output => output_buffer;
+  StringSink get output => _FrameSink(output_buffer, on_frame);
 
   /// Supplies controlled input during an interaction.
   @override
@@ -869,6 +900,31 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
       _active = false;
     }
   }
+}
+
+/// Records the renderer's frame write and exposes it as a test boundary.
+final class _FrameSink implements StringSink {
+  _FrameSink(this.buffer, this.on_frame);
+
+  final StringBuffer buffer;
+  final void Function(String)? on_frame;
+
+  @override
+  void write(Object? object) {
+    final text = object.toString();
+    buffer.write(text);
+    on_frame?.call(text);
+  }
+
+  @override
+  void writeAll(Iterable<Object?> objects, [String separator = '']) =>
+      write(objects.join(separator));
+
+  @override
+  void writeCharCode(int charCode) => write(String.fromCharCode(charCode));
+
+  @override
+  void writeln([Object? object = '']) => write('$object\n');
 }
 
 /// Creates one immutable filesystem observation.

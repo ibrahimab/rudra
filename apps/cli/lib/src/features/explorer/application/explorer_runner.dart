@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import '../../../core/cli/rudra_exit_code.dart';
 import '../../../core/rendering/renderer.dart';
 
 import '../presentation/explorer_view_model.dart';
 import '../terminal/explorer_terminal_host.dart';
 import '../terminal/terminal_input.dart';
+import '../terminal/terminal_key.dart';
 
 import 'explorer_controller.dart';
 
@@ -26,6 +29,7 @@ final class ExplorerRunner {
   /// Creates the runner without starting the interaction.
   ///
   /// [controller] owns navigation, application state and action dispatch.
+  /// The runner disposes it after the terminal interaction ends or startup fails.
   /// [terminal] supplies input, dimensions and guarded terminal lifecycle.
   /// [renderer] renders complete snapshots and reports its fixed row count.
   /// [error_output] receives terminal configuration diagnostics.
@@ -75,47 +79,128 @@ final class ExplorerRunner {
   /// observation was incomplete, or [RudraExitCode.success].
   ///
   /// Throws [StateError] on repeated invocation or if the terminal becomes
-  /// too small during interaction. Startup inspection failures propagate before
-  /// entering interactive mode. Once hosted, errors including OS interruptions
-  /// propagate after terminal restoration is attempted.
+  /// too small during interaction. Startup synchronization and inspection
+  /// failures propagate before entering interactive mode. Once hosted, errors
+  /// including OS interruptions propagate after terminal restoration is attempted.
   Future<int> run() async {
     if (_has_started) {
       throw StateError('ExplorerRunner supports only one invocation.');
     }
     _has_started = true;
 
-    final required_rows = _reserved_terminal_rows;
-    if (!_terminal.is_interactive || _terminal.terminal_rows < required_rows) {
-      _error_output.writeln(
-        'Interactive Explorer requires a supported terminal '
-        'with at least $required_rows rows.',
-      );
-      return RudraExitCode.configuration_error.value;
+    try {
+      final required_rows = _reserved_terminal_rows;
+      if (!_terminal.is_interactive ||
+          _terminal.terminal_rows < required_rows) {
+        _error_output.writeln(
+          'Interactive Explorer requires a supported terminal '
+          'with at least $required_rows rows.',
+        );
+        return RudraExitCode.configuration_error.value;
+      }
+
+      await _controller.start();
+      await _terminal.run_interactive(_interact);
+
+      return _controller.encountered_incomplete
+          ? RudraExitCode.inspection_incomplete.value
+          : RudraExitCode.success.value;
+    } finally {
+      await _controller.dispose();
+    }
+  }
+
+  /// Consumes input and invalidations inside the terminal restoration scope.
+  ///
+  /// At most one asynchronous operation and one pending redraw are retained.
+  /// Termination stops admission immediately and waits for the operation to
+  /// settle before releasing input and presentation subscriptions.
+  Future<void> _interact() async {
+    final stopping = Completer<void>();
+    (Object, StackTrace)? failure;
+    Future<void>? operation;
+    var needs_redraw = false;
+    var redraw_scheduled = false;
+
+    void stop([Object? error, StackTrace? stack]) {
+      if (error != null) failure ??= (error, stack ?? StackTrace.current);
+      if (!stopping.isCompleted) stopping.complete();
     }
 
-    await _controller.start();
+    void redraw() {
+      if (stopping.isCompleted || operation != null || !needs_redraw) return;
 
-    try {
-      await _terminal.run_interactive<void>(() async {
+      needs_redraw = false;
+      try {
         _render();
-
-        final input = TerminalInput(source: _terminal.input_bytes);
-        await for (final key in input.read_keys()) {
-          if (await _controller.handle_key(key)) {
-            _render();
-          }
-          if (_controller.is_closed) break;
-        }
-      });
-    } finally {
-      if (!_controller.is_closed) {
-        _controller.quit();
+      } catch (error, stack) {
+        stop(error, stack);
       }
     }
 
-    return _controller.encountered_incomplete
-        ? RudraExitCode.inspection_incomplete.value
-        : RudraExitCode.success.value;
+    Future<void> settle(Future<bool> result) async {
+      try {
+        if (await result) needs_redraw = true;
+      } catch (error, stack) {
+        stop(error, stack);
+      } finally {
+        operation = null;
+        redraw();
+      }
+    }
+
+    void on_key(TerminalKey key) {
+      if (stopping.isCompleted) return;
+      if (ExplorerController.is_exit_key(key)) {
+        stop();
+        return;
+      }
+      // The input subscription stays active while an operation is outstanding.
+      if (operation != null) return;
+
+      try {
+        final result = _controller.handle_key(key);
+        if (result is Future<bool>) {
+          operation = settle(result);
+        } else if (result == true) {
+          needs_redraw = true;
+          redraw();
+        }
+      } catch (error, stack) {
+        stop(error, stack);
+      }
+    }
+
+    final presentation = _controller.presentation_changes.listen((_) {
+      if (stopping.isCompleted) return;
+
+      needs_redraw = true;
+      if (operation != null || redraw_scheduled) return;
+
+      redraw_scheduled = true;
+      scheduleMicrotask(() {
+        redraw_scheduled = false;
+        redraw();
+      });
+    });
+
+    StreamSubscription<TerminalKey>? keys;
+    try {
+      _render();
+      final input = TerminalInput(source: _terminal.input_bytes);
+      keys = input.read_keys().listen(on_key, onError: stop, onDone: stop);
+      await stopping.future;
+      await operation;
+      if (failure case (final error, final stack)) {
+        Error.throwWithStackTrace(error, stack);
+      }
+    } finally {
+      stop();
+      await Future.wait<void>([
+        Future<void>.sync(presentation.cancel),
+        if (keys != null) Future<void>.sync(keys.cancel),
+      ]);
+    }
   }
 
   /// Renders using the current terminal height, including after a resize.
@@ -127,8 +212,8 @@ final class ExplorerRunner {
       throw StateError('Terminal became too small for Explorer rendering.');
     }
 
-    _renderer.render(
-      _controller.view_model(visible_row_limit: visible_row_limit),
-    );
+    final view = _controller.view_model(visible_row_limit: visible_row_limit);
+    _renderer.render(view);
+    _controller.acknowledge_render(view);
   }
 }

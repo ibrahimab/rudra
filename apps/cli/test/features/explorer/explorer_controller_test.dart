@@ -375,9 +375,9 @@ void main() {
 
       expect(() => controller.move_selection(1), throwsStateError);
 
-      await expectLater(controller.open_selected(), throwsStateError);
+      expect(controller.open_selected, throwsStateError);
 
-      await expectLater(controller.back(), throwsStateError);
+      expect(controller.back, throwsStateError);
 
       await expectLater(controller.start(), throwsStateError);
     });
@@ -408,10 +408,12 @@ Future<ExplorerController> _controller(
   final sdk = await client.connect();
   addTearDown(sdk.close);
 
-  return ExplorerController.create(
+  final controller = ExplorerController(
     sdk: sdk,
     starting_directory: TargetPath(root),
   );
+  addTearDown(controller.dispose);
+  return controller;
 }
 
 /// A deterministic read-only inspector for explorer tests.

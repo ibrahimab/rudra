@@ -75,6 +75,9 @@ final class TerminalInput {
   /// Incomplete escape sequences at end-of-stream are
   /// discarded without producing an application action.
   ///
+  /// Each input chunk is decoded in the source stream's delivery turn.
+  /// Consumers can keep listening and discard keys during an operation.
+  ///
   /// Stream errors propagate to the caller unchanged.
   /// The interactive terminal host remains responsible
   /// for restoration after such failures.
@@ -91,12 +94,20 @@ final class TerminalInput {
   ///
   /// assert(keys.single == const TerminalCharacterKey('p'));
   /// ```
-  Stream<TerminalKey> read_keys() async* {
+  Stream<TerminalKey> read_keys() {
     var state = _EscapeState.idle;
     var previous_was_carriage_return = false;
 
-    await for (final chunk in _source) {
+    Iterable<TerminalKey> decode(List<int> chunk) sync* {
       for (final byte in chunk) {
+        // Raw Ctrl+C takes precedence over an unfinished escape sequence.
+        if (byte == 0x03) {
+          state = _EscapeState.idle;
+          previous_was_carriage_return = false;
+          yield TerminalSpecialKey.interrupt;
+          continue;
+        }
+
         // A CRLF sequence represents one Enter key.
         // Preserve this rule across input chunk boundaries.
         if (previous_was_carriage_return && byte == 0x0A) {
@@ -162,6 +173,8 @@ final class TerminalInput {
         }
       }
     }
+
+    return _source.expand(decode);
   }
 
   /// Decodes an ANSI cursor-key final byte.
@@ -193,9 +206,6 @@ final class TerminalInput {
       case 0x08:
       case 0x7F:
         return TerminalSpecialKey.backspace;
-
-      case 0x03:
-        return TerminalSpecialKey.interrupt;
     }
 
     // All supported printable ASCII characters are
