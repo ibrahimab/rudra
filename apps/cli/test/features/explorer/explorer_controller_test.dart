@@ -267,7 +267,7 @@ void main() {
 
       expect(identical(controller.model, before), isTrue);
       expect(controller.model?.history, isEmpty);
-      expect(controller.is_loading, isFalse);
+      expect(controller.is_busy, isFalse);
     });
 
     test('preserves navigation state when back inspection fails', () async {
@@ -344,7 +344,7 @@ void main() {
 
       final pending_start = controller.start();
 
-      expect(controller.is_loading, isTrue);
+      expect(controller.is_busy, isTrue);
 
       await expectLater(controller.start(), throwsStateError);
 
@@ -357,7 +357,7 @@ void main() {
       final model = await pending_start;
 
       expect(model.current_directory.value, '/fixture');
-      expect(controller.is_loading, isFalse);
+      expect(controller.is_busy, isFalse);
     });
 
     test('quit closes interaction without filesystem changes', () async {
@@ -408,7 +408,10 @@ Future<ExplorerController> _controller(
   final sdk = await client.connect();
   addTearDown(sdk.close);
 
-  return ExplorerController(sdk: sdk, starting_directory: TargetPath(root));
+  return ExplorerController.create(
+    sdk: sdk,
+    starting_directory: TargetPath(root),
+  );
 }
 
 /// A deterministic read-only inspector for explorer tests.

@@ -2,6 +2,7 @@ import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../composition/product_sdk_composition.dart';
 import '../../../core/cli/rudra_cli_module.dart';
 import '../../../core/cli/rudra_exit_code.dart';
 
@@ -15,27 +16,28 @@ import '../../../core/cli/rudra_exit_code.dart';
 final class WorkflowCliModule implements RudraCliModule {
   /// Assembles workflow commands against the invocation's SDK.
   ///
-  /// [connect] opens the session after command arguments have been validated.
-  /// [sdk] is the same facade used by a Stop after reading authoritative state.
-  /// [working_directory] is the default Start root. [output] and
+  /// [sdk_composition] supplies the default Start root and opens the shared
+  /// session after command arguments have been validated. [output] and
   /// [error_output] receive operation results and diagnostics.
   factory WorkflowCliModule.product({
-    required Future<RudraSdk> Function() connect,
-    required RudraSdk sdk,
-    required TargetPath working_directory,
+    required ProductSdkComposition sdk_composition,
     required StringSink output,
     required StringSink error_output,
   }) => WorkflowCliModule(
-    working_directory: working_directory,
-    current_workflow: () async =>
-        (await (await connect()).read_state()).workflows.current_workflow,
-    start_workflow: (root, idempotency_key) async => (await connect()).workflows
-        .start(root: root, idempotency_key: idempotency_key),
+    working_directory: sdk_composition.working_directory,
+    current_workflow: () async {
+      final sdk = await sdk_composition.connect();
+      return (await sdk.read_state()).workflows.current_workflow;
+    },
+    start_workflow: (root, idempotency_key) async {
+      final sdk = await sdk_composition.connect();
+      return sdk.workflows.start(root: root, idempotency_key: idempotency_key);
+    },
     // Submit Stop through the session used to select the workflow.
-    stop_workflow: (workflow_id, idempotency_key) => sdk.workflows.stop(
-      workflow_id: workflow_id,
-      idempotency_key: idempotency_key,
-    ),
+    stop_workflow: (workflow_id, idempotency_key) => sdk_composition
+        .sdk
+        .workflows
+        .stop(workflow_id: workflow_id, idempotency_key: idempotency_key),
     output: output,
     error_output: error_output,
   );

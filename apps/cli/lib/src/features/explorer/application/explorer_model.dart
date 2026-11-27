@@ -1,6 +1,6 @@
 import 'package:rudra_sdk/rudra_sdk.dart';
 
-/// Immutable presentation state for the CLI filesystem explorer.
+/// Immutable interaction state for CLI Explorer navigation.
 ///
 /// This is not a persistent Rudra inspection session.
 ///
@@ -12,7 +12,7 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 ///
 /// No filesystem operations occur during construction.
 final class ExplorerModel {
-  /// Creates presentation state for an inspected directory.
+  /// Creates interaction state for an inspected directory.
   ///
   /// [root_directory] is the original exploration starting point.
   /// [listing] describes the currently displayed directory.
@@ -134,7 +134,7 @@ final class ExplorerModel {
     );
   }
 
-  /// Returns a closed snapshot of the current presentation.
+  /// Returns a closed snapshot of the interaction.
   ///
   /// Preserves the observed listing and navigation history.
   /// No filesystem operations or cleanup actions occur.

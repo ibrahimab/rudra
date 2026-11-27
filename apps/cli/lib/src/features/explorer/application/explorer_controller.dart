@@ -1,67 +1,154 @@
+import 'dart:async';
+
 import 'package:rudra_sdk/rudra_sdk.dart';
 
+import '../presentation/explorer_view_model.dart';
+import '../terminal/terminal_key.dart';
+
+import 'explorer_action_registry.dart';
 import 'explorer_model.dart';
 
-/// Coordinates read-only filesystem navigation for the CLI.
+/// Coordinates Explorer navigation, interaction state and registered actions.
 ///
-/// All filesystem observations are requested through the
-/// public [RudraSdk.filesystem] application service.
-///
-/// The controller owns transient navigation state only.
-///
-/// It does not:
-/// - Access TargetInspector directly.
-/// - Resolve symbolic links.
-/// - Construct child paths from terminal input.
-/// - Create or modify persistent inspection sessions.
-/// - Mark cleanup candidates.
-/// - Authorize or execute cleanup.
-///
-/// Only one directory inspection may run at a time.
+/// Filesystem observations and verified application state come from the public
+/// SDK. Actions and presentation use the same retained application snapshot.
 ///
 /// Example:
 /// ```dart
-/// final explorer = ExplorerController(
+/// final explorer = await ExplorerController.create(
 ///   sdk: sdk,
 ///   starting_directory: TargetPath('/workspace'),
 /// );
 ///
 /// await explorer.start();
-/// explorer.move_selection(1);
-/// await explorer.open_selected();
-/// await explorer.back();
+/// await explorer.handle_key(TerminalSpecialKey.down);
+/// final view = explorer.view_model(visible_row_limit: 12);
 /// explorer.quit();
 /// ```
 final class ExplorerController {
-  /// Creates a controller bound to a connected SDK.
+  /// Loads verified application state and creates a controller.
   ///
+  /// [sdk] is the invocation's authenticated SDK, borrowed for application I/O.
   /// [starting_directory] is supplied by application composition.
   /// Its target-native spelling is preserved.
+  /// [action_registry] supplies feature actions and their presentation.
   ///
-  /// Construction performs no filesystem inspection.
-  ExplorerController({
+  /// Returns an initialized controller ready for [start]. SDK state-read
+  /// failures propagate before any directory inspection or terminal setup.
+  static Future<ExplorerController> create({
     required RudraSdk sdk,
     required TargetPath starting_directory,
-  }) : _sdk = sdk,
-       _root_directory = starting_directory;
+    ExplorerActionRegistry? action_registry,
+  }) async {
+    final state = await sdk.read_state();
+    return ExplorerController._(
+      sdk,
+      starting_directory,
+      action_registry ?? ExplorerActionRegistry(const []),
+      state,
+    );
+  }
 
-  /// SDK used for all read-only filesystem observations.
+  ExplorerController._(
+    this._sdk,
+    this._root_directory,
+    this._actions,
+    this._application_state,
+  );
+
+  /// Borrowed SDK for filesystem observations and state reads.
   final RudraSdk _sdk;
 
   /// Original navigation root, immutable for this controller.
   final TargetPath _root_directory;
 
-  /// Latest committed explorer presentation state.
+  /// Validated, feature-owned action and presentation contributions.
+  final ExplorerActionRegistry _actions;
+
+  /// Default bindings for local navigation and interaction lifecycle.
+  late final Map<TerminalKey, FutureOr<ExplorerModel> Function()>
+  _interaction_bindings = {
+    TerminalSpecialKey.up: () => move_selection(-1),
+    TerminalSpecialKey.down: () => move_selection(1),
+    TerminalSpecialKey.enter: open_selected,
+    TerminalSpecialKey.left: back,
+    TerminalSpecialKey.backspace: back,
+    const TerminalCharacterKey('q'): quit,
+    const TerminalCharacterKey('Q'): quit,
+    TerminalSpecialKey.interrupt: quit,
+  };
+
+  /// Last verified application snapshot, shared by presentation and dispatch.
+  RudraState _application_state;
+
+  /// Latest committed Explorer navigation state.
   ExplorerModel? _model;
 
-  /// Prevents overlapping asynchronous inspection operations.
-  bool _is_loading = false;
+  /// Prevents overlapping inspections, actions and post-action state reads.
+  bool _is_busy = false;
 
-  /// Current presentation state, or null before initialization.
+  /// First entry shown in the current directory viewport.
+  int _first_visible_index = 0;
+
+  /// Current navigation snapshot, or null before the initial inspection.
   ExplorerModel? get model => _model;
 
-  /// Whether a filesystem inspection is in progress.
-  bool get is_loading => _is_loading;
+  /// Whether the current interaction has ended.
+  bool get is_closed => _model?.is_closed ?? false;
+
+  /// Whether an inspection or feature action is in progress.
+  bool get is_busy => _is_busy;
+
+  /// Whether any visited directory returned an incomplete SDK observation.
+  bool get encountered_incomplete => _encountered_incomplete;
+  bool _encountered_incomplete = false;
+
+  /// Handles a decoded terminal [key] and reports whether to redraw.
+  ///
+  /// Waits for a registered action and its verified state refresh before
+  /// allowing another input. Unknown keys and Quit request no redraw.
+  /// Throws [StateError] outside an active interaction or during another
+  /// operation. Action, inspection and state-read errors propagate.
+  Future<bool> handle_key(TerminalKey key) async {
+    final current = _require_active();
+    final interaction = _interaction_bindings[key];
+    if (interaction != null) {
+      final next = await interaction();
+      return !next.is_closed && !identical(current, next);
+    }
+
+    final action = _actions.resolve(key);
+    if (action == null) return false;
+
+    _is_busy = true;
+    try {
+      await action.execute(current, _application_state);
+      _application_state = await _sdk.read_state();
+    } finally {
+      _is_busy = false;
+    }
+
+    return true;
+  }
+
+  /// Returns an immutable presentation of the current interaction.
+  ///
+  /// [visible_row_limit] is the number of rows available for directory entries.
+  /// Throws [RangeError] for a negative limit and [StateError] if the Explorer
+  /// is inactive or busy. The view model adjusts scrolling to keep the selected
+  /// entry visible within the supplied limit.
+  ExplorerViewModel view_model({required int visible_row_limit}) {
+    final view = ExplorerViewModel.from_navigation(
+      explorer: _require_active(),
+      contributions: _actions.features.map(
+        (feature) => feature.present(_application_state),
+      ),
+      visible_row_limit: visible_row_limit,
+      first_visible_index: _first_visible_index,
+    );
+    _first_visible_index = view.directory.first_visible_index;
+    return view;
+  }
 
   /// Starts exploration at the configured root.
   ///
@@ -90,7 +177,7 @@ final class ExplorerController {
   /// Empty directories retain a null selection.
   ///
   /// Throws [StateError] before startup, after quit, or while
-  /// a directory inspection is running.
+  /// another operation is running.
   ExplorerModel move_selection(int offset) {
     final current = _require_active();
 
@@ -171,7 +258,7 @@ final class ExplorerController {
   /// No filesystem operations are performed.
   ///
   /// Throws [StateError] before startup, after quit, or
-  /// during an active inspection.
+  /// during an active operation.
   ExplorerModel quit() {
     final current = _require_active();
     final closed = current.close();
@@ -192,11 +279,11 @@ final class ExplorerController {
     required TargetPath directory,
     required List<TargetPath> history,
   }) async {
-    if (_is_loading) {
-      throw StateError('A directory inspection is already in progress.');
+    if (_is_busy) {
+      throw StateError('An Explorer operation is already in progress.');
     }
 
-    _is_loading = true;
+    _is_busy = true;
 
     try {
       final listing = await _sdk.filesystem.list(directory: directory);
@@ -215,19 +302,23 @@ final class ExplorerController {
         history: history,
       );
 
+      if (_model?.current_directory.value != next.current_directory.value) {
+        _first_visible_index = 0;
+      }
+      _encountered_incomplete = _encountered_incomplete || next.is_incomplete;
       _model = next;
       return next;
     } finally {
-      _is_loading = false;
+      _is_busy = false;
     }
   }
 
-  /// Requires a started, active, non-loading explorer.
+  /// Requires a started, active Explorer with no operation in progress.
   ///
   /// Centralizes lifecycle validation for navigation operations.
   ExplorerModel _require_active() {
-    if (_is_loading) {
-      throw StateError('Navigation is unavailable during inspection.');
+    if (_is_busy) {
+      throw StateError('An Explorer operation is already in progress.');
     }
 
     final current = _model;

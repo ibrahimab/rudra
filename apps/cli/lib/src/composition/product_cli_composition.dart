@@ -5,12 +5,14 @@ import 'package:rudra_host/rudra_host.dart';
 import '../core/cli/rudra_exit_code.dart';
 
 import '../features/about/cli/about_cli_module.dart';
+import '../features/explorer/application/explorer_action_registry.dart';
 import '../features/explorer/cli/explorer_cli_composition.dart';
 import '../features/explorer/terminal/explorer_terminal_host.dart';
 import '../features/filesystem/cli/filesystem_cli_module.dart';
 import '../features/host/cli/host_cli_module.dart';
 import '../features/welcome/composition/welcome_composition.dart';
 import '../features/workflow/cli/workflow_cli_module.dart';
+import '../features/workflow/explorer/workflow_explorer_contribution.dart';
 
 import '../rudra_cli.dart';
 
@@ -46,8 +48,7 @@ RudraCli compose_product_cli({
   return RudraCli(
       error_output: diagnostics,
       run_default: compose_welcome(
-        connect: composition.connect,
-        starting_directory: composition.working_directory,
+        sdk_composition: composition,
         output: presentation,
         error_output: diagnostics,
       ).show,
@@ -72,25 +73,24 @@ RudraCli compose_product_cli({
     )
     ..register_module(
       FilesystemCliModule.product(
-        connect: composition.connect,
-        working_directory: composition.working_directory,
+        sdk_composition: composition,
         output: presentation,
         error_output: diagnostics,
       ),
     )
     ..register_module(
       WorkflowCliModule.product(
-        connect: composition.connect,
-        sdk: composition.sdk,
-        working_directory: composition.working_directory,
+        sdk_composition: composition,
         output: presentation,
         error_output: diagnostics,
       ),
     )
     ..register_module(
       compose_explorer_cli(
-        connect: composition.connect,
-        working_directory: composition.working_directory,
+        sdk_composition: composition,
+        action_registry: ExplorerActionRegistry([
+          WorkflowExplorerContribution(composition.sdk.workflows),
+        ]),
         error_output: diagnostics,
         create_terminal_host: explorer_terminal_host_factory,
       ),

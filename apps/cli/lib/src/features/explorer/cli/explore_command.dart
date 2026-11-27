@@ -23,8 +23,8 @@ import '../application/explorer_runner.dart';
 /// SDK target rather than by interpreting paths using the
 /// frontend host's filesystem conventions.
 ///
-/// No persistent sessions, cleanup plans, or destructive
-/// filesystem operations are created by this command.
+/// Navigation is read-only. Registered features may submit explicit
+/// operations in response to their shortcuts.
 ///
 /// CLI usage:
 /// ```text
@@ -94,8 +94,8 @@ final class ExploreCommand extends Command<int> {
   /// A valid explicit path is not normalized, expanded, or
   /// interpreted using host-specific path rules.
   ///
-  /// The runner owns terminal capability checks, navigation,
-  /// SDK inspection, rendering, and interaction exit status.
+  /// The runner owns terminal capability checks, input, rendering and exit
+  /// status. Its controller coordinates navigation and SDK operations.
   ///
   /// Runner errors propagate without being converted into
   /// successful command completion.

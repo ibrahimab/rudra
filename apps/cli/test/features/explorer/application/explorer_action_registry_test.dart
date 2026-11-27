@@ -1,9 +1,10 @@
 import 'package:rudra_cli/src/features/explorer/application/explorer_action_registry.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/terminal_key.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-/// Tests action registration and physical-key dispatch using
+/// Tests action registration and shortcut lookup using
 /// synthetic action implementations.
 void main() {
   group('ExplorerActionRegistry', () {
@@ -14,9 +15,10 @@ void main() {
         ExplorerFeatureContribution(id: 'fixture', actions: [action]),
       ]);
 
-      expect(registry.resolve('p'), same(action));
-      expect(registry.resolve('P'), same(action));
-      expect(registry.resolve('x'), isNull);
+      expect(registry.resolve(const TerminalCharacterKey('p')), same(action));
+      expect(registry.resolve(const TerminalCharacterKey('P')), same(action));
+      expect(registry.resolve(const TerminalCharacterKey('x')), isNull);
+      expect(registry.resolve(TerminalSpecialKey.enter), isNull);
     });
 
     test('does not execute actions during registration', () {
@@ -36,32 +38,8 @@ void main() {
       ]);
 
       expect(executions, 0);
-      expect(registry.resolve('i'), isNotNull);
+      expect(registry.resolve(const TerminalCharacterKey('i')), isNotNull);
       expect(executions, 0);
-    });
-
-    test('dispatches the current navigation snapshot', () async {
-      ExplorerModel? received;
-
-      final registry = ExplorerActionRegistry([
-        ExplorerFeatureContribution(
-          id: 'fixture',
-          actions: [
-            _RecordingAction(
-              id: 'fixture.inspect',
-              shortcut: 'i',
-              on_execute: (model) => received = model,
-            ),
-          ],
-        ),
-      ]);
-
-      final explorer = _explorer();
-
-      await registry.resolve('I')!.execute(explorer);
-
-      expect(received, same(explorer));
-      expect(received!.current_directory.value, '/fixture');
     });
 
     test('defensively copies feature contributions', () {
@@ -169,28 +147,6 @@ void main() {
         );
       }
     });
-
-    test('propagates action failures during execution', () async {
-      final registry = ExplorerActionRegistry([
-        ExplorerFeatureContribution(
-          id: 'fixture',
-          actions: [
-            _RecordingAction(
-              id: 'fixture.failure',
-              shortcut: 'f',
-              on_execute: (_) {
-                throw StateError('Injected failure.');
-              },
-            ),
-          ],
-        ),
-      ]);
-
-      await expectLater(
-        registry.resolve('f')!.execute(_explorer()),
-        throwsStateError,
-      );
-    });
   });
 }
 
@@ -224,26 +180,11 @@ final class _RecordingAction implements ExplorerAction {
 
   /// Executes the synthetic action.
   ///
-  /// [model] is the navigation snapshot passed by the caller.
+  /// [model] and [state] are the navigation and SDK snapshots.
   ///
   /// Exceptions from [on_execute] propagate to the caller.
   @override
-  Future<void> execute(ExplorerModel model) async {
+  Future<void> execute(ExplorerModel model, RudraState state) async {
     on_execute?.call(model);
   }
-}
-
-/// Creates an Explorer navigation snapshot entirely in memory.
-ExplorerModel _explorer() {
-  final root = TargetPath('/fixture');
-
-  return ExplorerModel(
-    root_directory: root,
-    listing: DirectoryListing(
-      target_id: 'fixture-target',
-      directory: root,
-      entries: const [],
-      is_complete: true,
-    ),
-  );
 }

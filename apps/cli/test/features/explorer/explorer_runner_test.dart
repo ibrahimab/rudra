@@ -14,6 +14,7 @@ import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart'
 
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/terminal_key.dart';
 
 import 'package:rudra_cli/src/features/explorer/presentation/explorer_view_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
@@ -88,36 +89,69 @@ void main() {
       expect(scenario.inspector.inspected, hasLength(2));
     });
 
-    test('enters directories and navigates back', () async {
+    test(
+      'enters directories and navigates back with Left or Backspace',
+      () async {
+        final scenario = await _Scenario.create(
+          children: {
+            '/root': ['/root/docs'],
+            '/root/docs': ['/root/docs/readme.md'],
+          },
+          entries: [
+            _entry('/root/docs', FilesystemEntryKind.directory),
+            _entry('/root/docs/readme.md', FilesystemEntryKind.regularFile),
+          ],
+          keys: '\r\x1B[D\r\bQ\r',
+        );
+
+        final status = await scenario.runner.run();
+
+        expect(status, RudraExitCode.success.value);
+
+        expect(
+          scenario.inspector.listed,
+          orderedEquals([
+            '/root',
+            '/root/docs',
+            '/root',
+            '/root/docs',
+            '/root',
+          ]),
+        );
+
+        expect(
+          scenario.renderer.frames.map(
+            (frame) => frame.header.explorer.current_directory.value,
+          ),
+          orderedEquals([
+            '/root',
+            '/root/docs',
+            '/root',
+            '/root/docs',
+            '/root',
+          ]),
+        );
+
+        expect(scenario.controller.model?.can_go_back, isFalse);
+        expect(scenario.controller.is_closed, isTrue);
+      },
+    );
+
+    test('raw Ctrl+C exits before dispatching the next key', () async {
       final scenario = await _Scenario.create(
         children: {
           '/root': ['/root/docs'],
-          '/root/docs': ['/root/docs/readme.md'],
+          '/root/docs': [],
         },
-        entries: [
-          _entry('/root/docs', FilesystemEntryKind.directory),
-          _entry('/root/docs/readme.md', FilesystemEntryKind.regularFile),
-        ],
-        keys: '\r\x1B[Dq',
+        entries: [_entry('/root/docs', FilesystemEntryKind.directory)],
+        keys: '\x03\r',
       );
 
-      final status = await scenario.runner.run();
-
-      expect(status, RudraExitCode.success.value);
-
-      expect(
-        scenario.inspector.listed,
-        orderedEquals(['/root', '/root/docs', '/root']),
-      );
-
-      expect(
-        scenario.renderer.frames.map(
-          (frame) => frame.header.explorer.current_directory.value,
-        ),
-        orderedEquals(['/root', '/root/docs', '/root']),
-      );
-
-      expect(scenario.controller.model?.can_go_back, isFalse);
+      expect(await scenario.runner.run(), RudraExitCode.success.value);
+      expect(scenario.inspector.listed, ['/root']);
+      expect(scenario.renderer.frames, hasLength(1));
+      expect(scenario.controller.is_closed, isTrue);
+      expect(scenario.terminal.restored, isTrue);
     });
 
     test('does not navigate into files or symbolic links', () async {
@@ -521,71 +555,75 @@ void main() {
       expect(scenario.terminal.invocations, 0);
     });
 
-    test(
-      'dispatches contributed actions and refreshes after completion',
-      () async {
-        var executions = 0;
-        var refreshes = 0;
+    test('renders verified state before dispatching the next action', () async {
+      final action_entered = Completer<void>();
+      final release_action = Completer<void>();
+      final dispatched = <RudraState>[];
+      final presented = <RudraState>[];
 
-        final registry = ExplorerActionRegistry([
-          ExplorerFeatureContribution(
-            id: 'fixture',
-            actions: [
-              _SyntheticAction(
-                id: 'fixture.probe',
-                shortcut: 'p',
-                operation: (model) async {
-                  expect(model.current_directory.value, '/root');
-                  executions++;
-                },
-              ),
-            ],
+      final registry = ExplorerActionRegistry([
+        _SyntheticContribution(
+          on_present: presented.add,
+          action: _SyntheticAction(
+            id: 'fixture.probe',
+            shortcut: 'p',
+            operation: (model, state) async {
+              expect(model.current_directory.value, '/root');
+              dispatched.add(state);
+              if (dispatched.length == 1) {
+                action_entered.complete();
+                await release_action.future;
+              }
+            },
           ),
-        ]);
-
-        final scenario = await _Scenario.create(
-          children: {'/root': []},
-          entries: [],
-          keys: 'pPq',
-          action_registry: registry,
-          refresh_application_state: () async {
-            refreshes++;
-          },
-        );
-
-        expect(await scenario.runner.run(), RudraExitCode.success.value);
-
-        expect(executions, 2);
-        expect(refreshes, 2);
-
-        // Initial frame plus one frame for each completed action.
-        expect(scenario.renderer.frames, hasLength(3));
-        expect(scenario.terminal.restored, isTrue);
-      },
-    );
-
-    test('ignores printable keys without registered actions', () async {
-      var refreshes = 0;
+        ),
+      ]);
 
       final scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
+        keys: 'pPq',
+        action_registry: registry,
+      );
+
+      final running = scenario.runner.run();
+      try {
+        await action_entered.future.timeout(const Duration(seconds: 5));
+        expect(scenario.renderer.frames, hasLength(1));
+        expect(dispatched, hasLength(1));
+        await expectLater(
+          scenario.controller.handle_key(const TerminalCharacterKey('p')),
+          throwsStateError,
+        );
+      } finally {
+        release_action.complete();
+      }
+
+      expect(await running, RudraExitCode.success.value);
+      expect(dispatched, hasLength(2));
+      expect(presented, hasLength(3));
+      expect(dispatched.first, same(presented[0]));
+      expect(dispatched.last, same(presented[1]));
+      expect(presented[1], isNot(same(presented[0])));
+      expect(presented[2], isNot(same(presented[1])));
+      expect(scenario.renderer.frames, hasLength(3));
+      expect(scenario.terminal.restored, isTrue);
+    });
+
+    test('ignores printable keys without registered actions', () async {
+      final scenario = await _Scenario.create(
+        children: {'/root': []},
+        entries: [],
         keys: 'sXp?q',
-        refresh_application_state: () async {
-          refreshes++;
-        },
       );
 
       expect(await scenario.runner.run(), RudraExitCode.success.value);
 
-      expect(refreshes, 0);
       expect(scenario.renderer.frames, hasLength(1));
       expect(scenario.terminal.restored, isTrue);
     });
 
     test('propagates action failures through terminal restoration', () async {
-      var refreshes = 0;
-
       final registry = ExplorerActionRegistry([
         ExplorerFeatureContribution(
           id: 'fixture',
@@ -593,7 +631,7 @@ void main() {
             _SyntheticAction(
               id: 'fixture.failure',
               shortcut: 'f',
-              operation: (_) async {
+              operation: (_, _) async {
                 throw StateError('Injected action failure.');
               },
             ),
@@ -606,20 +644,17 @@ void main() {
         entries: [],
         keys: 'fq',
         action_registry: registry,
-        refresh_application_state: () async {
-          refreshes++;
-        },
       );
 
       await expectLater(scenario.runner.run(), throwsStateError);
 
-      expect(refreshes, 0);
       expect(scenario.renderer.frames, hasLength(1));
       expect(scenario.terminal.restored, isTrue);
       expect(scenario.controller.model?.is_closed, isTrue);
     });
 
     test('restores terminal when application-state refresh fails', () async {
+      late final _Scenario scenario;
       final registry = ExplorerActionRegistry([
         ExplorerFeatureContribution(
           id: 'fixture',
@@ -627,20 +662,18 @@ void main() {
             _SyntheticAction(
               id: 'fixture.refresh',
               shortcut: 'r',
-              operation: (_) async {},
+              // Simulate lost connectivity before the controller can read state.
+              operation: (_, _) => scenario.sdk.close(),
             ),
           ],
         ),
       ]);
 
-      final scenario = await _Scenario.create(
+      scenario = await _Scenario.create(
         children: {'/root': []},
         entries: [],
         keys: 'rq',
         action_registry: registry,
-        refresh_application_state: () async {
-          throw StateError('Injected refresh failure.');
-        },
       );
 
       await expectLater(scenario.runner.run(), throwsStateError);
@@ -677,9 +710,6 @@ final class _Scenario {
   /// [rows] is the terminal height for the initial frame.
   ///
   /// [action_registry] supplies optional synthetic feature actions.
-  ///
-  /// [refresh_application_state] is an optional callback invoked
-  /// after an action completes successfully.
   static Future<_Scenario> create({
     required Map<String, List<String>> children,
     required List<FilesystemEntry> entries,
@@ -688,7 +718,6 @@ final class _Scenario {
     Stream<List<int>>? source,
     int rows = 24,
     ExplorerActionRegistry? action_registry,
-    Future<void> Function()? refresh_application_state,
   }) async {
     final inspector = _Inspector(
       children: children,
@@ -702,6 +731,7 @@ final class _Scenario {
     addTearDown(sdk.close);
 
     final scenario = _Scenario._()
+      ..sdk = sdk
       ..inspector = inspector
       ..terminal = _FakeTerminalHost(
         source: source ?? Stream<List<int>>.fromIterable([ascii.encode(keys)]),
@@ -709,9 +739,10 @@ final class _Scenario {
       )
       ..renderer = _RecordingRenderer()
       ..errors = StringBuffer()
-      ..controller = ExplorerController(
+      ..controller = await ExplorerController.create(
         sdk: sdk,
         starting_directory: TargetPath('/root'),
+        action_registry: action_registry,
       );
 
     scenario.runner = ExplorerRunner(
@@ -719,24 +750,12 @@ final class _Scenario {
       terminal: scenario.terminal,
       renderer: scenario.renderer,
       error_output: scenario.errors,
-      create_view_model:
-          (
-            explorer, {
-            required int visible_row_limit,
-            required int first_visible_index,
-          }) {
-            return ExplorerViewModel.from_navigation(
-              explorer: explorer,
-              workflows: null,
-              visible_row_limit: visible_row_limit,
-              first_visible_index: first_visible_index,
-            );
-          },
-      refresh_application_state: refresh_application_state,
-      action_registry: action_registry,
     );
     return scenario;
   }
+
+  /// SDK borrowed by the controller.
+  late final RudraSdk sdk;
 
   /// Configured in-memory filesystem inspector.
   late final _Inspector inspector;
@@ -757,6 +776,22 @@ final class _Scenario {
   late final ExplorerRunner runner;
 }
 
+/// Records the exact SDK snapshot used for each frame.
+final class _SyntheticContribution extends ExplorerFeatureContribution {
+  _SyntheticContribution({
+    required this.on_present,
+    required ExplorerAction action,
+  }) : super(id: 'fixture', actions: [action]);
+
+  final void Function(RudraState) on_present;
+
+  @override
+  ExplorerFeaturePresentation present(RudraState state) {
+    on_present(state);
+    return super.present(state);
+  }
+}
+
 /// Synthetic Explorer action for runner interaction tests.
 ///
 /// The supplied operation records execution or injects failures
@@ -768,8 +803,7 @@ final class _SyntheticAction implements ExplorerAction {
   ///
   /// [shortcut] is the printable character used for dispatch.
   ///
-  /// [operation] receives the navigation snapshot passed by
-  /// the runner and completes or fails asynchronously.
+  /// [operation] receives the interaction snapshots and completes or fails asynchronously.
   const _SyntheticAction({
     required this.id,
     required this.shortcut,
@@ -785,17 +819,16 @@ final class _SyntheticAction implements ExplorerAction {
   final String shortcut;
 
   /// Operation invoked when the action is dispatched.
-  final Future<void> Function(ExplorerModel) operation;
+  final Future<void> Function(ExplorerModel, RudraState) operation;
 
   /// Executes the injected operation.
   ///
-  /// [model] is the current navigation snapshot supplied by
-  /// the runner.
+  /// [model] and [state] are the snapshots supplied by the controller.
   ///
   /// Returns the operation's future and propagates its failures.
   @override
-  Future<void> execute(ExplorerModel model) {
-    return operation(model);
+  Future<void> execute(ExplorerModel model, RudraState state) {
+    return operation(model, state);
   }
 }
 

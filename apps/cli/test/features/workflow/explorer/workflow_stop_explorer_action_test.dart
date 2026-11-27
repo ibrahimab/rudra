@@ -10,11 +10,14 @@ import 'package:test/test.dart';
 /// The application operation is injected to verify identity
 /// handling and failure propagation independently of persistence.
 void main() {
+  final state = _state('workflow-1');
   group('WorkflowStopExplorerAction', () {
     test('has a stable identity and keyboard shortcut', () {
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (id, _) async => _completed_stop(id),
+        stop_workflow: ({
+          required workflow_id,
+          required idempotency_key,
+        }) async => _completed_stop(workflow_id),
       );
 
       expect(action.id, 'workflow.stop');
@@ -25,14 +28,14 @@ void main() {
       String? requested_id;
 
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (expected_id, _) async {
-          requested_id = expected_id;
-          return _completed_stop(expected_id);
-        },
+        stop_workflow:
+            ({required workflow_id, required idempotency_key}) async {
+              requested_id = workflow_id;
+              return _completed_stop(workflow_id);
+            },
       );
 
-      await action.execute(_explorer());
+      await action.execute(_explorer(), state);
 
       expect(requested_id, 'workflow-1');
     });
@@ -41,78 +44,70 @@ void main() {
       var calls = 0;
 
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => null,
-        stop_workflow: (id, _) async {
-          calls++;
-          return _completed_stop(id);
-        },
+        stop_workflow:
+            ({required workflow_id, required idempotency_key}) async {
+              calls++;
+              return _completed_stop(workflow_id);
+            },
       );
 
-      await expectLater(action.execute(_explorer()), throwsStateError);
+      await expectLater(
+        action.execute(_explorer(), _state()),
+        throwsStateError,
+      );
 
       expect(calls, 0);
     });
 
     test('rejects a mismatched confirmed workflow ID', () async {
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (_, _) async => _completed_stop('workflow-2'),
+        stop_workflow: ({
+          required workflow_id,
+          required idempotency_key,
+        }) async => _completed_stop('workflow-2'),
       );
 
-      await expectLater(action.execute(_explorer()), throwsStateError);
+      await expectLater(action.execute(_explorer(), state), throwsStateError);
     });
 
     test(
       'does not retarget Stop after the displayed workflow changes',
       () async {
-        var displayed = _active('workflow-1');
+        var displayed = state;
         String? requested_id;
 
         final action = WorkflowStopExplorerAction(
-          displayed_workflow: () => displayed,
-          stop_workflow: (expected_id, _) async {
-            requested_id = expected_id;
+          stop_workflow:
+              ({required workflow_id, required idempotency_key}) async {
+                requested_id = workflow_id;
 
-            // Simulate another presentation snapshot replacing the
-            // workflow while the original operation is in flight.
-            displayed = _active('workflow-2');
+                // Simulate another presentation snapshot replacing the
+                // workflow while the original operation is in flight.
+                displayed = _state('workflow-2');
 
-            return _completed_stop(expected_id);
-          },
+                return _completed_stop(workflow_id);
+              },
         );
 
-        await action.execute(_explorer());
+        await action.execute(_explorer(), displayed);
 
         expect(requested_id, 'workflow-1');
-        expect(displayed.identity.workflow_id, 'workflow-2');
+        expect(
+          displayed.workflows.current_workflow!.identity.workflow_id,
+          'workflow-2',
+        );
       },
     );
 
     test('propagates unexpected application failure', () async {
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (_, _) async {
-          throw StateError('Injected Stop rejection.');
-        },
+        stop_workflow:
+            ({required workflow_id, required idempotency_key}) async {
+              throw StateError('Injected Stop rejection.');
+            },
       );
 
-      await expectLater(action.execute(_explorer()), throwsStateError);
-    });
-
-    test('reads the displayed workflow once per execution', () async {
-      var reads = 0;
-
-      final action = WorkflowStopExplorerAction(
-        displayed_workflow: () {
-          reads++;
-          return _active('workflow-1');
-        },
-        stop_workflow: (id, _) async => _completed_stop(id),
-      );
-
-      await action.execute(_explorer());
-
-      expect(reads, 1);
+      await expectLater(action.execute(_explorer(), state), throwsStateError);
     });
 
     test('preserves the durable rejection of a stale Stop', () async {
@@ -129,12 +124,14 @@ void main() {
       );
 
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (_, _) async => outcome,
+        stop_workflow: ({
+          required workflow_id,
+          required idempotency_key,
+        }) async => outcome,
       );
 
       await expectLater(
-        action.execute(_explorer()),
+        action.execute(_explorer(), state),
         throwsA(
           isA<WorkflowExplorerOperationException>().having(
             (error) => error.outcome,
@@ -150,16 +147,16 @@ void main() {
       String? requested_key;
 
       final action = WorkflowStopExplorerAction(
-        displayed_workflow: () => _active('workflow-1'),
-        stop_workflow: (workflow_id, idempotency_key) async {
-          requested_id = workflow_id;
-          requested_key = idempotency_key;
+        stop_workflow:
+            ({required workflow_id, required idempotency_key}) async {
+              requested_id = workflow_id;
+              requested_key = idempotency_key;
 
-          return _completed_stop(workflow_id);
-        },
+              return _completed_stop(workflow_id);
+            },
       );
 
-      await action.execute(_explorer());
+      await action.execute(_explorer(), state);
 
       expect(requested_id, 'workflow-1');
       expect(requested_key, isNotNull);
@@ -167,6 +164,13 @@ void main() {
     });
   });
 }
+
+/// Creates the SDK state supplied with a rendered frame.
+RudraState _state([String? workflow_id]) => RudraState(
+  workflows: WorkflowsState(
+    current_workflow: workflow_id == null ? null : _active(workflow_id),
+  ),
+);
 
 /// Creates a committed active workflow with the requested identifier.
 ///

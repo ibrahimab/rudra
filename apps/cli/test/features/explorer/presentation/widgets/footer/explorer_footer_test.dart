@@ -5,7 +5,6 @@ import 'package:rudra_cli/src/features/explorer/presentation/widgets/actions/exp
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/directory/explorer_directory_view_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/footer/explorer_footer.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/footer/explorer_footer_view_model.dart';
-import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -91,7 +90,7 @@ ExplorerFooter _footer(ExplorerModel explorer, {int visible_row_limit = 3}) {
 
   final actions = ExplorerActionsViewModel(
     explorer: explorer,
-    workflow: const WorkflowExplorerViewModel(current_workflow: null),
+    instructions: const ['S Start Workflow'],
   );
 
   return ExplorerFooter(

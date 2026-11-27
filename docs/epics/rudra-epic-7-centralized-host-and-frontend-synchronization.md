@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** 7A through 7D.2.1 implemented. Native multi-user provisioning verification, 7D.3 and 7E remain open.
+**Status:** 7A through 7D.3A implemented. Native multi-user provisioning verification, 7D.3B and 7E remain open.
 **Created:** 24 November 2026
 **Updated:** 27 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -1309,7 +1309,38 @@ host-backed inspection, Stop and durable restart. The real multi-user
 permissions gate remains open. The tests use isolated paths and write no
 production Rudra resources.
 
-#### 7D.3 — Reactive Explorer integration
+#### 7D.3A — Frontend MVC and composition simplification
+
+**Baseline:** `d43261f90f2fee96a8ef7b4b35f1a6157de4f6ed`.
+
+Explorer now borrows the authenticated SDK and loads verified `RudraState`
+during controller initialization, before terminal creation. The controller owns
+navigation, viewport state and registered action dispatch. It reads a fresh
+verified snapshot after each successful action. The terminal runner decodes
+input, forwards keys sequentially, supplies the available rows and renders
+immutable view models. Terminal restoration precedes disposal of the SDK by
+the enclosing CLI invocation.
+
+Product composition shares `ProductSdkComposition` with the SDK-backed feature
+compositions and registers `WorkflowExplorerContribution` explicitly. Workflow
+owns its Start and Stop actions and its status and shortcut text. Stop uses the
+same SDK snapshot used to render the workflow identity, so an external change
+can cause a durable stale-identity rejection. Navigation remains read-only,
+through the public SDK filesystem service.
+
+The single status row and shortcut row accept contributed display text through
+the existing Explorer registry. One-shot commands and interactive Explorer
+share general CLI and rendering contracts and compose their own components.
+
+**Verification on 27 November 2026:** Dependency resolution, workspace format
+and analysis, all eight test suites and the macOS arm64 production build passed.
+The test run passed 1,527 tests with zero failures and two non-macOS cases
+skipped. The workspace root has no test suite. The native host and independent
+CLI processes ran against isolated resources. Focused coverage verifies stale
+Stop identity, sequential dispatch and SDK disposal after terminal restoration.
+Real macOS multi-user permissions remain an open acceptance gate.
+
+#### 7D.3B — Reactive Explorer integration
 
 - Establish authenticated connectivity and initial verified application
   state observation.
@@ -1413,7 +1444,7 @@ These are **design checkpoints**, not permission to replace the agreed SDK-first
 - **7C.3:** Host-backed application capabilities belong beneath the existing `RudraSdk` facade. Shared connection ownership and remote observation remain independently owned SDK infrastructure.
 - **7D.1:** Unified SDK composition, host-authoritative target validation, filesystem messaging and bounded result transfer.
 - **7D.2:** Trusted production frontend connectivity, authoritative persistence scope and removal of superseded frontend execution dependencies.
-- **7D.3:** Explorer's serialized input/observation event loop, initial verified presentation and resource ownership.
+- **7D.3B:** Explorer's serialized input/observation event loop and observation lifecycle.
 - **7E:** Plugin versus install-step contract shapes, registry/installation plan and failure semantics, concrete launchd service/install integration, packaging, restart policy, verification and treatment of unavailable/disabled hosts. A power plugin remains optional and requires an explicit need.
 
 Decide these from inspected code and real platform constraints immediately before implementation. Do not present proposed wire APIs or service mechanics as existing capabilities.

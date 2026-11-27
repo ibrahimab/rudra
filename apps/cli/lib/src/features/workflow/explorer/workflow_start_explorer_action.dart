@@ -16,11 +16,7 @@ import 'workflow_explorer_operation_exception.dart';
 /// Example:
 /// ```dart
 /// final action = WorkflowStartExplorerAction(
-///   start_workflow: (root, key) => workflows.start(
-///     target_id: target_id,
-///     root: root,
-///     idempotency_key: key,
-///   ),
+///   start_workflow: sdk.workflows.start,
 /// );
 /// ```
 final class WorkflowStartExplorerAction implements ExplorerAction {
@@ -31,10 +27,10 @@ final class WorkflowStartExplorerAction implements ExplorerAction {
   const WorkflowStartExplorerAction({required this.start_workflow});
 
   /// Application operation receiving the requested root and operation key.
-  final Future<WorkflowOperationOutcome> Function(
-    TargetPath root,
-    String idempotency_key,
-  )
+  final Future<WorkflowOperationOutcome> Function({
+    required TargetPath root,
+    required String idempotency_key,
+  })
   start_workflow;
 
   /// Stable identifier for workflow establishment.
@@ -42,10 +38,15 @@ final class WorkflowStartExplorerAction implements ExplorerAction {
   String get id => 'workflow.start';
 
   /// Keyboard shortcut used to request Start.
+  static const String key = 's';
+
   @override
-  String get shortcut => 's';
+  String get shortcut => key;
 
   /// Requests workflow establishment for [model]'s displayed directory.
+  ///
+  /// The SDK [state] accompanies the frame. The host decides whether a new
+  /// workflow can be established.
   ///
   /// Completes only after the application confirms establishment.
   ///
@@ -53,11 +54,14 @@ final class WorkflowStartExplorerAction implements ExplorerAction {
   /// application outcomes, or [StateError] for contradictory commitment
   /// evidence. Unexpected application failures propagate.
   @override
-  Future<void> execute(ExplorerModel model) async {
+  Future<void> execute(ExplorerModel model, RudraState state) async {
     final root = model.current_directory;
     final idempotency_key = Uuid().v4();
 
-    final outcome = await start_workflow(root, idempotency_key);
+    final outcome = await start_workflow(
+      root: root,
+      idempotency_key: idempotency_key,
+    );
 
     if (outcome is! WorkflowOperationResolved ||
         outcome.resolution.state != WorkflowSubmissionState.completed) {

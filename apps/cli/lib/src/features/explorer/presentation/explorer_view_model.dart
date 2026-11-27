@@ -1,5 +1,7 @@
+import '../../../core/rendering/widgets/terminal_widget.dart';
+
+import '../application/explorer_action_registry.dart';
 import '../application/explorer_model.dart';
-import '../../workflow/explorer/workflow_explorer_view_model.dart';
 
 import 'widgets/actions/explorer_actions_view_model.dart';
 import 'widgets/directory/explorer_directory_view_model.dart';
@@ -19,7 +21,7 @@ import 'widgets/header/explorer_header_view_model.dart';
 /// ```dart
 /// final view_model = ExplorerViewModel.from_navigation(
 ///   explorer: explorer_model,
-///   workflows: workflow_view_model,
+///   contributions: [feature_presentation],
 ///   visible_row_limit: 12,
 /// );
 ///
@@ -30,8 +32,8 @@ final class ExplorerViewModel {
   ///
   /// [explorer] contains the current Explorer navigation snapshot.
   ///
-  /// [workflows] contains the current workflow presentation state.
-  /// Null indicates that workflow functionality is not configured.
+  /// [contributions] supplies projected status and shortcut text in
+  /// registration order. Empty presentations contribute no text.
   ///
   /// [visible_row_limit] is the number of rows available for
   /// directory entries after fixed screen rows are reserved.
@@ -42,7 +44,7 @@ final class ExplorerViewModel {
   /// Throws [RangeError] for a negative [visible_row_limit].
   factory ExplorerViewModel.from_navigation({
     required ExplorerModel explorer,
-    required WorkflowExplorerViewModel? workflows,
+    Iterable<ExplorerFeaturePresentation> contributions = const [],
     required int visible_row_limit,
     int first_visible_index = 0,
   }) {
@@ -52,13 +54,20 @@ final class ExplorerViewModel {
       first_visible_index: first_visible_index,
     );
 
+    final statuses = <TerminalLine>[];
+    final instructions = <String>[];
+    for (final (:status, :instruction) in contributions) {
+      if (status != null) statuses.add(status);
+      if (instruction != null) instructions.add(instruction);
+    }
+
     final actions = ExplorerActionsViewModel(
       explorer: explorer,
-      workflow: workflows,
+      instructions: instructions,
     );
 
     return ExplorerViewModel._(
-      header: ExplorerHeaderViewModel(explorer: explorer, workflow: workflows),
+      header: ExplorerHeaderViewModel(explorer: explorer, statuses: statuses),
       directory: directory,
       footer: ExplorerFooterViewModel(directory: directory, actions: actions),
     );
@@ -66,7 +75,7 @@ final class ExplorerViewModel {
 
   /// Creates a screen composition from its component models.
   ///
-  /// [header] contains the title, directory and workflow data.
+  /// [header] contains the title, directory and contributed status text.
   ///
   /// [directory] contains the formatted directory viewport.
   ///

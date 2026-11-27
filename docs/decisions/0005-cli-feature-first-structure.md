@@ -107,17 +107,17 @@ when an implemented use case demonstrates genuine reuse.
 
 ### 2.4 Application composition
 
-After Epic 7D.2.1, `compose_product_cli()` assembles and registers product
-features. It supplies the invocation-owned SDK, starting directory and output
-destinations. The host supplies filesystem target identity and selects native
-target inspection.
+`compose_product_cli()` assembles product features and selects their Explorer
+contributions. Its SDK-backed composition entry points receive the existing
+`ProductSdkComposition` for the invocation SDK, deferred connection and starting
+directory. Feature commands and controllers receive the capabilities they use.
+The host supplies filesystem target identity and selects native target inspection.
 
-Feature-owned composition constructs feature controllers, renderers and
-callbacks. Explorer owns terminal and runner assembly, while the workflow
-feature supplies its Explorer actions and verified workflow presentation.
-Features consume explicit dependencies and remain independent of
-`ProductSdkComposition`. `RudraCli` provides generic registration and
-dispatch under ADR 0001.
+Explorer assembles its controller, terminal runner and renderer. Its controller
+owns navigation, registered action dispatch and explicit SDK state refresh.
+Workflow owns its Explorer actions and projects verified state into presentation.
+`RudraCli` provides generic registration and dispatch under ADR 0001. Each
+feature composes the components its interaction requires.
 
 ### 2.5 SDK-first boundary
 

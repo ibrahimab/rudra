@@ -1,9 +1,15 @@
+import 'package:rudra_sdk/rudra_sdk.dart';
+
+import '../../../core/rendering/widgets/terminal_widget.dart';
+
+import '../terminal/terminal_key.dart';
+
 import 'explorer_model.dart';
 
 /// Represents an action invoked through an Explorer keyboard shortcut.
 ///
 /// Each action defines a stable identifier, a keyboard shortcut, and
-/// an operation executed against the current Explorer navigation model.
+/// an operation executed against the current Explorer and SDK snapshots.
 ///
 /// Implementations are registered through [ExplorerActionRegistry].
 ///
@@ -19,7 +25,7 @@ import 'explorer_model.dart';
 ///   String get shortcut => 'i';
 ///
 ///   @override
-///   Future<void> execute(ExplorerModel model) async {
+///   Future<void> execute(ExplorerModel model, RudraState state) async {
 ///     print(model.current_directory.value);
 ///   }
 /// }
@@ -46,15 +52,25 @@ abstract interface class ExplorerAction {
   ///
   /// [model] contains the navigation state at the moment the
   /// keyboard shortcut was dispatched.
+  /// [state] is the verified SDK snapshot used to present that frame.
   ///
   /// Returns a future that completes when the action finishes.
   ///
   /// Exceptions from the underlying application operation
   /// propagate to the caller.
-  Future<void> execute(ExplorerModel model);
+  Future<void> execute(ExplorerModel model, RudraState state);
 }
 
-/// Groups the Explorer actions contributed by a feature.
+/// Display data contributed to Explorer's shared status and shortcut rows.
+///
+/// A null value omits the corresponding text. [TerminalLine] supplies
+/// semantic styling for status text.
+typedef ExplorerFeaturePresentation = ({
+  TerminalLine? status,
+  String? instruction,
+});
+
+/// Groups a feature's Explorer actions and related presentation.
 ///
 /// Each contribution has a unique identifier and an immutable,
 /// ordered collection of actions.
@@ -69,7 +85,7 @@ abstract interface class ExplorerAction {
 ///   actions: [start_action, stop_action],
 /// );
 /// ```
-final class ExplorerFeatureContribution {
+base class ExplorerFeatureContribution {
   /// Creates a feature contribution.
   ///
   /// [id] uniquely identifies the contributing feature within
@@ -94,6 +110,13 @@ final class ExplorerFeatureContribution {
   ///
   /// Actions retain the order supplied to the constructor.
   final List<ExplorerAction> actions;
+
+  /// Projects the verified SDK [state] into status and shortcut text.
+  ///
+  /// Returns empty presentation for an action-only contribution. Implementations
+  /// use the supplied snapshot and perform no application or terminal I/O.
+  ExplorerFeaturePresentation present(RudraState state) =>
+      (status: null, instruction: null);
 }
 
 /// Registry of keyboard actions contributed by Explorer features.
@@ -115,10 +138,10 @@ final class ExplorerFeatureContribution {
 ///   ),
 /// ]);
 ///
-/// final action = registry.resolve('s');
+/// final action = registry.resolve(const TerminalCharacterKey('s'));
 ///
 /// if (action != null) {
-///   await action.execute(explorer_model);
+///   await action.execute(explorer_model, verified_state);
 /// }
 /// ```
 final class ExplorerActionRegistry {
@@ -137,7 +160,12 @@ final class ExplorerActionRegistry {
   /// The registry becomes available only after all contributions
   /// have been validated successfully.
   ExplorerActionRegistry(Iterable<ExplorerFeatureContribution> features)
-    : _by_shortcut = _register(features);
+    : this._(List<ExplorerFeatureContribution>.unmodifiable(features));
+
+  ExplorerActionRegistry._(this.features) : _by_shortcut = _register(features);
+
+  /// Validated contributions in registration order, used for presentation.
+  final List<ExplorerFeatureContribution> features;
 
   /// Immutable lookup of registered actions by keyboard shortcut.
   ///
@@ -205,22 +233,24 @@ final class ExplorerActionRegistry {
     return Map<String, ExplorerAction>.unmodifiable(actions);
   }
 
-  /// Resolves the action registered for a keyboard shortcut.
+  /// Resolves the feature action registered for a decoded terminal [key].
   ///
-  /// [character] is the decoded character received from terminal
-  /// input. Lookup is case-insensitive.
+  /// Printable shortcuts use case-insensitive lookup. Special keys are reserved
+  /// for Explorer's own interaction bindings.
   ///
   /// Returns the registered [ExplorerAction], or null when no
-  /// action is associated with the supplied character.
+  /// action is associated with the key.
   ///
   /// Resolution does not execute the returned action.
   ///
   /// Example:
   /// ```dart
-  /// final start_action = registry.resolve('S');
-  /// final unknown_action = registry.resolve('?');
+  /// final start_action = registry.resolve(const TerminalCharacterKey('S'));
+  /// final unknown_action = registry.resolve(TerminalSpecialKey.enter);
   /// ```
-  ExplorerAction? resolve(String character) {
-    return _by_shortcut[character.toLowerCase()];
-  }
+  ExplorerAction? resolve(TerminalKey key) => switch (key) {
+    TerminalCharacterKey(:final character) =>
+      _by_shortcut[character.toLowerCase()],
+    _ => null,
+  };
 }

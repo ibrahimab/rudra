@@ -1,3 +1,4 @@
+import 'package:rudra_cli/src/core/rendering/theme.dart';
 import 'package:rudra_cli/src/core/rendering/widgets/terminal_widget.dart';
 
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
@@ -9,8 +10,6 @@ import 'package:rudra_cli/src/features/explorer/presentation/widgets/directory/e
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/footer/explorer_footer.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/header/explorer_header.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/explorer_screen.dart';
-
-import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
@@ -166,7 +165,12 @@ ExplorerViewModel _view_model({
 
   return ExplorerViewModel.from_navigation(
     explorer: explorer,
-    workflows: const WorkflowExplorerViewModel(current_workflow: null),
+    contributions: const [
+      (
+        status: TerminalLine('Workflow: NONE', role: TerminalRole.muted),
+        instruction: 'S Start Workflow',
+      ),
+    ],
     visible_row_limit: visible_row_limit,
   );
 }

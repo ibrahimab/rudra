@@ -1,7 +1,7 @@
 
 # Rudra — Software Architecture
 
-Version: 1.4
+Version: 1.5
 Last updated: 2026-11-27
 **Status:** Architectural baseline
 
@@ -226,6 +226,7 @@ apps/cli/lib/
   src/
     rudra_cli.dart
     composition/
+      product_cli_composition.dart
       product_sdk_composition.dart
     core/
       cli/
@@ -258,11 +259,13 @@ apps/cli/lib/
               about_information_view_model.dart
       explorer/
         application/
+          explorer_action_registry.dart
           explorer_controller.dart
           explorer_model.dart
           explorer_runner.dart
         cli/
           explore_command.dart
+          explorer_cli_composition.dart
           explorer_cli_module.dart
         terminal/
           dart_explorer_terminal_host.dart
@@ -271,13 +274,15 @@ apps/cli/lib/
           terminal_input.dart
         presentation/
           bare_explorer_renderer.dart
-          explorer_presenter.dart
           explorer_view_model.dart
           widgets/
             explorer_screen.dart
             header/
               explorer_header.dart
               explorer_header_view_model.dart
+            actions/
+              explorer_actions.dart
+              explorer_actions_view_model.dart
             directory/
               explorer_directory.dart
               explorer_directory_view_model.dart
@@ -321,6 +326,13 @@ apps/cli/lib/
             footer/
               welcome_footer.dart
               welcome_footer_view_model.dart
+      workflow/
+        cli/
+          workflow_cli_module.dart
+        explorer/
+          workflow_explorer_contribution.dart
+          workflow_start_explorer_action.dart
+          workflow_stop_explorer_action.dart
 
 Feature directories own their presentation and command implementations.
 
@@ -485,6 +497,7 @@ The root `./rudra` development launcher supports:
 - `./rudra analyze`
 - `./rudra test`
 - `./rudra check`
+- `./rudra verify all`
 - `./rudra build`
 
 `./rudra test` supports selective testing through the existing development command implementation.
@@ -684,26 +697,37 @@ assemble product features. It owns the SDK lifecycle, starting directory and
 output destinations. The generic `RudraCli` framework registers modules,
 dispatches commands and supports application-owned invocation hooks.
 
-Features assemble their components through explicit dependencies. About
-selects its standard renderer. Welcome and List obtain the authenticated SDK
-after argument validation and render their observations. Help, About, invalid
-usage and host management remain independent of client connectivity. An
-unavailable host produces a diagnostic and exit status 69.
+The SDK-backed feature compositions receive `ProductSdkComposition`, which
+keeps the working directory, connection configuration and invocation SDK
+together. Features assemble their own commands and presentation. Commands
+connect after validating their arguments. Help, About, invalid usage and host
+management remain independent of client connectivity. An unavailable host
+produces a diagnostic and exit status 69.
 
 `ExplorerCliModule` registers `ExploreCommand`, which validates the optional
 target-native directory and delegates to the Explorer feature's runner factory.
-Explorer constructs its controller, renderer, terminal and view model lazily
-after reading verified application state. The workflow feature supplies its
-snapshot and registered Start and Stop actions. Explorer invokes explicit
-refresh and restores the terminal before invocation-owned SDK disposal.
+Product composition explicitly registers `WorkflowExplorerContribution` in an
+`ExplorerActionRegistry`. The feature supplies its Start and Stop actions and
+projects verified SDK state into the shared status and shortcut rows. Explorer
+consumes the registration contract. Additional features can register through
+the same product boundary.
 
 The Explorer composition contains:
 
-- `ExplorerController` configured with the public Rudra SDK.
-- `ExplorerRunner` coordinating read-only navigation.
-- `ExplorerViewModel` combining navigation and verified workflow presentation.
-- `BareExplorerRenderer` using the ANSI terminal backend.
-- `DartExplorerTerminalHost` managing terminal lifecycle.
+- `ExplorerController` loads verified SDK state before terminal creation. It
+  owns navigation, viewport position, action dispatch and explicit post-action
+  state reads. Directory listings come directly from `sdk.filesystem`.
+- `ExplorerModel` holds immutable directory, history and selection snapshots.
+- `ExplorerViewModel` projects the interaction and contributed display text
+  into immutable header, directory and footer view models. Widgets are stateless.
+- `ExplorerRunner` adapts terminal input and space to the controller and renders
+  its view models using `BareExplorerRenderer` in the ANSI backend.
+- `DartExplorerTerminalHost` restores terminal resources before the product
+  invocation releases its SDK.
+
+Stop receives the same verified SDK snapshot that supplied the displayed
+workflow identity. Its request carries that identity and a durable operation
+key. The SDK and host handle validation, idempotency and persistence.
 
 The terminal host supplies the interactive output destination.
 The renderer uses that same destination for screen updates.
@@ -788,11 +812,16 @@ application composition boundary.
 The initial interactive Explorer is implemented using the
 bare terminal rendering backend.
 
-TerminalInput converts raw input bytes into navigation actions.
+`TerminalInput` converts raw input bytes into physical keys.
 
-ExplorerRunner coordinates keyboard events, SDK-backed navigation,
-presentation updates, viewport scrolling, and interaction exit
-status.
+`ExplorerRunner` forwards decoded keys to the controller, awaits each operation
+and redraws when requested. It supplies the available viewport rows and maps
+the controller's inspection outcome to a CLI exit status.
+
+Explorer binds its navigation and exit keys to local controller operations.
+Feature actions declare their own shortcuts, which the action registry resolves
+from decoded keys. The controller awaits the matched operation and refreshes
+verified SDK state after a successful feature action.
 
 DartExplorerTerminalHost manages terminal input modes, alternate
 screen activation, cursor visibility, input subscriptions, signal
@@ -809,8 +838,10 @@ filesystem inspection begins.
 The initial directory is inspected before interactive terminal
 modes are enabled.
 
-Later navigation inspections are executed sequentially within
-the guarded terminal lifecycle.
+Navigation inspections and registered actions run sequentially within the
+guarded terminal lifecycle. The controller explicitly refreshes verified
+application state before the next frame after a successful action. Reactive
+state observation is scheduled for 7D.3B.
 
 All filesystem observations pass through RudraSdk.filesystem.
 
@@ -1530,7 +1561,7 @@ The repository contains:
 - Generic CLI rendering contract.
 - Bare terminal renderers.
 - Terminal text sanitization and semantic styling.
-- In-memory Explorer navigation controller and model.
+- Explorer MVC with registered feature actions and explicit SDK state refresh.
 - Explorer keyboard-input decoder.
 
 ### 16.2 CLI architecture

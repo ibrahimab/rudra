@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:rudra_cli/rudra_cli.dart';
 import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:rudra_cli/src/features/explorer/cli/explorer_cli_composition.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/dart_explorer_terminal_host.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_device.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_operation_exception.dart';
 
@@ -33,8 +35,7 @@ void main() {
       final cli = RudraCli()
         ..register_module(
           compose_explorer_cli(
-            connect: sdk.connect,
-            working_directory: sdk.working_directory,
+            sdk_composition: sdk,
             error_output: fixture.errors,
             create_terminal_host: () {
               fixture.host_creations++;
@@ -567,6 +568,72 @@ void main() {
       expect(await host.current(), isNull);
       expect(reopened.terminal.restored, isTrue);
     });
+
+    test(
+      'Stop retains the displayed identity after an external change',
+      () async {
+        final starter = _Fixture();
+        final host = starter.application_host;
+        expect(await starter.create_cli().run(['workflow', 'start']), 0);
+        final displayed_id = (await host.current())!.identity.workflow_id;
+        final explorer = _Fixture(host: host);
+        final cli = explorer.create_cli();
+        String? replacement_id;
+
+        explorer.terminal.read_input = () async* {
+          expect(
+            explorer.terminal.output_buffer.toString(),
+            contains('ID: $displayed_id'),
+          );
+          expect(
+            await _Fixture(host: host).create_cli().run(['workflow', 'stop']),
+            0,
+          );
+          expect(
+            await _Fixture(host: host).create_cli().run(['workflow', 'start']),
+            0,
+          );
+          replacement_id = (await host.current())!.identity.workflow_id;
+          expect(replacement_id, isNot(displayed_id));
+          yield ascii.encode('x');
+        };
+
+        await expectLater(
+          cli.run(['explore']),
+          throwsA(
+            isA<WorkflowExplorerOperationException>().having(
+              (error) => error.outcome,
+              'outcome',
+              isA<WorkflowOperationResolved>().having(
+                (outcome) => outcome.resolution.rejection_code,
+                'rejection code',
+                WorkflowRejectionCode.workflow_id_mismatch,
+              ),
+            ),
+          ),
+        );
+        expect((await host.current())!.identity.workflow_id, replacement_id);
+        expect(explorer.terminal.restored, isTrue);
+        expect(explorer.sdk!.resources_released, isTrue);
+      },
+    );
+
+    test(
+      'restores Explorer before releasing the SDK after interruption',
+      () async {
+        final fixture = _Fixture();
+        fixture.terminal.read_input = () => Stream<List<int>>.error(
+          const ExplorerTerminalInterrupted(ExplorerTerminalSignal.terminate),
+        );
+
+        await expectLater(
+          fixture.create_cli().run(['explore']),
+          throwsA(isA<ExplorerTerminalInterrupted>()),
+        );
+        expect(fixture.terminal.restored, isTrue);
+        expect(fixture.sdk!.resources_released, isTrue);
+      },
+    );
   });
 }
 
@@ -628,6 +695,10 @@ final class _Fixture {
   RudraCli create_cli() {
     final composition = application_host.composition();
     sdk = composition.sdk;
+    terminal.on_restore = () {
+      expect(composition.sdk.is_connected, isTrue);
+      expect(composition.sdk.resources_released, isFalse);
+    };
     return compose_product_cli(
       sdk_composition: composition,
       output: normal_output,
@@ -739,6 +810,12 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
   /// Simulated explicit user keypresses.
   final String keys;
 
+  /// Optional input stream created after the first frame.
+  Stream<List<int>> Function()? read_input;
+
+  /// Checks invocation ownership during restoration.
+  void Function()? on_restore;
+
   /// Whether terminal interaction was entered.
   bool entered = false;
 
@@ -763,14 +840,15 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
   @override
   StringSink get output => output_buffer;
 
-  /// Supplies a controlled quit event during an interaction.
+  /// Supplies controlled input during an interaction.
   @override
   Stream<List<int>> get input_bytes {
     if (!_active) {
       throw StateError('No active terminal interaction.');
     }
 
-    return Stream<List<int>>.fromIterable([ascii.encode(keys)]);
+    return read_input?.call() ??
+        Stream<List<int>>.fromIterable([ascii.encode(keys)]);
   }
 
   /// Runs the interaction and guarantees restoration signaling.
@@ -786,6 +864,7 @@ final class _TestTerminalHost implements ExplorerTerminalHost {
     try {
       return await interaction();
     } finally {
+      on_restore?.call();
       restored = true;
       _active = false;
     }

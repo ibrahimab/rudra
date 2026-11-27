@@ -5,7 +5,7 @@ import 'explorer_actions_view_model.dart';
 
 /// Renders Explorer's navigation and keyboard-action instructions.
 ///
-/// Instructions reflect the navigation and workflow state supplied
+/// Instructions reflect the navigation and contributed text supplied
 /// through [ExplorerActionsViewModel].
 ///
 /// The widget occupies one terminal row.
@@ -47,8 +47,7 @@ final class ExplorerActions implements TerminalWidget {
 
     final instructions = [
       'Up/Down Select  Enter Open  Left/Backspace Back',
-      if (view_model.show_start) 'S Start Workflow',
-      if (view_model.show_stop) 'X Stop Workflow',
+      ...view_model.instructions,
       'Q Quit',
     ];
 

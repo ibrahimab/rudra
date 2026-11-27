@@ -453,7 +453,7 @@ void main() {
   });
 
   group('trusted request boundaries', () {
-    test('rejects a relative root before durable acceptance', () async {
+    test('relative Start leaves its operation key available', () async {
       final fixture = await create_session();
 
       await expectLater(
@@ -480,7 +480,7 @@ void main() {
       _completed(valid.outcome);
     });
 
-    test('rejects a relative root before durable acceptance', () async {
+    test('relative Start leaves workflow state empty', () async {
       final fixture = await create_session();
 
       await expectLater(

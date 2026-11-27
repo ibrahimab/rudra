@@ -1,5 +1,6 @@
 import 'package:rudra_cli/src/features/explorer/application/explorer_action_registry.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
+import 'package:rudra_cli/src/features/explorer/terminal/terminal_key.dart';
 import 'package:rudra_cli/src/features/workflow/explorer/workflow_start_explorer_action.dart';
 import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_operation_exception.dart';
 
@@ -11,10 +12,12 @@ import 'package:test/test.dart';
 /// Application operations are injected; persistence and event
 /// processing are covered by integration tests.
 void main() {
+  final state = RudraState(workflows: WorkflowsState(current_workflow: null));
   group('WorkflowStartExplorerAction', () {
     test('has a stable identity and keyboard shortcut', () {
       final action = WorkflowStartExplorerAction(
-        start_workflow: (_, _) async => _completed_start(),
+        start_workflow: ({required root, required idempotency_key}) async =>
+            _completed_start(),
       );
 
       expect(action.id, 'workflow.start');
@@ -26,7 +29,7 @@ void main() {
       String? requested_key;
 
       final action = WorkflowStartExplorerAction(
-        start_workflow: (root, idempotency_key) async {
+        start_workflow: ({required root, required idempotency_key}) async {
           requested_root = root;
           requested_key = idempotency_key;
 
@@ -34,7 +37,7 @@ void main() {
         },
       );
 
-      await action.execute(_explorer('/workspace/src'));
+      await action.execute(_explorer('/workspace/src'), state);
 
       expect(requested_root?.value, '/workspace/src');
       expect(requested_key, isNotNull);
@@ -45,7 +48,7 @@ void main() {
       var submissions = 0;
 
       final action = WorkflowStartExplorerAction(
-        start_workflow: (_, _) async {
+        start_workflow: ({required root, required idempotency_key}) async {
           submissions++;
           return _completed_start();
         },
@@ -55,19 +58,19 @@ void main() {
         ExplorerFeatureContribution(id: 'workflow', actions: [action]),
       ]);
 
-      expect(registry.resolve('s'), same(action));
+      expect(registry.resolve(const TerminalCharacterKey('s')), same(action));
       expect(submissions, 0);
     });
 
     test('propagates unexpected application failure', () async {
       final action = WorkflowStartExplorerAction(
-        start_workflow: (_, _) async {
+        start_workflow: ({required root, required idempotency_key}) async {
           throw StateError('Workflow already exists.');
         },
       );
 
       await expectLater(
-        action.execute(_explorer('/workspace')),
+        action.execute(_explorer('/workspace'), state),
         throwsStateError,
       );
     });
@@ -76,10 +79,11 @@ void main() {
       final explorer = _explorer('/workspace');
 
       final action = WorkflowStartExplorerAction(
-        start_workflow: (_, _) async => _completed_start(),
+        start_workflow: ({required root, required idempotency_key}) async =>
+            _completed_start(),
       );
 
-      await action.execute(explorer);
+      await action.execute(explorer, state);
 
       expect(explorer.current_directory.value, '/workspace');
       expect(explorer.is_closed, isFalse);
@@ -100,11 +104,12 @@ void main() {
       );
 
       final action = WorkflowStartExplorerAction(
-        start_workflow: (_, _) async => outcome,
+        start_workflow: ({required root, required idempotency_key}) async =>
+            outcome,
       );
 
       await expectLater(
-        action.execute(_explorer('/workspace')),
+        action.execute(_explorer('/workspace'), state),
         throwsA(
           isA<WorkflowExplorerOperationException>().having(
             (error) => error.outcome,
@@ -119,7 +124,7 @@ void main() {
       final keys = <String>[];
 
       final action = WorkflowStartExplorerAction(
-        start_workflow: (_, idempotency_key) async {
+        start_workflow: ({required root, required idempotency_key}) async {
           keys.add(idempotency_key);
           return _completed_start();
         },
@@ -127,8 +132,8 @@ void main() {
 
       final explorer = _explorer('/workspace');
 
-      await action.execute(explorer);
-      await action.execute(explorer);
+      await action.execute(explorer, state);
+      await action.execute(explorer, state);
 
       expect(keys, hasLength(2));
       expect(keys.first, isNot(keys.last));

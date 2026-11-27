@@ -16,34 +16,23 @@ import 'workflow_explorer_operation_exception.dart';
 /// Example:
 /// ```dart
 /// final action = WorkflowStopExplorerAction(
-///   displayed_workflow: () => current_workflow,
-///   stop_workflow: (id, key) => workflows.stop(
-///     workflow_id: id,
-///     idempotency_key: key,
-///   ),
+///   stop_workflow: sdk.workflows.stop,
 /// );
 /// ```
 final class WorkflowStopExplorerAction implements ExplorerAction {
-  /// Creates a Stop action using the supplied application capabilities.
+  /// Creates a Stop action using [stop_workflow].
   ///
-  /// [displayed_workflow] supplies the workflow represented by Explorer.
   /// [stop_workflow] executes termination for an explicit workflow ID
   /// and idempotency key.
   ///
-  /// Construction does not invoke either function.
-  const WorkflowStopExplorerAction({
-    required this.displayed_workflow,
-    required this.stop_workflow,
-  });
-
-  /// Supplies the current displayed workflow or null when none exists.
-  final WorkflowSnapshot? Function() displayed_workflow;
+  /// Construction does not submit any operation.
+  const WorkflowStopExplorerAction({required this.stop_workflow});
 
   /// Application operation receiving the intended workflow and operation key.
-  final Future<WorkflowOperationOutcome> Function(
-    String workflow_id,
-    String idempotency_key,
-  )
+  final Future<WorkflowOperationOutcome> Function({
+    required String workflow_id,
+    required String idempotency_key,
+  })
   stop_workflow;
 
   /// Stable identifier for workflow termination.
@@ -51,13 +40,15 @@ final class WorkflowStopExplorerAction implements ExplorerAction {
   String get id => 'workflow.stop';
 
   /// Keyboard shortcut used to request Stop.
+  static const String key = 'x';
+
   @override
-  String get shortcut => 'x';
+  String get shortcut => key;
 
   /// Requests termination of the workflow displayed at dispatch time.
   ///
   /// [model] identifies the current Explorer navigation snapshot.
-  /// Workflow selection originates from [displayed_workflow].
+  /// [state] supplies the verified workflow snapshot used to render that frame.
   ///
   /// Completes only after the intended workflow's terminal outcome
   /// has been confirmed.
@@ -68,8 +59,8 @@ final class WorkflowStopExplorerAction implements ExplorerAction {
   /// Throws [WorkflowExplorerOperationException] for unsuccessful
   /// application outcomes. Unexpected application failures propagate.
   @override
-  Future<void> execute(ExplorerModel model) async {
-    final workflow = displayed_workflow();
+  Future<void> execute(ExplorerModel model, RudraState state) async {
+    final workflow = state.workflows.current_workflow;
 
     if (workflow == null) {
       throw StateError('No displayed workflow is available to stop.');
@@ -79,7 +70,10 @@ final class WorkflowStopExplorerAction implements ExplorerAction {
     final workflow_id = workflow.identity.workflow_id;
     final idempotency_key = Uuid().v4();
 
-    final outcome = await stop_workflow(workflow_id, idempotency_key);
+    final outcome = await stop_workflow(
+      workflow_id: workflow_id,
+      idempotency_key: idempotency_key,
+    );
 
     if (outcome is! WorkflowOperationResolved ||
         outcome.resolution.state != WorkflowSubmissionState.completed) {

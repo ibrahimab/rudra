@@ -3,10 +3,9 @@ import '../../../../../core/rendering/widgets/terminal_widget.dart';
 
 import 'explorer_header_view_model.dart';
 
-/// Renders Explorer's title, current directory, and workflow status.
+/// Renders Explorer's title, current directory and contributed status.
 ///
-/// The header occupies three terminal rows. Workflow information
-/// is derived from the supplied presentation snapshot.
+/// The header occupies three terminal rows.
 ///
 /// Example:
 /// ```dart
@@ -18,7 +17,7 @@ import 'explorer_header_view_model.dart';
 final class ExplorerHeader implements TerminalWidget {
   /// Creates a header from its presentation state.
   ///
-  /// [view_model] contains the navigation and workflow objects
+  /// [view_model] contains the navigation and status text
   /// represented by this header.
   const ExplorerHeader(this.view_model);
 
@@ -37,7 +36,8 @@ final class ExplorerHeader implements TerminalWidget {
   /// [constraints] supplies the available layout dimensions.
   /// The renderer handles sanitization and final text fitting.
   ///
-  /// Returns the title, directory, and workflow status lines.
+  /// Returns the title, directory and status lines. The first contribution
+  /// supplies the styling role for the shared status row.
   @override
   Iterable<TerminalLine> build(TerminalConstraints constraints) sync* {
     yield const TerminalLine(
@@ -50,20 +50,13 @@ final class ExplorerHeader implements TerminalWidget {
       role: TerminalRole.path,
     );
 
-    final workflows = view_model.workflow;
-    final active = workflows?.current_workflow;
-
-    if (workflows == null) {
+    final statuses = view_model.statuses;
+    if (statuses.isEmpty) {
       yield const TerminalLine('Explorer ready.', role: TerminalRole.muted);
-    } else if (active == null) {
-      yield const TerminalLine('Workflow: NONE', role: TerminalRole.muted);
     } else {
       yield TerminalLine(
-        'Workflow: ACTIVE'
-        '  |  ID: ${active.identity.workflow_id}'
-        '  |  Version: ${active.version}'
-        '  |  Target: ${active.identity.target_id}',
-        role: TerminalRole.heading,
+        statuses.map((line) => line.text).join('  |  '),
+        role: statuses.first.role,
       );
     }
   }

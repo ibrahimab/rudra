@@ -3,19 +3,18 @@ import 'package:rudra_cli/src/core/rendering/widgets/terminal_widget.dart';
 import 'package:rudra_cli/src/features/explorer/application/explorer_model.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/header/explorer_header.dart';
 import 'package:rudra_cli/src/features/explorer/presentation/widgets/header/explorer_header_view_model.dart';
-import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_view_model.dart';
 
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
-/// Tests Explorer header rendering from navigation and workflow snapshots.
+/// Tests Explorer header rendering from navigation and contributed status.
 void main() {
   final constraints = TerminalConstraints(columns: 100);
 
   group('ExplorerHeader', () {
-    test('displays the current directory without workflow integration', () {
+    test('displays the current directory without contributed status', () {
       final header = ExplorerHeader(
-        ExplorerHeaderViewModel(explorer: _explorer(), workflow: null),
+        ExplorerHeaderViewModel(explorer: _explorer()),
       );
 
       final lines = header.build(constraints).toList();
@@ -29,11 +28,13 @@ void main() {
       expect(lines[2].role, TerminalRole.muted);
     });
 
-    test('distinguishes an absent workflow from no integration', () {
+    test('uses the supplied status role', () {
       final header = ExplorerHeader(
         ExplorerHeaderViewModel(
           explorer: _explorer(),
-          workflow: const WorkflowExplorerViewModel(current_workflow: null),
+          statuses: const [
+            TerminalLine('Workflow: NONE', role: TerminalRole.muted),
+          ],
         ),
       );
 
@@ -43,25 +44,17 @@ void main() {
       expect(lines[2].role, TerminalRole.muted);
     });
 
-    test('renders the confirmed active workflow', () {
-      final active = WorkflowSnapshot(
-        identity: WorkflowIdentity(
-          workflow_id: 'workflow-1',
-          os_user_id: 'fixture-user',
-          target_id: 'fixture-target',
-          root: TargetPath('/workspace'),
-        ),
-        version: 1,
-        lifecycle: WorkflowLifecycle(
-          id: 'rudra.workflow.active',
-          is_terminal: false,
-        ),
-      );
-
+    test('joins contributed statuses in one row', () {
       final header = ExplorerHeader(
         ExplorerHeaderViewModel(
           explorer: _explorer(),
-          workflow: WorkflowExplorerViewModel(current_workflow: active),
+          statuses: const [
+            TerminalLine(
+              'Workflow: ACTIVE  |  ID: workflow-1  |  Version: 1  |  Target: fixture-target',
+              role: TerminalRole.heading,
+            ),
+            TerminalLine('Probe ready'),
+          ],
         ),
       );
 
@@ -71,6 +64,7 @@ void main() {
       expect(lines[2].text, contains('ID: workflow-1'));
       expect(lines[2].text, contains('Version: 1'));
       expect(lines[2].text, contains('Target: fixture-target'));
+      expect(lines[2].text, endsWith('  |  Probe ready'));
       expect(lines[2].role, TerminalRole.heading);
     });
   });
