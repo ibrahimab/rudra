@@ -10,7 +10,6 @@ void main() {
       },
     );
 
-    expect(sdk.target_id, local_macos_target_id);
     expect(sdk.is_connected, isFalse);
     expect(sdk.resources_released, isTrue);
 

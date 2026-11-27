@@ -10,7 +10,6 @@ void main() {
     resolutions = 0;
 
     sdk = RudraSdk(
-      target_id: 'test-target',
       communication_factory: ({required codecs, required handlers}) {
         resolutions++;
 
@@ -25,10 +24,6 @@ void main() {
 
   group('RudraSdk', () {
     test('composes application services without acquiring resources', () {
-      expect(sdk.target_id, 'test-target');
-      expect(sdk.filesystem.target_id, sdk.target_id);
-      expect(sdk.workflows.target_id, sdk.target_id);
-
       expect(sdk.is_connected, isFalse);
       expect(sdk.resources_released, isTrue);
       expect(resolutions, 0);
@@ -66,23 +61,8 @@ void main() {
       expect(sdk.resources_released, isTrue);
     });
 
-    test('rejects invalid target identifiers', () {
-      for (final target_id in ['', ' ', '\t\n']) {
-        expect(
-          () => RudraSdk(
-            target_id: target_id,
-            communication_factory: ({required codecs, required handlers}) {
-              throw StateError('Unexpected endpoint resolution.');
-            },
-          ),
-          throwsArgumentError,
-        );
-      }
-    });
-
     test('keeps independently configured SDK instances isolated', () async {
       final second = RudraSdk(
-        target_id: 'second-target',
         communication_factory: ({required codecs, required handlers}) {
           throw StateError('Unexpected endpoint resolution.');
         },
@@ -90,15 +70,11 @@ void main() {
 
       addTearDown(second.close);
 
-      expect(sdk.target_id, 'test-target');
-      expect(second.target_id, 'second-target');
-
       expect(sdk.filesystem, isNot(same(second.filesystem)));
       expect(sdk.workflows, isNot(same(second.workflows)));
 
       await sdk.close();
 
-      expect(second.filesystem.target_id, 'second-target');
       expect(second.resources_released, isTrue);
     });
   });

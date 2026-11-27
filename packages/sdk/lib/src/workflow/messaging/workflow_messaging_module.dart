@@ -92,10 +92,10 @@ final class WorkflowMessagingModule implements ApplicationRequestHandlerModule {
       ) async {
         context.require_authorized_peer(session);
 
-        context.validate_start(request.target_id, request.root);
+        context.validate_start(request.root);
 
         final outcome = await context.application.start(
-          target_id: request.target_id,
+          target_id: context.target_id,
           root: request.root,
           idempotency_key: request.idempotency_key,
         );

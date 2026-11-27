@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
+import 'package:rudra_cli/src/features/explorer/cli/explorer_cli_composition.dart';
 import 'package:rudra_cli/src/features/explorer/terminal/explorer_terminal_host.dart';
 import 'package:rudra_cli/src/features/workflow/explorer/workflow_explorer_operation_exception.dart';
 
@@ -14,11 +16,50 @@ import '../../support/cli_host_fixture.dart';
 
 /// Verifies Explorer command registration and production dispatch.
 ///
-/// The tests exercise RudraCli.product() and the actual public SDK.
+/// The tests exercise compose_product_cli() and the actual public SDK.
 ///
 /// All filesystem and terminal operations are simulated.
 /// No real filesystem content or terminal modes are modified.
 void main() {
+  test(
+    'Explorer feature waits for verified state and borrows the SDK',
+    () async {
+      final fixture = _Fixture();
+      final host = fixture.application_host;
+      final sdk = host.composition();
+      addTearDown(sdk.sdk.close);
+
+      final state_read = host.hold_next_response();
+      final cli = RudraCli()
+        ..register_module(
+          compose_explorer_cli(
+            connect: sdk.connect,
+            working_directory: sdk.working_directory,
+            error_output: fixture.errors,
+            create_terminal_host: () {
+              fixture.host_creations++;
+              return fixture.terminal;
+            },
+          ),
+        );
+
+      final invocation = cli.run(['explore']);
+      try {
+        await state_read.entered.timeout(const Duration(seconds: 5));
+        expect(host.connect_count, 1);
+        expect(fixture.host_creations, 0);
+        expect(fixture.terminal.entered, isFalse);
+      } finally {
+        state_read.release();
+      }
+
+      expect(await invocation, RudraExitCode.success.value);
+      expect(fixture.terminal.restored, isTrue);
+      expect(sdk.sdk.is_connected, isTrue);
+      expect(host.connect_count, 1);
+    },
+  );
+
   group('ExploreCommand production integration', () {
     test('registers Explorer without constructing a terminal', () {
       final fixture = _Fixture();
@@ -587,8 +628,8 @@ final class _Fixture {
   RudraCli create_cli() {
     final composition = application_host.composition();
     sdk = composition.sdk;
-    return RudraCli.product(
-      target_composition: composition,
+    return compose_product_cli(
+      sdk_composition: composition,
       output: normal_output,
       error_output: errors,
       explorer_terminal_host_factory: () {

@@ -11,6 +11,7 @@ import 'transport/connection_params.dart';
 import 'transport/contracts/transport.dart';
 import 'transport/contracts/transport_connection.dart';
 import 'transport/contracts/transport_listener.dart';
+import 'transport/transport_configuration.dart';
 import 'transport/transport_registry.dart';
 
 /// Coordinates authenticated object-level application communication.
@@ -48,9 +49,10 @@ import 'transport/transport_registry.dart';
 abstract interface class Communication {
   /// Creates communication with internally owned execution components.
   ///
-  /// [listening_transports] enables explicit listeners in activation order.
-  /// When omitted, the registered platform default is enabled. An explicit
-  /// list must contain one or more distinct transport instances.
+  /// [transport_configuration] enables listeners in activation order. The
+  /// default enables only native local connectivity.
+  /// [transport_registry] optionally substitutes the implementation catalog
+  /// used to resolve listeners and the default client transport.
   ///
   /// [codecs] supplies application message codec configuration.
   /// When absent, communication constructs an empty registry.
@@ -65,7 +67,8 @@ abstract interface class Communication {
   /// Construction does not bind endpoints, establish connections
   /// or execute application handlers.
   factory Communication({
-    Iterable<Transport>? listening_transports,
+    TransportConfiguration transport_configuration,
+    TransportRegistry? transport_registry,
     MessageCodecRegistry? codecs,
     RequestHandlerRegistry? handlers,
     MessageSessionOptions options,
@@ -157,7 +160,8 @@ abstract interface class Communication {
 final class _Communication implements Communication {
   /// Creates the default communication implementation.
   ///
-  /// [listening_transports] supplies explicit authenticated listeners.
+  /// [transport_configuration] selects enabled listening endpoints.
+  /// [transport_registry] supplies available transport implementations.
   ///
   /// [codecs] supplies the application message codec registry.
   /// [handlers] supplies the application request handler registry.
@@ -167,13 +171,14 @@ final class _Communication implements Communication {
   /// Absent messaging registries are constructed internally.
   /// Construction performs no external resource acquisition.
   _Communication({
-    Iterable<Transport>? listening_transports,
+    TransportConfiguration transport_configuration =
+        const TransportConfiguration.native(),
+    TransportRegistry? transport_registry,
     MessageCodecRegistry? codecs,
     RequestHandlerRegistry? handlers,
     MessageSessionOptions options = const MessageSessionOptions(),
-  }) : _listening_transports = listening_transports == null
-           ? null
-           : List.unmodifiable(listening_transports),
+  }) : _transport_configuration = transport_configuration,
+       _transport_registry = transport_registry ?? TransportRegistry.standard,
        _codecs = codecs ?? MessageCodecRegistry(),
        _handlers = handlers ?? RequestHandlerRegistry(),
        _options = options {
@@ -182,11 +187,15 @@ final class _Communication implements Communication {
     _completion.future.ignore();
   }
 
-  /// Explicitly enabled listeners, or null to activate the native default.
-  final List<Transport>? _listening_transports;
+  /// Host-owned configuration for the listening lifecycle.
+  final TransportConfiguration _transport_configuration;
 
+  /// Available implementations for listening and native client connectivity.
+  final TransportRegistry _transport_registry;
+
+  /// Constructs the current platform's inactive native local transport.
   Transport _native_transport() =>
-      TransportRegistry.standard.create_default(Platform.operatingSystem);
+      _transport_registry.create_default(Platform.operatingSystem);
 
   /// Application codec configuration owned by communication.
   final MessageCodecRegistry _codecs;
@@ -308,11 +317,16 @@ final class _Communication implements Communication {
   Future<List<TransportListener>> _activate_listeners() async {
     final listeners = <TransportListener>[];
     try {
-      final enabled = _listening_transports ?? [_native_transport()];
-      if (enabled.isEmpty ||
-          (Set<Transport>.identity()..addAll(enabled)).length !=
-              enabled.length) {
-        throw ArgumentError('Enabled listeners must be nonempty and distinct.');
+      // Resolve every configured endpoint before attempting any bind.
+      final endpoints = _transport_configuration.endpoints;
+      final enabled = endpoints == null
+          ? [_native_transport()]
+          : endpoints.map(_transport_registry.create).toList();
+      if ((Set<Transport>.identity()..addAll(enabled)).length !=
+          enabled.length) {
+        throw ArgumentError(
+          'Transport factories must return distinct listeners.',
+        );
       }
       for (final transport in enabled) {
         listeners.add(await transport.listen());

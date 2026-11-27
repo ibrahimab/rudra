@@ -60,12 +60,17 @@ final class RudraHost {
   /// [validate_start] supplies trusted target-specific validation
   /// for workflow establishment requests.
   ///
+  /// [transport_configuration] selects the host's enabled listeners.
+  /// [transport_registry] optionally supplies alternative implementations.
+  ///
   /// [communication_factory] optionally substitutes the default
   /// communication implementation using the host-owned registries.
   ///
   /// [filesystem_application] supplies authoritative filesystem
   /// inspection against the configured target environment.
   ///
+  /// Throws [ArgumentError] if listener configuration or a transport registry
+  /// is combined with a full communication replacement.
   /// Throws [StateError] for incompatible messaging configuration.
   /// Registration and communication construction failures propagate.
   ///
@@ -75,8 +80,17 @@ final class RudraHost {
     required WorkflowApplication application,
     required FilesystemApplication filesystem_application,
     required WorkflowStartValidator validate_start,
+    TransportConfiguration? transport_configuration,
+    TransportRegistry? transport_registry,
     HostCommunicationFactory? communication_factory,
   }) {
+    if (communication_factory != null &&
+        (transport_configuration != null || transport_registry != null)) {
+      throw ArgumentError(
+        'Listener configuration requires the default communication subsystem.',
+      );
+    }
+
     // Use the same immutable runtime for execution and state codecs.
     final modules = standard_messaging_modules(
       workflow_runtime: application.runtime,
@@ -96,6 +110,7 @@ final class RudraHost {
     final context = ApplicationRequestContext(
       application: application,
       publication: publication,
+      target_id: filesystem_application.target_id,
       validate_start: validate_start,
       filesystem_handlers: filesystem_handlers,
     );
@@ -118,7 +133,14 @@ final class RudraHost {
     handlers.freeze(codecs: codecs);
 
     final communication = communication_factory == null
-        ? Communication(codecs: codecs, handlers: handlers)
+        ? Communication(
+            codecs: codecs,
+            handlers: handlers,
+            transport_configuration:
+                transport_configuration ??
+                const TransportConfiguration.native(),
+            transport_registry: transport_registry,
+          )
         : communication_factory(codecs: codecs, handlers: handlers);
 
     return RudraHost._(

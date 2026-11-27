@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
+
+import 'support/registered_test_communication.dart';
 
 /// Verifies communication construction, substitution and resource ownership.
 void main() {
@@ -20,7 +23,7 @@ void main() {
   test('construction acquires no communication resources', () {
     final transport = _TestTransport();
 
-    final communication = Communication(listening_transports: [transport]);
+    final communication = registered_test_communication([transport]);
 
     expect(transport.listen_count, 0);
     expect(communication.resources_released, isTrue);
@@ -29,7 +32,7 @@ void main() {
   test('configured transport initializes only during execution', () async {
     final transport = _TestTransport();
 
-    final communication = Communication(listening_transports: [transport]);
+    final communication = registered_test_communication([transport]);
 
     expect(transport.listen_count, 0);
     expect(communication.resources_released, isTrue);
@@ -49,7 +52,7 @@ void main() {
   test('failed initialization retains no communication resources', () async {
     final transport = _TestTransport(fail_binding: true);
 
-    final communication = Communication(listening_transports: [transport]);
+    final communication = registered_test_communication([transport]);
 
     await expectLater(
       run_once(
@@ -69,7 +72,7 @@ void main() {
   test('failed application startup releases the acquired listener', () async {
     final transport = _TestTransport();
 
-    final communication = Communication(listening_transports: [transport]);
+    final communication = registered_test_communication([transport]);
 
     final failure = StateError('Controlled application startup failure.');
 
@@ -90,7 +93,7 @@ void main() {
   test('failed listener disposal remains unconfirmed', () async {
     final transport = _TestTransport(fail_disposal: true);
 
-    final communication = Communication(listening_transports: [transport]);
+    final communication = registered_test_communication([transport]);
 
     await expectLater(run_once(communication), throwsStateError);
 
@@ -101,7 +104,7 @@ void main() {
   test('activates each enabled listener before announcing readiness', () async {
     final first = _TestTransport();
     final second = _TestTransport();
-    final communication = Communication(listening_transports: [first, second]);
+    final communication = registered_test_communication([first, second]);
 
     await run_once(
       communication,
@@ -121,9 +124,7 @@ void main() {
       () async {
         final first = _TestTransport(fail_disposal: fail_disposal);
         final second = _TestTransport(fail_binding: true);
-        final communication = Communication(
-          listening_transports: [first, second],
-        );
+        final communication = registered_test_communication([first, second]);
 
         await expectLater(
           run_once(
@@ -141,21 +142,124 @@ void main() {
     );
   }
 
-  test('duplicate enabled endpoints fail before activation', () async {
-    final transport = _TestTransport();
-    final communication = Communication(
-      listening_transports: [transport, transport],
-    );
+  test('native policy constructs and activates only the default', () async {
+    final native = _TestTransport();
+    var alternative_constructions = 0;
+    final registry = TransportRegistry([
+      (
+        id: 'native',
+        default_platform: Platform.operatingSystem,
+        create: (_) => native,
+      ),
+      (
+        id: 'alternative',
+        default_platform: null,
+        create: (_) {
+          alternative_constructions++;
+          return _TestTransport();
+        },
+      ),
+    ]);
 
-    await expectLater(run_once(communication), throwsArgumentError);
-    expect(transport.listen_count, 0);
-    expect(communication.resources_released, isTrue);
+    final communication = Communication(transport_registry: registry);
+    expect(native.listen_count, 0);
+
+    await run_once(communication);
+    expect(native.listen_count, 1);
+    expect(alternative_constructions, 0);
   });
+
+  test(
+    'explicit policy constructs only selected endpoints with their options',
+    () async {
+      final selected = _TestTransport();
+      final options = {'path': 'fixture'};
+      final configuration = TransportConfiguration.enabled([
+        TransportEndpoint(transport_id: 'alternative', options: options),
+      ]);
+      options['path'] = 'changed after configuration';
+      final registry = TransportRegistry([
+        (
+          id: 'native',
+          default_platform: Platform.operatingSystem,
+          create: (_) =>
+              fail('The native endpoint was implicitly constructed.'),
+        ),
+        (
+          id: 'alternative',
+          default_platform: null,
+          create: (options) {
+            expect(options, {'path': 'fixture'});
+            return selected;
+          },
+        ),
+      ]);
+
+      final communication = Communication(
+        transport_registry: registry,
+        transport_configuration: configuration,
+      );
+      await run_once(communication);
+      expect(selected.listen_count, 1);
+      expect(selected.listener.close_calls, 1);
+    },
+  );
+
+  test(
+    'resolves all registered endpoints before starting a listener',
+    () async {
+      final first = _TestTransport();
+      final registry = TransportRegistry([
+        (id: 'registered', default_platform: null, create: (_) => first),
+      ]);
+      final communication = Communication(
+        transport_registry: registry,
+        transport_configuration: TransportConfiguration.enabled([
+          TransportEndpoint(transport_id: 'registered'),
+          TransportEndpoint(transport_id: 'unregistered'),
+        ]),
+      );
+
+      await expectLater(run_once(communication), throwsArgumentError);
+      expect(first.listen_count, 0);
+      expect(communication.resources_released, isTrue);
+    },
+  );
+
+  test('configuration rejects a repeated endpoint before resolution', () {
+    final first = TransportEndpoint(
+      transport_id: 'fixture',
+      options: {'first': 'one', 'second': 'two'},
+    );
+    final duplicate = TransportEndpoint(
+      transport_id: 'fixture',
+      options: {'second': 'two', 'first': 'one'},
+    );
+    expect(
+      () => TransportConfiguration.enabled([first, duplicate]),
+      throwsArgumentError,
+    );
+  });
+
+  test(
+    'factories cannot reuse the same transport for enabled endpoints',
+    () async {
+      final transport = _TestTransport();
+      final communication = registered_test_communication([
+        transport,
+        transport,
+      ]);
+
+      await expectLater(run_once(communication), throwsArgumentError);
+      expect(transport.listen_count, 0);
+      expect(communication.resources_released, isTrue);
+    },
+  );
 
   test('communication cannot execute twice', () async {
     final transport = _TestTransport();
 
-    final communication = Communication(listening_transports: [transport]);
+    final communication = registered_test_communication([transport]);
 
     await run_once(communication);
 
@@ -175,7 +279,7 @@ void main() {
 /// Example:
 /// ```dart
 /// final transport = _TestTransport();
-/// final communication = Communication(listening_transports: [transport]);
+/// final communication = registered_test_communication([transport]);
 /// ```
 final class _TestTransport implements Transport {
   /// Creates a transport with controlled failure behavior.

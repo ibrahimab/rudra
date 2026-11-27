@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
-import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:rudra_communication/rudra_communication.dart';
-import 'package:rudra_target_macos/rudra_target_macos.dart';
+import 'package:rudra_target_inspection/rudra_target_inspection.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -20,10 +20,9 @@ import '../support/cli_host_fixture.dart';
 /// Rudra itself performs only read-only inspection operations.
 void main() {
   group('ProductSdkComposition', () {
-    test('selects the local target and defers native connectivity', () {
+    test('selects native connectivity without opening a session', () {
       final composition = ProductSdkComposition.for_current_host();
 
-      expect(composition.sdk.target_id, local_macos_target_id);
       expect(
         composition.working_directory.value,
         Directory.current.absolute.path,
@@ -39,7 +38,7 @@ void main() {
       final composition = CliHostFixture(inspector: inspector)
           .composition(directory: TargetPath('/fixture'));
 
-      final cli = RudraCli.product(target_composition: composition);
+      final cli = compose_product_cli(sdk_composition: composition);
 
       expect(cli.command_names, containsAll(['about', 'ls']));
 
@@ -73,8 +72,8 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final cli = RudraCli.product(
-        target_composition: composition,
+      final cli = compose_product_cli(
+        sdk_composition: composition,
         output: output,
         error_output: errors,
       );
@@ -104,7 +103,7 @@ void main() {
       final composition = CliHostFixture(inspector: _RecordingInspector())
           .composition();
 
-      final cli = RudraCli.product(target_composition: composition);
+      final cli = compose_product_cli(sdk_composition: composition);
 
       expect(cli.command_names, contains('about'));
       expect(cli.command_names, contains('ls'));
@@ -135,8 +134,8 @@ void main() {
           working_directory: TargetPath('/fixture'),
           connection_params: ConnectionParams(transport: transport),
         );
-        await RudraCli.product(
-          target_composition: composition,
+        await compose_product_cli(
+          sdk_composition: composition,
           output: StringBuffer(),
           error_output: StringBuffer(),
         ).run(arguments);
@@ -164,8 +163,8 @@ void main() {
         connection_params: ConnectionParams(transport: transport),
       );
 
-      final status = await RudraCli.product(
-        target_composition: composition,
+      final status = await compose_product_cli(
+        sdk_composition: composition,
         output: output,
         error_output: errors,
         explorer_terminal_host_factory: () =>
@@ -198,8 +197,8 @@ void main() {
           final errors = StringBuffer();
 
           final host = CliHostFixture(inspector: MacOsTargetInspector());
-          final cli = RudraCli.product(
-            target_composition: host.composition(),
+          final cli = compose_product_cli(
+            sdk_composition: host.composition(),
             output: output,
             error_output: errors,
           );

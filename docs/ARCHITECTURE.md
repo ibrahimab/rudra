@@ -175,18 +175,22 @@ The established package organization is:
             rudra.dart
           tool/
             rudra_dev.dart
-        host/
 
       packages/
         sdk/
         communication/
         host/
-          macos/
+          lib/src/
+            composition/macos/
+            identity/macos/
+            lifecycle/macos/
+            ownership/macos/
+            storage/macos/
         platform/
           macos/
         targets/
           contracts/
-          macos/
+          inspection/lib/src/macos/
         persistence/
           sqlite/
 
@@ -374,9 +378,10 @@ Current contracts include:
 
 The contracts package must remain independent of the CLI, SDK implementation, Flutter, and platform-specific adapters.
 
-### 4.4 rudra_target_macos
+### 4.4 rudra_target_inspection
 
-Implements target contracts using macOS filesystem facilities.
+Implements read-only filesystem inspection against portable target
+contracts. The macOS adapter lives under its inspection capability.
 
 The macOS adapter is responsible for translating native filesystem observations and errors into Rudra's platform-independent models.
 
@@ -405,23 +410,31 @@ The SDK defines the rules; the persistence adapter stores and retrieves their st
 ### 4.6 Authenticated host execution
 
 The production CLI and future graphical clients use `RudraSdk` to connect to
-one authoritative host for their effective operating-system user. Connection
-and application execution are explicit. A frontend selects the target and
-supplies the operation's inputs. The host validates the target and executes
-filesystem inspection and workflow operations.
+one authoritative host for their effective operating-system user. The connected
+host supplies its configured filesystem target for directory inspections and
+workflow establishment. Inspection admission returns the target identifier so
+listings preserve its provenance. Workflow Start binds the host target before
+durable submission. Workflow identities, command history and deterministic
+replay retain the target. Client OS, connectivity and the host target are
+independent.
 
-`RudraHost` owns application execution, state publication and its Communication
-lifecycle. Communication owns registered transports, endpoint activation, native
-peer credentials, typed messaging and independent client sessions. The default
-macOS transport derives its endpoint from the effective UID. An explicit Unix
-socket configuration changes the endpoint while preserving authentication and
-the host's ownership scope.
+`RudraHost` owns portable application execution, state publication and its
+Communication lifecycle. The transport registry catalogs inactive factories.
+The host supplies immutable `TransportConfiguration` policy, and Communication
+resolves the configured entries, binds them before session admission and owns
+their disposal. The default policy enables only the native local transport.
+Explicit client endpoints use `ConnectionParams`. A socket override changes
+the listening location while retaining effective-UID authentication and host
+ownership.
 
-`apps/host` composes trusted identity, native ownership, target inspection and
-SQLite persistence. The SDK depends on portable target and persistence
-contracts. Communication remains independent of the SDK and its application
-semantics. The native host adapter and Unix transport share a focused macOS
-resource layout capability.
+`apps/cli` provides the executable and delegates host startup to `rudra_host`.
+That package selects native composition and supplies trusted identity, ownership,
+storage, shutdown and inspection to the shared SDK runtime. It depends on the
+SDK, Communication, SQLite and target inspection. SQLite and the SDK use
+portable contracts. Communication has no dependency on application semantics.
+The host, Communication and the inspection adapter share Darwin metadata
+primitives. The host and Communication also share effective identity and the
+per-user runtime location. Each capability owns its resource policy.
 
 All production hosts open separate connections to the same database. Each host
 scopes submissions and journal restoration to its trusted user and publishes
@@ -563,7 +576,7 @@ About has no application controller because it performs no
 application workflow, filesystem inspection, or state mutation.
 
 The product name and rendering backend are supplied by
-`RudraCli.product()` through `AboutCliModule`.
+the product composition through `AboutCliModule`.
 The feature does not depend on SDK services or direct stdout access.
 
 Welcome uses application and presentation responsibilities under its
@@ -666,41 +679,29 @@ terminal-specific layout correctness.
 
 ### 5.5.4 Renderer and SDK composition
 
-`RudraCli.product()` selects the supported SDK composition,
-constructs concrete renderers, and assembles production features.
+The production and development entrypoints use `compose_product_cli()` to
+assemble product features. It owns the SDK lifecycle, starting directory and
+output destinations. The generic `RudraCli` framework registers modules,
+dispatches commands and supports application-owned invocation hooks.
 
-Feature controllers and commands receive their dependencies
-through explicit constructor injection.
+Features assemble their components through explicit dependencies. About
+selects its standard renderer. Welcome and List obtain the authenticated SDK
+after argument validation and render their observations. Help, About, invalid
+usage and host management remain independent of client connectivity. An
+unavailable host produces a diagnostic and exit status 69.
 
-`AboutCliModule` receives the application name and an injected
-`Renderer<AboutViewModel>`.
-
-`AboutCommand` delegates to `AboutPresenter` and the injected
-renderer. It is available even without a configured filesystem
-target and performs no SDK inspection.
-
-`WelcomeController` and `ListCommand` receive the target-native starting
-directory, an SDK connection operation and their renderer. The production CLI
-owns one authenticated SDK lifecycle per operational invocation. Help, About,
-invalid usage and host management remain independent of client connectivity.
-An unavailable host produces a diagnostic and exit status 69.
-
-`FilesystemCliModule` supplies its injected dependencies to
-its registered commands.
-
-The Explorer feature is registered through `ExplorerCliModule`.
-
-`ExploreCommand` accepts an optional target-native directory and
-delegates execution to an injected `ExplorerRunner` factory.
-
-`RudraCli.product()` constructs Explorer dependencies lazily,
-only when the explore command executes.
+`ExplorerCliModule` registers `ExploreCommand`, which validates the optional
+target-native directory and delegates to the Explorer feature's runner factory.
+Explorer constructs its controller, renderer, terminal and view model lazily
+after reading verified application state. The workflow feature supplies its
+snapshot and registered Start and Stop actions. Explorer invokes explicit
+refresh and restores the terminal before invocation-owned SDK disposal.
 
 The Explorer composition contains:
 
 - `ExplorerController` configured with the public Rudra SDK.
 - `ExplorerRunner` coordinating read-only navigation.
-- `ExplorerPresenter` preparing immutable view models.
+- `ExplorerViewModel` combining navigation and verified workflow presentation.
 - `BareExplorerRenderer` using the ANSI terminal backend.
 - `DartExplorerTerminalHost` managing terminal lifecycle.
 

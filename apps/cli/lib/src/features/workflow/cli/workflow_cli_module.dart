@@ -13,6 +13,33 @@ import '../../../core/cli/rudra_exit_code.dart';
 /// The commands select operation inputs, identify new user intentions,
 /// and present durable application outcomes.
 final class WorkflowCliModule implements RudraCliModule {
+  /// Assembles workflow commands against the invocation's SDK.
+  ///
+  /// [connect] opens the session after command arguments have been validated.
+  /// [sdk] is the same facade used by a Stop after reading authoritative state.
+  /// [working_directory] is the default Start root. [output] and
+  /// [error_output] receive operation results and diagnostics.
+  factory WorkflowCliModule.product({
+    required Future<RudraSdk> Function() connect,
+    required RudraSdk sdk,
+    required TargetPath working_directory,
+    required StringSink output,
+    required StringSink error_output,
+  }) => WorkflowCliModule(
+    working_directory: working_directory,
+    current_workflow: () async =>
+        (await (await connect()).read_state()).workflows.current_workflow,
+    start_workflow: (root, idempotency_key) async => (await connect()).workflows
+        .start(root: root, idempotency_key: idempotency_key),
+    // Submit Stop through the session used to select the workflow.
+    stop_workflow: (workflow_id, idempotency_key) => sdk.workflows.stop(
+      workflow_id: workflow_id,
+      idempotency_key: idempotency_key,
+    ),
+    output: output,
+    error_output: error_output,
+  );
+
   /// Creates a workflow module with injected application operations.
   ///
   /// [working_directory] supplies the default Start root.

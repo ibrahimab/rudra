@@ -123,11 +123,10 @@ final class FilesystemListHandlers {
 
   /// Admits the requested inspection on authenticated [session].
   ///
-  /// [request] supplies the target, directory and inspection identity.
+  /// [request] supplies the directory and inspection identity.
   ///
-  /// Returns confirmation of inspection admission.
+  /// Returns confirmation with the configured target identity.
   ///
-  /// Throws [ArgumentError] for an unsupported target.
   /// Throws [StateError] for unavailable capacity, duplicate active
   /// identifiers or a terminated session.
   ///
@@ -138,14 +137,6 @@ final class FilesystemListHandlers {
   ) {
     if (_closed) {
       throw StateError('Filesystem inspection admission is closed.');
-    }
-
-    if (request.target_id != _application.target_id) {
-      throw ArgumentError.value(
-        request.target_id,
-        'target_id',
-        'The requested filesystem target is not configured.',
-      );
     }
 
     final owner = _sessions[session] ??= _observe_session(session);
@@ -180,7 +171,10 @@ final class FilesystemListHandlers {
 
     _arm_expiration(binding, _idle_timeout);
 
-    return FilesystemListOpenResponse(inspection_id: inspection.inspection_id);
+    return FilesystemListOpenResponse(
+      inspection_id: inspection.inspection_id,
+      target_id: _application.target_id,
+    );
   }
 
   /// Advances an inspection owned by authenticated [session].

@@ -8,14 +8,12 @@ dependencies:
   rudra_sdk:
     path: ../../packages/sdk
   rudra_host:
-    path: ../host
+    path: ../../packages/host
   args: ^2.7.0
   uuid: ^4.6.0
 dev_dependencies:
-  rudra_host_macos:
-    path: ../../packages/host/macos
-  rudra_target_macos:
-    path: ../../packages/targets/macos
+  rudra_target_inspection:
+    path: ../../packages/targets/inspection
   rudra_communication:
     path: ../../packages/communication
   rudra_persistence_sqlite:

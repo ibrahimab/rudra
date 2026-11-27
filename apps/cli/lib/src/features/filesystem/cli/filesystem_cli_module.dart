@@ -1,3 +1,5 @@
+import '../presentation/bare_filesystem_renderer.dart';
+
 import 'package:args/command_runner.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 
@@ -18,7 +20,7 @@ import 'list_command.dart';
 /// commands using those dependencies.
 ///
 /// The module does not select concrete rendering backends.
-/// That responsibility belongs to RudraCli.product() or
+/// That responsibility belongs to product composition or
 /// another application composition entry point.
 ///
 /// Invariants:
@@ -47,6 +49,25 @@ import 'list_command.dart';
 /// cli.register_module(module);
 /// ```
 final class FilesystemCliModule implements RudraCliModule {
+  /// Assembles filesystem commands with the standard listing renderer.
+  ///
+  /// [connect] acquires the invocation's SDK after argument validation.
+  /// [working_directory] supplies the default directory. [output] receives
+  /// listings and [error_output] receives inspection diagnostics.
+  factory FilesystemCliModule.product({
+    required Future<RudraSdk> Function() connect,
+    required TargetPath working_directory,
+    required StringSink output,
+    required StringSink error_output,
+  }) => FilesystemCliModule(
+    connect: connect,
+    working_directory: working_directory,
+    renderer: BareFilesystemRenderer(
+      output: output,
+      error_output: error_output,
+    ),
+  );
+
   /// Creates a filesystem module with explicit dependencies.
   ///
   /// [connect] provides platform-independent filesystem services.

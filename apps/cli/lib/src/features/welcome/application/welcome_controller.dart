@@ -91,7 +91,7 @@ final class WelcomeController {
     final listing = await sdk.filesystem.list(directory: _starting_directory);
     final model = WelcomeModel(
       product_name: application_name,
-      target_id: sdk.target_id,
+      target_id: listing.target_id,
       starting_directory: _starting_directory,
       listing: listing,
     );

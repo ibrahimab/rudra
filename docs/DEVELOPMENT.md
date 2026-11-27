@@ -2,7 +2,7 @@
 # Rudra — Development Standards
 
 **Version:** 1.1  
-**Last updated:** 2026-11-03  
+**Last updated:** 2026-11-27
 **Status:** Active development standard
 
 ## 1. Purpose
@@ -298,13 +298,49 @@ await sdk.connect(const ConnectionParams(
 ));
 ```
 
-Trusted host composition configures enabled endpoints through Communication's
-`listening_transports`, typically using the host's `communication_factory`
-substitution for an isolated fixture. Endpoint changes preserve host ownership,
-database identity and effective-user peer verification. `sdk.reconnect()`
-reuses the last selection after confirmed disposal. Passing a new
-`ConnectionParams` replaces that selection. An empty `ConnectionParams()`
-restores native defaults. Reconnection does not repeat application requests.
+Filesystem target identity comes from the connected host. A directory listing
+reports `listing.target_id`, and workflow identity retains the target selected
+by the host at Start. Neither connection establishment nor application
+requests require supplying a client-side target identifier.
+
+Trusted host composition can enable a registered endpoint while preserving the
+machine-wide database and effective-user ownership.
+
+```dart
+import 'package:rudra_communication/rudra_communication.dart';
+import 'package:rudra_host/rudra_host.dart';
+
+await run_local_host(
+  on_ready: (owner, workflow) => print('Ready for $owner'),
+  transport_configuration: TransportConfiguration.enabled([
+    MacOsUnixTransport.endpoint(socket_path: '/private/tmp/fixture/rudra.sock'),
+  ]),
+);
+```
+
+A `TransportRegistry` describes available factories. The standard registry
+uses `TransportRegistry([MacOsUnixTransport.registration])`. Registering an
+implementation leaves it inactive. Native policy enables the local default,
+and an explicit configuration supplies the complete enabled listener list.
+Communication resolves the list before binding and rolls back previously bound
+endpoints if a bind fails. Isolated composition can substitute a registry
+or, when testing a separate subsystem implementation, a communication factory.
+
+`sdk.reconnect()` reuses the last selection after confirmed disposal. Passing
+new `ConnectionParams` replaces the selection. Empty `ConnectionParams()`
+restores native connectivity. Application requests are never implicitly
+repeated.
+
+The ownership lock and socket directory require the effective UID, an exact
+private mode, canonical paths and plain POSIX permissions. Storage validates
+the provisioned owner, authorized group, file type, mode, link count and ACL
+with Darwin metadata. Storage retains the system `id -G` tool for the macOS
+Directory Services group list, which uses an Apple private enumeration API
+and can include groups outside the POSIX process group array. [Apple id source](https://raw.githubusercontent.com/apple-oss-distributions/shell_cmds/main/id/id.c)
+
+The Unix
+transport uses `chmod` to apply the socket mode in the already-private
+directory and checks the command's exit status.
 
 The native process tests use isolated paths. Multi-user permission verification
 requires two distinct macOS accounts in the authorized group and a separately
@@ -1123,35 +1159,23 @@ If a known safety requirement is not yet enforceable, the feature must remain no
 
 ## 20. Current Development Baseline
 
-As of Block 4B, Rudra has implemented:
+Epic 7D.2.1 consolidates the reusable host in `packages/host`. The native
+inspection adapter lives in `packages/targets/inspection`; portable target
+contracts remain in `packages/targets/contracts`. The SDK owns portable
+application execution and Communication owns transport and session execution.
+The CLI executable in `apps/cli/bin` delegates to product or host composition
+according to the selected command.
 
-- Modular CLI infrastructure and typed exit codes.
-- Separate production and development entrypoints.
-- Dart Pub Workspaces.
-- Platform-independent filesystem contracts and metadata.
-- The macOS TargetInspector.
-- Pure-Dart SDK filesystem inspection services.
-- Production SDK composition.
-- SDK-backed directory listing commands.
-- CLI welcome MVC.
-- Shared CLI directory-listing presentation.
-- Read-only welcome-screen filesystem inspection.
-- Explicit reporting of incomplete observations.
+The CLI framework is separate from `compose_product_cli()`. The composition
+root owns invocation dependencies and the SDK lifetime. Each feature chooses
+its controller, presentation and callbacks. Explorer receives the workflow
+feature's actions and refreshes state explicitly.
 
-The SDK remains independent of CLI presentation and concrete
-platform adapters.
-
-The development launcher executes from the repository root.
-
-Interactive navigation, persistent sessions, cleanup planning,
-validation, authorization, and execution remain future work.
-
-The current verification status must be established by running
-the repository quality gate. Historical test totals must not
-be presented as current results.
-
-The next milestone is interactive filesystem exploration using
-the existing SDK-first architecture and safety requirements.
+Run `dart pub get`, `./rudra verify all`, `./rudra build` and
+`git diff --check` after coordinated package and protocol changes. The build
+places the production executable under `build/rudra-cli/bundle/bin` and its
+SQLite library under `build/rudra-cli/bundle/lib`. The Epic 7 implementation
+record tracks the verification evidence and the remaining acceptance gates.
 
 ## 21. Non-Negotiable Development Rules
 

@@ -86,7 +86,6 @@ void main() {
       expect(
         registry.response_type_for(
           WorkflowStartRequest(
-            target_id: 'local-macos',
             root: TargetPath('/workspace'),
             idempotency_key: 'operation-001',
           ),
@@ -129,7 +128,6 @@ void main() {
       expect(
         () => registry.encode(
           WorkflowStartRequest(
-            target_id: 'local-macos',
             root: TargetPath('/workspace'),
             idempotency_key: 'operation-001',
           ),

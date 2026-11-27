@@ -6,6 +6,8 @@ import 'package:rudra_platform_macos/rudra_platform_macos.dart';
 import '../../contracts/transport.dart';
 import '../../contracts/transport_connection.dart';
 import '../../contracts/transport_listener.dart';
+import '../../transport_configuration.dart';
+import '../../transport_registration.dart';
 
 import 'darwin_peer_credentials.dart';
 import 'macos_unix_connection.dart';
@@ -28,8 +30,47 @@ final class MacOsUnixTransport implements Transport {
   /// effective UID. Both ends continue to authenticate peers as that UID.
   const MacOsUnixTransport({this.socket_path});
 
+  /// Constructs an inactive Unix transport from registered listener [options].
+  ///
+  /// An omitted socket path selects the native endpoint. Throws [ArgumentError]
+  /// for unknown options. The socket path is validated before native use.
+  factory MacOsUnixTransport._from_options(Map<String, String> options) {
+    for (final option in options.keys) {
+      if (option != _socket_path_option) {
+        throw ArgumentError.value(option, 'option', 'Unknown Unix option.');
+      }
+    }
+    return MacOsUnixTransport(socket_path: options[_socket_path_option]);
+  }
+
+  /// Factory registration for native macOS Unix-domain connectivity.
+  static const TransportRegistration registration = (
+    id: _registration_id,
+    default_platform: 'macos',
+    create: MacOsUnixTransport._from_options,
+  );
+
+  /// Describes an enabled Unix endpoint without constructing a transport.
+  ///
+  /// [socket_path] optionally overrides the socket inside the effective user's
+  /// private runtime directory. Communication validates the path at activation.
+  static TransportEndpoint endpoint({String? socket_path}) => TransportEndpoint(
+    transport_id: _registration_id,
+    options: {if (socket_path != null) _socket_path_option: socket_path},
+  );
+
+  /// Registry key for native macOS Unix-domain connectivity.
+  static const _registration_id = 'macos-unix';
+
+  /// Listener option selecting an absolute socket file path.
+  static const _socket_path_option = 'socket_path';
+
   /// The explicitly selected endpoint, or null for native default resolution.
   final String? socket_path;
+
+  /// Exclusive directory access for the effective owner.
+  static const _private_directory_permissions =
+      DarwinMode.owner_read_write | DarwinMode.owner_execute;
 
   /// Darwin sockaddr_un pathname capacity, including termination.
   static const int _socket_path_capacity = 104;
@@ -63,7 +104,10 @@ final class MacOsUnixTransport implements Transport {
 
     try {
       // The directory is already private during the bind-to-chmod interval.
-      final result = await Process.run('/bin/chmod', ['0600', endpoint.path]);
+      final result = await Process.run('/bin/chmod', [
+        DarwinMode.owner_read_write.toRadixString(8),
+        endpoint.path,
+      ]);
       if (result.exitCode != 0) {
         throw FileSystemException(
           'Unable to protect the Rudra socket.',
@@ -110,7 +154,7 @@ final class MacOsUnixTransport implements Transport {
   /// Resolves the endpoint and validates its parent before socket operations.
   Future<({InternetAddress address, String path, int uid})>
   _resolve_endpoint() async {
-    final uid = await macos_effective_uid();
+    final uid = macos_effective_uid();
     final path = socket_path ?? macos_default_socket_path(uid);
     if (!path.startsWith('/') ||
         path.endsWith('/') ||
@@ -127,7 +171,18 @@ final class MacOsUnixTransport implements Transport {
       throw FileSystemException('Unix socket endpoint path is too long.', path);
     }
 
-    await require_macos_private_directory(File(path).parent.path, uid);
+    final directory = File(path).parent;
+    final runtime = DarwinLStat().inspect_security(directory.path);
+    if (runtime.has_extended_acl ||
+        runtime.metadata.uid != uid ||
+        runtime.metadata.type != DarwinFileType.directory ||
+        runtime.metadata.permissions != _private_directory_permissions ||
+        await directory.resolveSymbolicLinks() != directory.path) {
+      throw FileSystemException(
+        'Rudra requires a canonical, user-owned 0700 socket directory.',
+        directory.path,
+      );
+    }
     return (
       address: InternetAddress(path, type: InternetAddressType.unix),
       path: path,
@@ -206,7 +261,7 @@ final class MacOsUnixTransport implements Transport {
 
 /// Resolves the deterministic default Unix endpoint for a trusted [uid].
 String macos_default_socket_path(int uid) =>
-    '${MacOsResourceLayout.user_runtime(uid)}/${MacOsResourceLayout.socket_filename}';
+    '${MacOsResourceLayout.user_runtime(uid)}/rudra.sock';
 
 /// Transfers [socket] to a managed connection after native peer verification.
 ///

@@ -47,6 +47,9 @@ export 'src/messaging/protocol/protocol_exception.dart';
 
 /// Portable transport capability contracts.
 export 'src/transport/connection_params.dart';
+export 'src/transport/transport_configuration.dart';
+export 'src/transport/transport_registry.dart';
+export 'src/transport/transport_registration.dart';
 export 'src/transport/contracts/transport.dart';
 export 'src/transport/contracts/transport_connection.dart';
 export 'src/transport/contracts/transport_listener.dart';

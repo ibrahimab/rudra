@@ -1,0 +1,24 @@
+name: rudra_host
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  rudra_sdk:
+    path: ../sdk
+  rudra_persistence_sqlite:
+    path: ../persistence/sqlite
+  rudra_target_inspection:
+    path: ../targets/inspection
+  rudra_platform_macos:
+    path: ../platform/macos
+  rudra_communication:
+    path: ../communication
+  ffi: ^2.1.3
+  uuid: ^4.6.0
+
+dev_dependencies:
+  test: ^1.33.0

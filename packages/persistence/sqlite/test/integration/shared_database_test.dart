@@ -100,7 +100,7 @@ void main() {
       expect(await file.exists(), isFalse);
 
       final command = WorkflowStartEvent(
-        target_id: local_macos_target_id,
+        target_id: 'fixture-filesystem',
         root: TargetPath('/fixture'),
       );
       final accepted = await first.submit_command(
@@ -212,7 +212,7 @@ void main() {
     () async {
       final app = application_for('first');
       final command = WorkflowStartEvent(
-        target_id: local_macos_target_id,
+        target_id: 'fixture-filesystem',
         root: TargetPath('/fixture'),
       );
       final initial = await app.submit_command(

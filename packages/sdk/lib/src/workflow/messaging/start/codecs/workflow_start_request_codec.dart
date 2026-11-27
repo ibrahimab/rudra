@@ -5,24 +5,28 @@ import '../workflow_start_request.dart';
 
 /// Serializes workflow establishment requests.
 ///
-/// Preserves the requested target, target-native path and
-/// durable idempotency key without normalization.
+/// Preserves the target-native path and durable idempotency key.
+///
+/// Example:
+/// ```dart
+/// const codec = WorkflowStartRequestCodec();
+/// final decoded = codec.decode(codec.encode(request));
+/// ```
 final class WorkflowStartRequestCodec
     implements MessageCodec<WorkflowStartRequest> {
   /// Creates the stateless Start request codec.
   const WorkflowStartRequestCodec();
 
-  /// Stable wire identifier of the version 1 Start request.
+  /// Stable wire identifier of the version 2 Start request.
   @override
-  String get type_id => 'rudra.workflow.start.request.v1';
+  String get type_id => 'rudra.workflow.start.request.v2';
 
   /// Converts [message] into its structured application payload.
   ///
-  /// Returns the requested target, root and idempotency key.
+  /// Returns the requested root and idempotency key.
   @override
   Map<String, Object?> encode(WorkflowStartRequest message) {
     return {
-      'target_id': message.target_id,
       'root': message.root.value,
       'idempotency_key': message.idempotency_key,
     };
@@ -36,21 +40,19 @@ final class WorkflowStartRequestCodec
   /// unexpected fields or invalid application values.
   @override
   WorkflowStartRequest decode(Object? payload) {
-    if (payload is! Map<String, Object?> || payload.length != 3) {
+    if (payload is! Map<String, Object?> || payload.length != 2) {
       throw const FormatException('Invalid workflow Start request payload.');
     }
 
-    final target_id = payload['target_id'];
     final root = payload['root'];
     final idempotency_key = payload['idempotency_key'];
 
-    if (target_id is! String || root is! String || idempotency_key is! String) {
+    if (root is! String || idempotency_key is! String) {
       throw const FormatException('Invalid workflow Start request fields.');
     }
 
     try {
       return WorkflowStartRequest(
-        target_id: target_id,
         root: TargetPath(root),
         idempotency_key: idempotency_key,
       );

@@ -1,5 +1,5 @@
 import 'package:rudra_cli/rudra_cli.dart';
-import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:rudra_cli/src/features/welcome/application/welcome_controller.dart';
 import 'package:rudra_cli/src/features/welcome/presentation/bare_welcome_renderer.dart';
 import 'package:rudra_communication/rudra_communication.dart';
@@ -202,8 +202,8 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final cli = RudraCli.product(
-        target_composition: _composition(inspector),
+      final cli = compose_product_cli(
+        sdk_composition: _composition(inspector),
         output: output,
         error_output: errors,
       );
@@ -227,8 +227,8 @@ void main() {
         ),
       );
 
-      final cli = RudraCli.product(
-        target_composition: _composition(inspector),
+      final cli = compose_product_cli(
+        sdk_composition: _composition(inspector),
         output: StringBuffer(),
         error_output: StringBuffer(),
       );
@@ -237,8 +237,8 @@ void main() {
     });
 
     test('preserves explicit production commands', () {
-      final cli = RudraCli.product(
-        target_composition: _composition(_StartupInspector()),
+      final cli = compose_product_cli(
+        sdk_composition: _composition(_StartupInspector()),
         output: StringBuffer(),
       );
 
@@ -252,8 +252,8 @@ void main() {
     test('retains single-invocation lifecycle', () async {
       final inspector = _StartupInspector();
 
-      final cli = RudraCli.product(
-        target_composition: _composition(inspector),
+      final cli = compose_product_cli(
+        sdk_composition: _composition(inspector),
         output: StringBuffer(),
         error_output: StringBuffer(),
       );

@@ -74,9 +74,9 @@ void main() {
           ..register<EchoResponse, EchoRequest>(handler);
 
         final communication = Communication(
-          listening_transports: [
-            MacOsUnixTransport(socket_path: '$scope/rudra.sock'),
-          ],
+          transport_configuration: TransportConfiguration.enabled([
+            MacOsUnixTransport.endpoint(socket_path: '$scope/rudra.sock'),
+          ]),
           codecs: create_echo_codecs(),
           handlers: handlers,
         );

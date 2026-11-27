@@ -10,18 +10,13 @@ import '../filesystem/messaging/list/filesystem_list_handlers.dart';
 /// Validates a requested workflow establishment against trusted
 /// target configuration.
 ///
-/// [target_id] identifies the requested configured filesystem target.
 /// [root] preserves the original target-native filesystem path.
 ///
-/// Implementations throw [ArgumentError] for unsupported targets
-/// or invalid root syntax.
+/// Implementations throw [ArgumentError] for invalid target-native root syntax.
 ///
 /// Validation must not establish workflow state, submit commands
 /// or perform cleanup operations.
-typedef WorkflowStartValidator = void Function(
-  String target_id,
-  TargetPath root,
-);
+typedef WorkflowStartValidator = void Function(TargetPath root);
 
 /// Trusted application capabilities available to request handlers.
 ///
@@ -29,12 +24,24 @@ typedef WorkflowStartValidator = void Function(
 /// owner. Target-specific validation is supplied by host composition.
 ///
 /// The context performs no application execution during construction.
+///
+/// Example:
+/// ```dart
+/// final context = ApplicationRequestContext(
+///   application: application,
+///   publication: publication,
+///   target_id: filesystem_application.target_id,
+///   validate_start: validate_root,
+///   filesystem_handlers: filesystem_handlers,
+/// );
+/// ```
 final class ApplicationRequestContext {
   /// Binds request handlers to trusted application capabilities.
   ///
   /// [application] supplies authoritative application execution.
   /// [publication] supplies verified composite state subscriptions
   /// backed by the same application.
+  /// [target_id] supplies the host's configured filesystem identity.
   /// [validate_start] supplies trusted target-specific validation
   /// before an explicit workflow establishment is accepted.
   /// [filesystem_handlers] supplies authoritative filesystem request
@@ -42,6 +49,7 @@ final class ApplicationRequestContext {
   const ApplicationRequestContext({
     required this.application,
     required this.publication,
+    required this.target_id,
     required this.validate_start,
     required this.filesystem_handlers,
   });
@@ -54,7 +62,10 @@ final class ApplicationRequestContext {
   /// Shares the retained application's observation and owner scope.
   final StatePublication publication;
 
-  /// Trusted target and root validation capability.
+  /// Authoritative target identifier used for workflow establishment.
+  final String target_id;
+
+  /// Trusted target-native root validation capability.
   final WorkflowStartValidator validate_start;
 
   /// Host-owned filesystem inspection lifecycle and request execution.

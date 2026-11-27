@@ -1,4 +1,5 @@
 import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:rudra_cli/src/features/host/cli/host_cli_module.dart';
 import 'package:rudra_host/rudra_host.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -40,7 +41,7 @@ void main() {
   };
 
   test('production composition registers the host feature', () {
-    final cli = RudraCli.product(output: output, error_output: errors);
+    final cli = compose_product_cli(output: output, error_output: errors);
 
     expect(cli.command_names, contains('host'));
 

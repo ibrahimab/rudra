@@ -1,7 +1,6 @@
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_communication/src/transport/macos/unix/macos_unix_transport.dart'
     show macos_default_socket_path;
-import 'package:rudra_communication/src/transport/transport_registry.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -37,12 +36,12 @@ void main() {
       (
         id: 'default',
         default_platform: 'fixture',
-        create: MacOsUnixTransport.new,
+        create: (_) => const MacOsUnixTransport(),
       ),
       (
         id: 'alternative',
         default_platform: null,
-        create: () => fail('Alternative selected.'),
+        create: (_) => fail('Alternative selected.'),
       ),
     ]);
 
@@ -50,7 +49,7 @@ void main() {
   });
 
   test('rejects duplicate implementation IDs and platform defaults', () {
-    const create = MacOsUnixTransport.new;
+    Transport create(Map<String, String> _) => const MacOsUnixTransport();
     expect(
       () => TransportRegistry([
         (id: 'unix', default_platform: 'macos', create: create),

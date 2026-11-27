@@ -1,6 +1,6 @@
 # Rudra — Epic 7: Centralized Host and Frontend Synchronization
 
-**Status:** 7A through 7D.2 implemented. Native multi-user provisioning verification, 7D.3 and 7E remain open.
+**Status:** 7A through 7D.2.1 implemented. Native multi-user provisioning verification, 7D.3 and 7E remain open.
 **Created:** 24 November 2026
 **Updated:** 27 November 2026
 **Repository:** https://github.com/ibrahimab/rudra
@@ -12,11 +12,11 @@
 
 Move Rudra's trusted application execution and persistence ownership out of independent frontend processes into **one per-user, long-running Rudra Host**. The host executes the existing SDK application machinery and distributes validated committed application state to connected frontends.
 
-**The host must be platform-agnostic by design**, like the existing filesystem, workflow and state features. Portable host contracts, extension registries and orchestration belong in `packages/sdk/lib/src/host/`. Native host capabilities live under `packages/host/<platform>/`.
+**The host must be platform-agnostic by design**, like the existing filesystem, workflow and state features. Portable host contracts, extension registries and orchestration belong in `packages/sdk/lib/src/host/`. Native host capabilities live under their owning features in `packages/host/lib/src/`.
 
 The independent `packages/communication/` package owns native communication mechanisms, transport contracts, peer authentication, session management and generic messaging infrastructure. RudraHost constructs and maintains its communication instance by default, while allowing explicit substitution through contracts.
 
-`apps/host` provides headless application composition, establishing trusted identity, exclusive ownership and persistence resources before executing the host. The existing modular CLI provides the host launch command.
+`packages/host` provides reusable headless composition, establishing trusted identity, exclusive ownership and persistence resources before executing the SDK host. The modular CLI provides the launch command.
 
 The immediate deliverable is a **small, working local macOS host using those portable boundaries**, not a generalized distributed-services framework or an implementation of all three desktop operating systems at once. Windows and Linux must be implementable by adding platform adapters and registering them, without changing portable SDK host logic.
 
@@ -39,11 +39,10 @@ Rudra follows SDK-first application architecture and hierarchical component owne
 
 - **SDK (`packages/sdk/`):** Owns application operations, domain semantics, workflow processing, state observation and portable host orchestration.
 - **Communication (`packages/communication/`):** Owns reusable transport contracts, native communication implementations, connection and session lifecycles, and generic messaging infrastructure. It remains independent of the Rudra SDK, host application and persistence packages.
-- **Native host adapters (`packages/host/<platform>/`):** Implement trusted identity, exclusive process ownership, process lifecycle coordination and explicit native service-management capabilities.
-- **Host application (`apps/host/`):** Establishes trusted environmental configuration, exclusive ownership, application resources and persistence. It delegates execution to RudraHost.
+- **Host (`packages/host/`):** Selects and composes native identity, storage, owner exclusivity, inspection and lifecycle capabilities. It owns listener policy and delegates execution to RudraHost.
 - **Frontends (`apps/cli/`, later Flutter clients):** Consume application-facing host capabilities and observe verified state.
 
-RudraHost constructs its communication instance by default. Communication constructs its default transport internally. Both support explicit substitution through contracts.
+RudraHost constructs its communication instance by default. The host supplies the enabled endpoint policy. Communication resolves registrations, activates endpoints and retains the resulting resources. Both support explicit substitution through contracts.
 
 The SDK never imports concrete native host adapters. Native communication selection remains encapsulated within the communication package.
 
@@ -53,81 +52,46 @@ Communication resource disposal must be confirmed before exclusive host ownershi
 
 One host retains one workflow application and one persistence context throughout its execution lifecycle.
 
-### 2.2 Proposed feature-first layout
+### 2.2 Feature-first layout
 
 ```text
+apps/cli/
+  bin/rudra.dart
+  lib/src/composition/
 packages/
-  sdk/
-    lib/
-      rudra_sdk.dart
-      src/
-        filesystem/                     # Existing feature
-        workflow/                       # Existing domain/application feature
-        state/                          # Existing immutable state
-        host/
-          host.dart                     # SDK host feature barrel
-          runtime/                     # Portable host lifecycle/coordination
-          platform/
-            contracts/                 # Identity, storage, ownership
-            host_platform_plugin.dart  # Optional capability contribution
-            host_platform_registry.dart
-          install/
-            host_install_step.dart      # Explicit installation contribution
-            host_install_registry.dart
-            host_install_plan.dart      # Describe/validate proposed changes
-  communication/
-    lib/
-      rudra_communication.dart
-      src/
-        communication.dart
-        sessions/
-          connection_service.dart
-        transport/
-          contracts/
-          local_transport.dart
-          macos/
-            unix/
-    test/
-    pubspec.yaml
-  persistence/
-    sqlite/                             # Existing SDK persistence adapter
-  host/
-    macos/
-      lib/
-        rudra_host_macos.dart           # Native adapter exports
-        src/
-          macos_identity.dart
-          plugins/
-            launchd/
-              macos_launchd_plugin.dart
-              launchd_service_manager.dart
-            power/
-              macos_power_plugin.dart
-              macos_power_manager.dart
-          install/
-            steps/
-              directories/
-                macos_directories_install_step.dart
-              executable/
-                macos_executable_install_step.dart
-              launchd/
-                macos_launchd_install_step.dart
-    windows/                             # Future native adapter package
-    linux/                               # Future native adapter package
-apps/
-  host/
-    lib/
-      rudra_host.dart                   # Host application API
-      src/
-        composition/
-          host_composition.dart
-          local_host.dart
-        development/
-          host_transport_probe.dart
-  cli/
+  sdk/lib/src/
+    filesystem/
+    workflow/
+    state/
+    host/
+      runtime/
+      platform/contracts/
+  communication/lib/src/
+    sessions/
+    transport/
+      contracts/
+      macos/unix/
+  host/lib/
+    rudra_host.dart
+    src/
+      composition/macos/
+      identity/macos/
+      ownership/macos/
+      lifecycle/macos/
+      storage/macos/
+  platform/macos/lib/src/
+    filesystem/
+    identity/
+    resources/
+  targets/
+    contracts/
+    inspection/lib/src/macos/
+  persistence/sqlite/
 ```
 
-This is an **ownership sketch, not an instruction to create all directories and types now**. Some contracts may be grouped or renamed as we implement coherent slices. Native packages can be split/shared when actual dependencies justify it; the example does not mandate duplication of transport code. The `host/host.dart` feature barrel follows the existing `workflow/workflow.dart` pattern and can be exported from public `rudra_sdk.dart`.
+The SDK supplies portable host execution and contracts. The reusable host
+selects the platform at its composition boundary and groups native code by
+capability. Host plugins and installation remain future capabilities.
 
 ### 2.3 Platform capabilities, feature plugins and registration
 
@@ -154,7 +118,7 @@ The macOS feature layout separates `plugins/launchd` and `plugins/power` so addi
 
 ### 2.4 Explicit installation contributions
 
-Installation is a separate feature, organized under each platform's `install/`, with SDK-owned contracts and a validated contribution registry under `src/host/install/`. Its structure resembles plugin registration, but **installer steps are not runtime plugins**: they describe and perform setup or removal when the user explicitly requests it.
+Installation is a separate host feature, with native implementations within `install/`, with SDK-owned contracts and a validated contribution registry under `src/host/install/`. Its structure resembles plugin registration, but **installer steps are not runtime plugins**: they describe and perform setup or removal when the user explicitly requests it.
 
 Possible macOS contributions include application/runtime directory provisioning, executable placement and a launchd agent configuration. Each step must have a stable identity, prerequisites, inspectable intended changes, idempotent or explicitly guarded execution, a verifiable result and a defined partial-failure strategy. Do not promise transactional rollback of external OS operations. Actual contract shapes remain a 7E design decision.
 
@@ -350,8 +314,9 @@ User B
 
 Each host retains exclusive per-user instance ownership.
 
-Communication internally owns transport registration,
-endpoint activation and authenticated session execution.
+Host composition supplies enabled endpoint configuration.
+Communication resolves registrations and owns endpoint
+activation and authenticated session execution.
 
 Future machine-wide filesystem reservations coordinate
 conflicting operations through shared persistence.
@@ -364,7 +329,7 @@ The host is a **new headless Dart application in the existing monorepo**. Do not
 ### Included
 
 - A portable SDK host feature with necessary platform capability contracts and a small validated registration mechanism.
-- `apps/host` as the composition root, selecting the native implementations supplied by `packages/host/<platform>`.
+- `packages/host` as the native composition boundary for the shared SDK runtime.
 - One macOS adapter-backed per-user host and one configured local persistence scope as the first verified implementation.
 - Internally registered communication transports, initially
   using one enabled native Unix-domain socket listener.
@@ -480,6 +445,9 @@ Connecting, observing, rendering, navigating, quitting, cancelling and reading v
 Slices are defined by **coherent responsibilities**, not file counts. Agree on interfaces and failure semantics before editing, verify each slice, then inspect the pushed commit.
 
 ### 7A — Portable SDK host runtime, native capabilities and composition
+
+The original package split described in this slice was consolidated in
+[7D.2.1](#7d21--architectural-consolidation).
 
 **Goal:** A thin `apps/host` entrypoint composes and runs one long-lived SDK host/application/persistence context. It chooses native adapters without implementing OS-specific behavior; the portable host has no platform branches.
 
@@ -1284,6 +1252,63 @@ through the configured authenticated host, and frontend processes
 neither open workflow persistence nor execute native filesystem
 inspection.
 
+#### 7D.2.1 — Architectural Consolidation
+
+**Baseline:** `8aecbc28d70b1b4cfd049b354028ac9435f8c0e0`.
+
+The `rudra_host` package now owns reusable composition and native host
+capabilities under `packages/host`. It supersedes the earlier split between
+`apps/host` and `rudra_host_macos`. The foreground CLI entrypoint delegates
+to this package. The portable SDK retains `RudraHost`, application services,
+authorization and state publication. The macOS inspection adapter now lives
+under `rudra_target_inspection` with portable contracts in their own package.
+
+Transport implementations publish registrations with inactive construction
+factories. The standard registry registers `MacOsUnixTransport.registration`.
+A host supplies its enabled listeners through `TransportConfiguration` and
+can describe an explicit Unix socket with `MacOsUnixTransport.endpoint()`.
+Default policy enables only native local connectivity. Communication resolves
+the full list before binding and owns listener and session disposal.
+`RudraSdk().connect()` keeps native defaults, and explicit
+`ConnectionParams` and reconnect selection remain supported. Socket location
+preserves the same trusted ownership and storage domain.
+
+The SDK and request payloads require no client-supplied target identifier.
+The host returns its authoritative target on filesystem inspection admission
+and attaches it to workflow creation at the application boundary. The
+filesystem open request and response and the workflow Start request use
+version 2 wire identifiers. Workflow identities, persisted events and SQLite
+schema retain their existing target representation.
+
+`rudra_platform_macos` exports shared effective-UID, runtime path and Darwin
+metadata primitives. Ordinary inspection uses native `lstat`, and protected
+host and transport resources use its extended variant to read metadata and ACL
+presence together. Ownership, storage validation, endpoint policy and
+inspection orchestration live in the respective capabilities. Storage retains
+the system group utility for Directory Services semantics. Unix peers continue
+to authenticate through their native credentials.
+
+`compose_product_cli()` registers features and owns the invocation SDK.
+Feature compositions assemble their components. Explorer loads verified
+workflow state before terminal creation, uses the workflow feature's
+registered actions, and refreshes explicitly. Terminal restoration precedes
+SDK disposal. Stop uses the workflow identity selected from verified state.
+
+**Verification on 27 November 2026:** `dart pub get`, `./rudra verify all`,
+`./rudra build` and `git diff --check` passed. Eight suites passed 1,527 tests
+with zero failures. Two non-macOS cases were skipped, and the workspace root
+has no test suite. Focused coverage includes opted-in listener activation,
+rollback, host-supplied target identity, native ACL and link validation, and
+Explorer composition with a borrowed SDK. The arm64 production executable
+passed help, About and command-registration checks. The bundled SQLite 3.54.1
+library loaded and executed SQL against an in-memory database.
+
+**Acceptance:** The isolated process tests exercise native authenticated IPC,
+exclusive ownership across endpoint overrides, competing Start commands,
+host-backed inspection, Stop and durable restart. The real multi-user
+permissions gate remains open. The tests use isolated paths and write no
+production Rudra resources.
+
 #### 7D.3 — Reactive Explorer integration
 
 - Establish authenticated connectivity and initial verified application
@@ -1318,9 +1343,9 @@ own processes.
 **Goal:** Finish the smallest usable macOS-managed service lifecycle through SDK-owned plugin and installation contracts, then prove the complete cross-process acceptance scenario without macOS-specific logic in the SDK host runtime.
 
 - Define the **necessary** SDK host plugin/installation contribution contracts and registries, including duplicate/conflicting capability rejection, prerequisites, plan/inspect behavior, explicit execution and resource lifetime. Do not introduce a generalized installation engine beyond verified requirements.
-- Implement a focused `packages/host/macos/lib/src/plugins/launchd/` capability; introduce other plugins (such as `power/`) only with a concrete use case, not merely to populate the proposed tree.
-- Implement `packages/host/macos/lib/src/install/` as feature-owned installation steps, initially for the executable, required directories and per-user launchd configuration, reusing the launchd service manager rather than duplicating OS commands.
-- Expose explicit install/verify/uninstall or configure actions through `apps/host` composition and the SDK-defined installation contract. Registration and `host.run()` must never install, enable, disable or remove services.
+- Implement a focused `packages/host/lib/src/plugins/launchd/macos/` capability; introduce other plugins (such as `power/`) only with a concrete use case, not merely to populate the proposed tree.
+- Implement `packages/host/lib/src/install/` as feature-owned installation steps, initially for the executable, required directories and per-user launchd configuration, reusing the launchd service manager rather than duplicating OS commands.
+- Expose explicit install/verify/uninstall or configure actions through `packages/host` composition and the SDK-defined installation contract. Registration and `host.run()` must never install, enable, disable or remove services.
 - Separate installed, enabled and running status. Explicitly document automatic login startup, disable/uninstall semantics, retained workflow data and partial installation failures; verify safe no-op/idempotent repeat behavior.
 - Run multi-process concurrency, lifecycle, restart/reconnect, permission, terminal-restoration, install/verify/uninstall and missing-storage tests; test optional plugin/installer registration with synthetic SDK fixtures.
 - Make service-unavailable and startup-conflict behavior explicit, and update architecture and usage docs only after verification evidence exists.
@@ -1332,9 +1357,9 @@ own processes.
 Test at the feature's owning boundary. Prefer separate unit, contract, real-persistence integration and process-level tests. Do not expand generic terminal decoder tests for new workflow actions.
 
 - **SDK host unit/contract:** Portable lifecycle orchestration, command routing, state fan-out, typed contracts, cancellation and fake capability adapters; tests cannot depend on macOS APIs.
-- **`apps/host` composition:** OS detection, selected adapter/feature registrations, trusted runtime/persistence assembly, no native algorithms and clean disposal.
+- **`packages/host` composition:** OS detection, selected adapter/feature registrations, trusted runtime/persistence assembly, no native algorithms and clean disposal.
 - **Communication (`packages/communication`):** Default construction, transport substitution, authenticated peers, native endpoint security, concurrent sessions, communication lifecycle and resource disposal.
-- **Native host adapters (`packages/host/<platform>`):** Trusted identity, instance ownership, process lifecycle, native host capabilities and explicit service management.
+- **Native host capabilities (`packages/host/lib/src/<capability>/<platform>`):** Trusted identity, instance ownership, process lifecycle, native host capabilities and explicit service management.
 - **Plugin/installation contracts:** Multiple independent contributions, duplicate ID/conflict rejection, no side effects on registration, explicit activation and release, inspectable install plans, repeated installation behavior, partial failures and data retention on uninstall.
 - **SDK/persistence regression:** Existing state-machine replay, atomic commit, owner uniqueness, expected identity/version, idempotency, rejected/quarantined submission semantics and no publication on rollback.
 - **Real host integration:** Two simultaneous Start requests with barriers (not timing sleeps), Start-vs-Stop races, committed change fan-out, failed commit silence and reconnect to verified journal state.
@@ -1349,7 +1374,7 @@ At every completed slice, run formatting, affected tests, full `./rudra verify a
 - **SDK first:** Domain semantics, transitions, reducers, journal validation, processing, application operations and portable host contracts/orchestration are implemented once in the SDK.
 - **Explicit dependency direction:** `packages/host/<platform>` implements SDK host contracts; `packages/sdk` never imports concrete native host adapters. The SDK consumes `packages/communication`, which remains independent of the SDK, host application and persistence implementations.
 - **Hierarchical ownership:** RudraHost constructs and owns Communication by default. Communication constructs and maintains its internal transport and session components. Explicit substitution remains available through contracts, and resource disposal is coordinated by the immediate resource owner.
-- **Composition root:** `apps/host` selects and registers concrete adapters/plugins and constructs the configured SDK host, but contains neither native algorithms nor duplicate application/domain logic.
+- **Composition root:** `packages/host` selects concrete capabilities and constructs the configured SDK host. Native algorithms live in their owning features. Domain logic remains in the SDK.
 - **Feature-owned native extensions:** Communication infrastructure belongs to the independent communication package. Native host identity and ownership capabilities remain separate from optional `plugins/` and explicit `install/steps/`. New capabilities and installation steps should primarily add code and one registration.
 - **No implicit host installation:** Registration, SDK construction, observation and `host.run()` do not install or configure OS services; install/uninstall actions are separate, explicit and auditable.
 - **Portability by construction:** Adding Windows or Linux support should involve adapter implementations and composition registration, not edits to portable SDK host behavior.
@@ -1382,7 +1407,7 @@ At every completed slice, run formatting, affected tests, full `./rudra verify a
 
 These are **design checkpoints**, not permission to replace the agreed SDK-first ownership model:
 
-- **7A:** Names/signatures of SDK host runtime, platform contracts and `apps/host` composition root; minimum registry/required-capability boundaries; macOS socket placement, exclusive ownership mechanism, trusted peer verification and explicit development launch command.
+- **7A:** Names/signatures of SDK host runtime, platform contracts and host composition root; minimum registry/required-capability boundaries; macOS socket placement, exclusive ownership mechanism, trusted peer verification and explicit development launch command.
 - **7B:** Minimal message envelope, protocol evolution, idempotency-key handling across lost responses and whether command handling is queued or otherwise safely serialized.
 - **7C:** Host-stream generation/revision representation, bounded subscriber queues and registered serialization of future typed SDK state slices.
 - **7C.3:** Host-backed application capabilities belong beneath the existing `RudraSdk` facade. Shared connection ownership and remote observation remain independently owned SDK infrastructure.
@@ -1405,4 +1430,4 @@ Decide these from inspected code and real platform constraints immediately befor
 - [`ProductSdkComposition`](../../apps/cli/lib/src/composition/product_sdk_composition.dart)
 - [`ExplorerRunner`](../../apps/cli/lib/src/features/explorer/application/explorer_runner.dart)
 
-**Guiding acceptance criterion:** The SDK owns portable host behavior, capability contracts and extension registries; native packages under `packages/host/<platform>` implement independent platform features and installation steps; `apps/host` composes them and launches the configured SDK runtime. Independent frontends then share one trusted application/persistence owner and react to verified committed state. Neither registration nor `run()` implicitly installs operating-system services.
+**Guiding acceptance criterion:** The SDK owns portable host behavior, capability contracts and extension registries; native implementations live inside the host capabilities, and `packages/host` composes them for the SDK runtime. Independent frontends then share one trusted application/persistence owner and react to verified committed state. Neither registration nor `run()` implicitly installs operating-system services.

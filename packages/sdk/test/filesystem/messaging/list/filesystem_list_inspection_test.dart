@@ -12,7 +12,7 @@ import 'package:test/test.dart';
 void main() {
   final request = FilesystemListOpenRequest(
     inspection_id: 'inspection-001',
-    target_id: 'local-macos',
+
     directory: TargetPath('/workspace'),
   );
 

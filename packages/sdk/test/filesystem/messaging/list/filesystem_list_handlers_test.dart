@@ -18,14 +18,11 @@ void main() {
   late _TestSession first;
   late _TestSession second;
 
-  /// Creates an admission request for the supplied [id] and [target].
-  FilesystemListOpenRequest open_request({
-    String id = inspection_id,
-    String target = target_id,
-  }) {
+  /// Creates an admission request for the supplied [id].
+  FilesystemListOpenRequest open_request({String id = inspection_id}) {
     return FilesystemListOpenRequest(
       inspection_id: id,
-      target_id: target,
+
       directory: TargetPath('/workspace'),
     );
   }
@@ -79,14 +76,12 @@ void main() {
       expect(inspector.inspection_count, 0);
     });
 
-    test('rejects unsupported targets before inspection', () {
-      expect(
-        () => handlers.open(open_request(target: 'different-target'), first),
-        throwsArgumentError,
-      );
+    test('identifies the host target before native inspection', () {
+      final accepted = handlers.open(open_request(), first);
 
-      expect(handlers.resources_released, isTrue);
+      expect(accepted.target_id, target_id);
       expect(inspector.enumeration_count, 0);
+      expect(inspector.inspection_count, 0);
     });
 
     test('rejects duplicate active inspection identifiers', () {

@@ -28,7 +28,7 @@ final class ProductSdkComposition {
   /// The SDK whose lifecycle belongs to the enclosing CLI invocation.
   final RudraSdk sdk;
 
-  /// Initial path on the SDK's selected filesystem target.
+  /// Default path submitted to the connected host.
   final TargetPath working_directory;
 
   /// Native default connectivity unless isolated composition overrides it.

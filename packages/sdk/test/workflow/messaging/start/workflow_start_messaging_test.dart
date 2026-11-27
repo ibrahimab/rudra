@@ -19,7 +19,6 @@ void main() {
   );
 
   final request_payload = <String, Object?>{
-    'target_id': 'local-macos',
     'root': '/workspace',
     'idempotency_key': 'operation-001',
   };
@@ -27,14 +26,13 @@ void main() {
   group('Start request', () {
     test('preserves the typed message contract and wire identities', () {
       final request = WorkflowStartRequest(
-        target_id: 'local-macos',
         root: TargetPath('/workspace'),
         idempotency_key: 'operation-001',
       );
 
       expect(request, isA<Request<WorkflowStartResponse>>());
 
-      expect(request_codec.type_id, 'rudra.workflow.start.request.v1');
+      expect(request_codec.type_id, 'rudra.workflow.start.request.v2');
 
       expect(response_codec.type_id, 'rudra.workflow.start.response.v1');
     });
@@ -50,7 +48,6 @@ void main() {
 
       for (final path in paths) {
         final request = WorkflowStartRequest(
-          target_id: ' Target-001 ',
           root: TargetPath(path),
           idempotency_key: ' Operation-001 ',
         );
@@ -58,34 +55,22 @@ void main() {
         final payload = request_codec.encode(request);
 
         expect(payload, {
-          'target_id': request.target_id,
           'root': path,
           'idempotency_key': request.idempotency_key,
         });
 
         final restored = request_codec.decode(jsonDecode(jsonEncode(payload)));
 
-        expect(restored.target_id, request.target_id);
         expect(restored.root.value, path);
 
         expect(restored.idempotency_key, request.idempotency_key);
       }
     });
 
-    test('rejects blank target identifiers and idempotency keys', () {
+    test('rejects blank idempotency keys', () {
       for (final identifier in ['', ' ', '\t\n']) {
         expect(
           () => WorkflowStartRequest(
-            target_id: identifier,
-            root: TargetPath('/workspace'),
-            idempotency_key: 'operation-001',
-          ),
-          throwsArgumentError,
-        );
-
-        expect(
-          () => WorkflowStartRequest(
-            target_id: 'local-macos',
             root: TargetPath('/workspace'),
             idempotency_key: identifier,
           ),
@@ -101,7 +86,7 @@ void main() {
         'start',
         <String, Object?>{},
         {'target_id': 'local-macos', 'root': '/workspace'},
-        {...request_payload, 'target_id': ''},
+        {...request_payload, 'target_id': 'untrusted-target'},
         {...request_payload, 'target_id': 42},
         {...request_payload, 'root': ''},
         {...request_payload, 'root': '/workspace\u0000'},

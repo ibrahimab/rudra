@@ -18,9 +18,11 @@ void main() {
 
     final socket_path = '$scope/rudra.sock';
 
-    final transport = MacOsUnixTransport(socket_path: '$scope/rudra.sock');
-
-    final communication = Communication(listening_transports: [transport]);
+    final communication = Communication(
+      transport_configuration: TransportConfiguration.enabled([
+        MacOsUnixTransport.endpoint(socket_path: socket_path),
+      ]),
+    );
 
     // Construction must not acquire native endpoint resources.
     expect(
@@ -51,9 +53,11 @@ void main() {
   }, skip: !Platform.isMacOS);
 
   test('unsupported native execution retains no resources', () async {
-    const transport = MacOsUnixTransport(socket_path: '/unused/rudra.sock');
-
-    final communication = Communication(listening_transports: [transport]);
+    final communication = Communication(
+      transport_configuration: TransportConfiguration.enabled([
+        MacOsUnixTransport.endpoint(socket_path: '/unused/rudra.sock'),
+      ]),
+    );
 
     await expectLater(
       communication.run(shutdown: Future<void>.value()),

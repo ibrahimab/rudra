@@ -10,7 +10,7 @@ const Map<String, String> _package_aliases = {
   'sdk': 'rudra_sdk',
   'sqlite': 'rudra_persistence_sqlite',
   'contracts': 'rudra_target_contracts',
-  'macos': 'rudra_target_macos',
+  'macos': 'rudra_target_inspection',
 };
 
 /// Resolves a verification target to its workspace package name.

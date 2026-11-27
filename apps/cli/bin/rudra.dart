@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 
 /// Starts the production Rudra command-line application.
 ///
@@ -16,7 +16,7 @@ import 'package:rudra_cli/rudra_cli.dart';
 /// dart run apps/cli/bin/rudra.dart about
 /// ```
 Future<void> main(List<String> arguments) async {
-  final cli = RudraCli.product();
+  final cli = compose_product_cli();
 
   exitCode = await cli.run(arguments);
 }

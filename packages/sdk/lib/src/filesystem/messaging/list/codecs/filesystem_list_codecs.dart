@@ -21,17 +21,16 @@ final class FilesystemListOpenRequestCodec
   /// Creates the stateless inspection admission request codec.
   const FilesystemListOpenRequestCodec();
 
-  /// Stable version 1 wire identifier.
+  /// Stable version 2 wire identifier.
   @override
-  String get type_id => 'rudra.filesystem.list.open.request.v1';
+  String get type_id => 'rudra.filesystem.list.open.request.v2';
 
-  /// Returns the inspection identity, target and directory
+  /// Returns the inspection identity and directory
   /// represented by [message].
   @override
   Map<String, Object?> encode(FilesystemListOpenRequest message) {
     return {
       'inspection_id': message.inspection_id,
-      'target_id': message.target_id,
       'directory': message.directory.value,
     };
   }
@@ -43,10 +42,9 @@ final class FilesystemListOpenRequestCodec
   FilesystemListOpenRequest decode(Object? payload) {
     return _decode(
       payload,
-      const {'inspection_id', 'target_id', 'directory'},
+      const {'inspection_id', 'directory'},
       (fields) => FilesystemListOpenRequest(
         inspection_id: _string(fields, 'inspection_id'),
-        target_id: _string(fields, 'target_id'),
         directory: TargetPath(_string(fields, 'directory')),
       ),
     );
@@ -65,14 +63,17 @@ final class FilesystemListOpenResponseCodec
   /// Creates the stateless inspection admission response codec.
   const FilesystemListOpenResponseCodec();
 
-  /// Stable version 1 wire identifier.
+  /// Stable version 2 wire identifier.
   @override
-  String get type_id => 'rudra.filesystem.list.open.response.v1';
+  String get type_id => 'rudra.filesystem.list.open.response.v2';
 
-  /// Returns the admitted inspection identity from [message].
+  /// Returns the admitted inspection and authoritative target from [message].
   @override
   Map<String, Object?> encode(FilesystemListOpenResponse message) {
-    return {'inspection_id': message.inspection_id};
+    return {
+      'inspection_id': message.inspection_id,
+      'target_id': message.target_id,
+    };
   }
 
   /// Reconstructs an admission response from [payload].
@@ -82,9 +83,10 @@ final class FilesystemListOpenResponseCodec
   FilesystemListOpenResponse decode(Object? payload) {
     return _decode(
       payload,
-      const {'inspection_id'},
+      const {'inspection_id', 'target_id'},
       (fields) => FilesystemListOpenResponse(
         inspection_id: _string(fields, 'inspection_id'),
+        target_id: _string(fields, 'target_id'),
       ),
     );
   }

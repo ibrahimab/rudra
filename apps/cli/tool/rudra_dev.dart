@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 
 import 'src/dev_tasks.dart';
 import 'src/dev_tools_cli_module.dart';
@@ -41,7 +42,7 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
-  final cli = RudraCli.product();
+  final cli = compose_product_cli();
 
   final tasks = DevTasks(repo_root);
 

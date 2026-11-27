@@ -14,7 +14,6 @@ void main() {
     resolution_count = 0;
 
     sdk = RudraSdk(
-      target_id: 'test-target',
       communication_factory: ({required codecs, required handlers}) {
         resolution_count++;
 
@@ -27,11 +26,10 @@ void main() {
     await sdk.close();
   });
 
-  test('exposes one stable target-bound workflow service', () {
+  test('exposes one stable host-backed workflow service', () {
     final workflows = sdk.workflows;
 
     expect(workflows, isA<WorkflowService>());
-    expect(workflows.target_id, sdk.target_id);
     expect(sdk.workflows, same(workflows));
 
     expect(sdk.is_connected, isFalse);

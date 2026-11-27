@@ -12,7 +12,7 @@ void main() {
     expect(resolve_verify_target('sqlite'), 'rudra_persistence_sqlite');
     expect(resolve_verify_target('sdk'), 'rudra_sdk');
     expect(resolve_verify_target('cli'), 'rudra_cli');
-    expect(resolve_verify_target('macos'), 'rudra_target_macos');
+    expect(resolve_verify_target('macos'), 'rudra_target_inspection');
     expect(resolve_verify_target('contracts'), 'rudra_target_contracts');
   });
 

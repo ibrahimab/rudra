@@ -26,28 +26,12 @@ import 'messaging/list/filesystem_list_messages.dart';
 /// print(listing.is_complete);
 /// ```
 final class FilesystemService {
-  /// Creates a filesystem service for the configured [target_id].
+  /// Creates a service using the authenticated [connection].
   ///
-  /// [connection] supplies authenticated application request execution.
-  /// Its lifecycle remains owned by the composing SDK.
-  ///
-  /// Throws [ArgumentError] for a blank target identifier.
-  /// Construction does not establish communication or inspect files.
-  FilesystemService({
-    required this.target_id,
-    required ClientConnection connection,
-  }) : _connection = connection {
-    if (target_id.trim().isEmpty) {
-      throw ArgumentError.value(
-        target_id,
-        'target_id',
-        'The target identifier must not be blank.',
-      );
-    }
-  }
-
-  /// Identifier of the configured filesystem environment.
-  final String target_id;
+  /// The owning SDK establishes and disposes the connection.
+  /// Construction performs no application operations.
+  FilesystemService({required ClientConnection connection})
+    : _connection = connection;
 
   /// Borrowed authenticated application request capability.
   final ClientConnection _connection;
@@ -58,7 +42,7 @@ final class FilesystemService {
   ///
   /// Returns an immutable directory listing containing successful
   /// entries, typed inspection issues and authoritative completion
-  /// status.
+  /// status. The inspection admission supplies the host's target identifier.
   ///
   /// All requests belonging to the inspection remain bound to
   /// the same authenticated communication session.
@@ -83,7 +67,6 @@ final class FilesystemService {
       final accepted = await _connection.request(
         FilesystemListOpenRequest(
           inspection_id: inspection_id,
-          target_id: target_id,
           directory: directory,
         ),
         session: session,
@@ -123,7 +106,7 @@ final class FilesystemService {
           }
 
           return DirectoryListing(
-            target_id: target_id,
+            target_id: accepted.target_id,
             directory: directory,
             entries: entries,
             issues: issues,

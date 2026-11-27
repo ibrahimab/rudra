@@ -12,7 +12,6 @@ import '../../inspection_issue.dart';
 /// ```dart
 /// final request = FilesystemListOpenRequest(
 ///   inspection_id: 'inspection-001',
-///   target_id: 'local-macos',
 ///   directory: TargetPath('/workspace'),
 /// );
 /// ```
@@ -21,28 +20,18 @@ final class FilesystemListOpenRequest
   /// Creates a directory inspection request.
   ///
   /// [inspection_id] identifies the intended inspection.
-  /// [target_id] identifies the requested filesystem environment.
   /// [directory] preserves the requested target-native directory.
   ///
-  /// Throws [ArgumentError] for an invalid inspection identifier
-  /// or blank target identifier.
+  /// Throws [ArgumentError] for an invalid inspection identifier.
   FilesystemListOpenRequest({
     required this.inspection_id,
-    required this.target_id,
     required this.directory,
   }) {
     _require_inspection_id(inspection_id);
-
-    if (target_id.trim().isEmpty) {
-      throw ArgumentError.value(target_id, 'target_id');
-    }
   }
 
   /// Client-assigned inspection identity.
   final String inspection_id;
-
-  /// Requested configured filesystem target.
-  final String target_id;
 
   /// Requested directory in target-native syntax.
   final TargetPath directory;
@@ -57,15 +46,25 @@ final class FilesystemListOpenRequest
 /// ```dart
 /// final response = FilesystemListOpenResponse(
 ///   inspection_id: request.inspection_id,
+///   target_id: 'host-filesystem',
 /// );
 /// ```
 final class FilesystemListOpenResponse implements Response {
-  /// Confirms admission of [inspection_id].
+  /// Confirms admission of [inspection_id] on the host's [target_id].
   ///
-  /// Throws [ArgumentError] for an invalid inspection identifier.
-  FilesystemListOpenResponse({required this.inspection_id}) {
+  /// Throws [ArgumentError] for an invalid inspection or target identifier.
+  FilesystemListOpenResponse({
+    required this.inspection_id,
+    required this.target_id,
+  }) {
     _require_inspection_id(inspection_id);
+    if (target_id.trim().isEmpty) {
+      throw ArgumentError.value(target_id, 'target_id');
+    }
   }
+
+  /// Authoritative filesystem target associated with this inspection.
+  final String target_id;
 
   /// Identity of the admitted inspection.
   final String inspection_id;

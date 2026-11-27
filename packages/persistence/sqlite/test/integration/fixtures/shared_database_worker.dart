@@ -39,7 +39,7 @@ Future<void> main(List<String> arguments) async {
       throw StateError('Worker did not receive the initialization signal.');
     }
     final outcome = await application.start(
-      target_id: local_macos_target_id,
+      target_id: 'fixture-filesystem',
       root: TargetPath('/${application.os_user_id}'),
       idempotency_key: 'shared-key',
     );

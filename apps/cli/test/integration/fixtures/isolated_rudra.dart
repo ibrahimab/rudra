@@ -1,13 +1,12 @@
 import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
-import 'package:rudra_cli/src/composition/product_sdk_composition.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:rudra_cli/src/features/host/cli/host_cli_module.dart';
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:rudra_host/rudra_host.dart';
-import 'package:rudra_host_macos/rudra_host_macos.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
-import 'package:rudra_target_macos/rudra_target_macos.dart';
+import 'package:rudra_target_inspection/rudra_target_inspection.dart';
 
 /// Runs normal CLI commands with isolated native resources supplied by tests.
 ///
@@ -29,14 +28,11 @@ Future<void> main(List<String> arguments) async {
               runtime_directory: runtime,
             ),
             resolve_database: () => database,
-            target_id: local_macos_target_id,
+            target_id: 'fixture-filesystem',
             inspector: MacOsTargetInspector(),
-            communication_factory: ({required codecs, required handlers}) =>
-                Communication(
-                  listening_transports: [transport],
-                  codecs: codecs,
-                  handlers: handlers,
-                ),
+            transport_configuration: TransportConfiguration.enabled([
+              MacOsUnixTransport.endpoint(socket_path: arguments[2]),
+            ]),
           );
 
           await const MacOsHostShutdown().run(
@@ -51,8 +47,8 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
-  final cli = RudraCli.product(
-    target_composition: ProductSdkComposition(
+  final cli = compose_product_cli(
+    sdk_composition: ProductSdkComposition(
       sdk: RudraSdk(),
       working_directory: TargetPath(runtime),
       connection_params: ConnectionParams(transport: transport),

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/dev_tasks.dart';
@@ -11,14 +12,14 @@ import '../../tool/src/dev_tools_cli_module.dart';
 void main() {
   group('RudraCli production composition', () {
     test('registers product commands', () {
-      final cli = RudraCli.product();
+      final cli = compose_product_cli();
 
       expect(cli.command_names, contains('about'));
       expect(cli.module_ids, contains('rudra.product.about'));
     });
 
     test('excludes development commands', () {
-      final cli = RudraCli.product();
+      final cli = compose_product_cli();
 
       for (final name in [
         'test',
@@ -42,7 +43,7 @@ void main() {
       final output = StringBuffer();
       final errors = StringBuffer();
 
-      final cli = RudraCli.product(output: output, error_output: errors);
+      final cli = compose_product_cli(output: output, error_output: errors);
 
       // Application composition must not render eagerly.
       expect(output.toString(), isEmpty);
@@ -62,7 +63,7 @@ void main() {
     test('maps invalid arguments to a typed exit code', () async {
       final diagnostics = StringBuffer();
 
-      final cli = RudraCli.product(error_output: diagnostics);
+      final cli = compose_product_cli(error_output: diagnostics);
 
       final status = await cli.run(['--invalid-option']);
 
@@ -122,7 +123,7 @@ void main() {
     });
 
     test('prevents registration after execution', () async {
-      final cli = RudraCli.product();
+      final cli = compose_product_cli();
 
       await cli.run(['about']);
 
@@ -133,7 +134,7 @@ void main() {
     });
 
     test('prevents executing an instance twice', () async {
-      final cli = RudraCli.product();
+      final cli = compose_product_cli();
 
       await cli.run(['about']);
 
@@ -143,7 +144,7 @@ void main() {
 
   group('RudraCli development composition', () {
     test('extends the product registry', () {
-      final cli = RudraCli.product();
+      final cli = compose_product_cli();
 
       cli.register_module(DevToolsCliModule(DevTasks(Directory.current)));
 

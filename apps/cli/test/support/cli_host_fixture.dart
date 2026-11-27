@@ -8,7 +8,8 @@ import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../host/test/support/loopback_host_transport.dart';
+import '../../../../packages/host/test/support/loopback_host_transport.dart';
+import '../../../../packages/host/test/support/host_test_transport_registry.dart';
 
 /// Runs the real authoritative host with synthetic authenticated IPC.
 ///
@@ -40,7 +41,7 @@ final class CliHostFixture implements Transport {
   /// Creates a new disconnected frontend for one invocation.
   ProductSdkComposition composition({TargetPath? directory}) =>
       ProductSdkComposition(
-        sdk: RudraSdk(target_id: target_id),
+        sdk: RudraSdk(),
         working_directory: directory ?? TargetPath('/fixture'),
         connection_params: ConnectionParams(transport: this),
       );
@@ -94,17 +95,12 @@ final class CliHostFixture implements Transport {
         target_id: target_id,
         inspector: inspector,
       ),
-      validate_start: (target, root) {
-        if (target != target_id || !root.value.startsWith('/')) {
-          throw ArgumentError('Invalid fixture workflow target.');
+      validate_start: (root) {
+        if (!root.value.startsWith('/')) {
+          throw ArgumentError('Invalid fixture workflow root.');
         }
       },
-      communication_factory: ({required codecs, required handlers}) =>
-          Communication(
-            listening_transports: [this],
-            codecs: codecs,
-            handlers: handlers,
-          ),
+      transport_registry: host_test_transport_registry(this),
     );
     final ready = Completer<void>();
     final running = _running = host.run(

@@ -1,0 +1,517 @@
+import 'dart:ffi';
+import 'dart:io';
+
+import 'package:ffi/ffi.dart';
+
+import 'darwin_mode.dart';
+
+const int _nanoseconds_per_second = 1000000000;
+const int _nanoseconds_per_microsecond = 1000;
+const int _microseconds_per_second = 1000000;
+
+// Dart DateTime supports dates within 100 million days of
+// the Unix epoch, measured in microseconds.
+const int _maximum_date_microseconds = 8640000000000000000;
+
+const int _maximum_date_seconds =
+    _maximum_date_microseconds ~/ _microseconds_per_second;
+
+/// A native Darwin timestamp relative to the Unix epoch.
+///
+/// [seconds] is the whole-second component.
+/// [nanoseconds] is the fractional component in the range 0 through 999999999.
+///
+/// The original native precision is preserved in this object.
+/// Converting to Dart DateTime loses sub-microsecond precision.
+///
+/// This observation has native precision and describes a single read.
+///
+/// Example:
+/// ```dart
+/// final timestamp = DarwinTimestamp(
+///   seconds: 1700000000,
+///   nanoseconds: 123456789,
+/// );
+///
+/// final utc = timestamp.to_utc_datetime();
+/// print(utc?.isUtc);
+/// // true
+/// ```
+final class DarwinTimestamp {
+  /// Creates a timestamp from native timespec fields.
+  ///
+  /// Values are retained unchanged. Invalid or unrepresentable
+  /// values are handled by [to_utc_datetime].
+  const DarwinTimestamp({required this.seconds, required this.nanoseconds});
+
+  /// Whole seconds since the Unix epoch.
+  final int seconds;
+
+  /// Fractional nanoseconds within the native second.
+  final int nanoseconds;
+
+  /// Converts the native timestamp to a UTC Dart DateTime.
+  ///
+  /// Returns null for invalid nanoseconds or timestamps outside
+  /// Dart's representable DateTime range.
+  ///
+  /// Nanoseconds are truncated to microsecond precision.
+  /// A timestamp at the Unix epoch is valid and is not treated
+  /// as an unknown value.
+  ///
+  /// The conversion performs no filesystem operations.
+  ///
+  /// Example:
+  /// ```dart
+  /// final timestamp = DarwinTimestamp(
+  ///   seconds: 0,
+  ///   nanoseconds: 500000000,
+  /// );
+  ///
+  /// final utc = timestamp.to_utc_datetime();
+  /// print(utc?.microsecondsSinceEpoch);
+  /// // 500000
+  /// ```
+  DateTime? to_utc_datetime() {
+    if (nanoseconds < 0 || nanoseconds >= _nanoseconds_per_second) {
+      return null;
+    }
+
+    // Check before multiplication to prevent signed integer
+    // overflow when handling malformed native observations.
+    if (seconds < -_maximum_date_seconds || seconds > _maximum_date_seconds) {
+      return null;
+    }
+
+    final microseconds =
+        seconds * _microseconds_per_second +
+        nanoseconds ~/ _nanoseconds_per_microsecond;
+
+    if (microseconds < -_maximum_date_microseconds ||
+        microseconds > _maximum_date_microseconds) {
+      return null;
+    }
+
+    try {
+      return DateTime.fromMicrosecondsSinceEpoch(microseconds, isUtc: true);
+    } on ArgumentError {
+      return null;
+    }
+  }
+}
+
+/// An immutable observation obtained from Darwin's native `lstat`.
+///
+/// The values describe the filesystem entry itself, without following
+/// a symbolic link in the final path component.
+///
+/// The reported block count describes allocation at inspection time.
+///
+/// Example:
+/// ```dart
+/// final metadata = DarwinLStat().inspect('/private/tmp');
+/// print(metadata.uid);
+/// print(metadata.type);
+/// ```
+final class DarwinStatSnapshot {
+  /// Creates a Dart-owned copy of native metadata.
+  ///
+  /// [mode], [uid], [gid] and [links] preserve resource ownership metadata.
+  /// [device_id] and [inode] identify the observed entry. Size, allocation
+  /// and timestamps preserve their native units.
+  const DarwinStatSnapshot({
+    required this.mode,
+    required this.uid,
+    required this.gid,
+    required this.links,
+    required this.device_id,
+    required this.inode,
+    required this.logical_size_bytes,
+    required this.allocated_blocks,
+    required this.access_time,
+    required this.modification_time,
+  });
+
+  /// Native POSIX mode including file type and permission bits.
+  final int mode;
+
+  /// Effective owner UID recorded on the entry.
+  final int uid;
+
+  /// Owner group GID recorded on the entry.
+  final int gid;
+
+  /// Native link count, including hard links.
+  final int links;
+
+  /// File type decoded independently of permission bits.
+  DarwinFileType get type => DarwinFileType.from_mode(mode);
+
+  /// Exact permission and special bits.
+  int get permissions => mode & DarwinMode.permission_mask;
+
+  /// Native device identifier, scoped to the inspected host.
+  final int device_id;
+
+  /// Native inode identifier for the observed filesystem entry.
+  final int inode;
+
+  /// Native apparent size, without recursive aggregation.
+  final int logical_size_bytes;
+
+  /// Native allocation count in 512-byte units.
+  ///
+  /// This is not necessarily the number of blocks exclusively
+  /// owned by the entry or recoverable through deletion.
+  final int allocated_blocks;
+
+  /// Native time of last access to the entry.
+  ///
+  /// Some filesystems may suppress or defer access-time updates.
+  /// This observation does not prove when a file was last read.
+  final DarwinTimestamp access_time;
+
+  /// Native time of last content modification.
+  ///
+  /// For symbolic links, this describes the link itself.
+  /// It does not describe the destination.
+  final DarwinTimestamp modification_time;
+}
+
+/// The 64-bit Darwin representation of a POSIX timespec.
+///
+/// This type is used solely to preserve the native struct layout.
+/// Timestamp conversion is deferred to the metadata implementation.
+final class _DarwinTimespec extends Struct {
+  /// Whole seconds in the native timespec value.
+  @Int64()
+  external int tv_sec;
+
+  /// Fractional nanoseconds in the native timespec value.
+  @Int64()
+  external int tv_nsec;
+}
+
+/// Darwin's 64-bit `struct stat` representation.
+///
+/// Field ordering and widths follow Apple's `sys/stat.h`.
+///
+/// This layout targets 64-bit macOS processes on supported Darwin
+/// architectures. It must be validated against native fixtures
+/// before being relied upon for production inspection.
+///
+/// Never use this structure for Linux or Windows.
+final class _DarwinStat extends Struct {
+  /// Device identifier owning the filesystem entry.
+  @Int32()
+  external int st_dev;
+
+  /// POSIX file-type and permission mode bits.
+  @Uint16()
+  external int st_mode;
+
+  /// Number of native hard links to the entry.
+  @Uint16()
+  external int st_nlink;
+
+  /// Filesystem inode identity within [st_dev].
+  @Uint64()
+  external int st_ino;
+
+  /// Native numeric owner user identifier.
+  @Uint32()
+  external int st_uid;
+
+  /// Native numeric owner group identifier.
+  @Uint32()
+  external int st_gid;
+
+  /// Device identifier associated with a device entry.
+  @Int32()
+  external int st_rdev;
+
+  /// Native last-access timestamp.
+  external _DarwinTimespec st_atimespec;
+
+  /// Native last-content-modification timestamp.
+  external _DarwinTimespec st_mtimespec;
+
+  /// Native last-metadata-change timestamp.
+  external _DarwinTimespec st_ctimespec;
+
+  /// Native filesystem-entry creation timestamp.
+  external _DarwinTimespec st_birthtimespec;
+
+  /// Apparent filesystem-entry size in bytes.
+  @Int64()
+  external int st_size;
+
+  /// Number of allocated native 512-byte blocks.
+  @Int64()
+  external int st_blocks;
+
+  /// Filesystem-preferred block size for I/O.
+  @Int32()
+  external int st_blksize;
+
+  /// Native file flags reported by Darwin.
+  @Uint32()
+  external int st_flags;
+
+  /// Native generation number associated with the entry.
+  @Uint32()
+  external int st_gen;
+
+  /// Reserved signed field retained for native ABI layout.
+  @Int32()
+  external int st_lspare;
+
+  /// Reserved native 64-bit fields retained for ABI layout.
+  @Array(2)
+  external Array<Int64> st_qspare;
+}
+
+/// C ABI for lstat inspection without following the final symbolic link.
+typedef _LstatNative = Int32 Function(Pointer<Utf8>, Pointer<_DarwinStat>);
+
+/// Dart FFI mapping for native lstat inspection.
+typedef _LstatDart = int Function(Pointer<Utf8>, Pointer<_DarwinStat>);
+
+/// C ABI for retrieving the native errno location.
+typedef _ErrnoNative = Pointer<Int32> Function();
+
+/// Dart FFI mapping for reading the native errno location.
+typedef _ErrnoDart = Pointer<Int32> Function();
+
+/// Provides read-only native filesystem inspection on macOS.
+///
+/// Uses `lstat` rather than `stat`, preserving the identity and type
+/// of symbolic links in the final path component.
+///
+/// A successful call returns a Dart-owned snapshot. Native memory
+/// is freed before the method returns.
+///
+/// Errors are preserved as [FileSystemException] with their native
+/// [OSError] codes for the owning capability to interpret.
+///
+/// Limitations:
+/// - Requires a 64-bit macOS Dart VM.
+/// - Calls native functions synchronously.
+/// - Intermediate symbolic links may still be traversed.
+/// - Does not establish containment inside a session root.
+/// - Does not provide race-safe authorization for future deletion.
+/// - Rejects trailing separators other than the root path to avoid
+///   unintentionally following a final symbolic link.
+///
+/// Example:
+/// ```dart
+/// final native = DarwinLStat();
+/// final result = native.inspect('/tmp/example.txt');
+///
+/// print(result.logical_size_bytes);
+/// ```
+final class DarwinLStat {
+  /// Initializes the Darwin native function bindings.
+  ///
+  /// Throws [UnsupportedError] outside macOS.
+  ///
+  /// Fails during initialization when a required native symbol
+  /// cannot be resolved. Such failure must not silently produce
+  /// incomplete filesystem observations.
+  DarwinLStat() {
+    if (!Platform.isMacOS) {
+      throw UnsupportedError('DarwinLStat requires macOS.');
+    }
+
+    final library = DynamicLibrary.process();
+
+    _lstat = _lookup_lstat(library);
+    _errno = library.lookupFunction<_ErrnoNative, _ErrnoDart>('__error');
+  }
+
+  /// Native metadata inspection without following the final link.
+  late final _LstatDart _lstat;
+
+  /// Extended metadata inspection with the same no-follow behavior.
+  late final _LstatExtendedDart _lstat_extended = _lookup_lstat_extended();
+
+  /// Native thread-local errno accessor.
+  late final _ErrnoDart _errno;
+
+  /// Inspects one filesystem entry without following its final link.
+  ///
+  /// [path] must be an absolute macOS path without a NUL character.
+  /// A trailing slash is rejected except for `/`.
+  ///
+  /// Throws [ArgumentError] for invalid input.
+  ///
+  /// Throws [FileSystemException] if native `lstat` fails. The
+  /// original native errno is retained in the exception's OSError.
+  ///
+  /// This operation performs no filesystem modification.
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = DarwinLStat().inspect('/tmp');
+  ///
+  /// print(result.inode);
+  /// ```
+  DarwinStatSnapshot inspect(String path) => _inspect(path, _lstat);
+
+  /// Inspects [path] and checks for an extended ACL in the same native read.
+  ///
+  /// Accepts the same absolute path syntax as [inspect]. Returns a snapshot
+  /// together with the presence of an ACL. Throws [FileSystemException] when
+  /// either metadata or ACL presence cannot be read.
+  ({DarwinStatSnapshot metadata, bool has_extended_acl}) inspect_security(
+    String path,
+  ) {
+    final security = _filesec_init();
+    if (security == nullptr) {
+      throw _native_error('filesec_init', path);
+    }
+    try {
+      final metadata = _inspect(
+        path,
+        (native_path, stat) => _lstat_extended(native_path, stat, security),
+      );
+      final has_acl = calloc<Int>();
+      try {
+        if (_filesec_query(security, _filesec_acl, has_acl) != 0) {
+          throw _native_error('filesec_query_property', path);
+        }
+        return (metadata: metadata, has_extended_acl: has_acl.value != 0);
+      } finally {
+        calloc.free(has_acl);
+      }
+    } finally {
+      _filesec_free(security);
+    }
+  }
+
+  /// Maps native metadata from [read_stat] to Dart values for [path].
+  DarwinStatSnapshot _inspect(String path, _LstatDart read_stat) {
+    if (path.isEmpty ||
+        !path.startsWith('/') ||
+        path.contains('\u0000') ||
+        (path.length > 1 && path.endsWith('/'))) {
+      throw ArgumentError.value(
+        path,
+        'path',
+        'Expected an absolute macOS path without NUL or a trailing slash.',
+      );
+    }
+
+    final native_stat = calloc<_DarwinStat>();
+
+    try {
+      final native_path = path.toNativeUtf8(allocator: calloc);
+
+      try {
+        if (read_stat(native_path, native_stat) != 0) {
+          throw _native_error('lstat', path);
+        }
+
+        final stat = native_stat.ref;
+
+        return DarwinStatSnapshot(
+          mode: stat.st_mode,
+          uid: stat.st_uid,
+          gid: stat.st_gid,
+          links: stat.st_nlink,
+          device_id: stat.st_dev,
+          inode: stat.st_ino,
+          logical_size_bytes: stat.st_size,
+          allocated_blocks: stat.st_blocks,
+          access_time: DarwinTimestamp(
+            seconds: stat.st_atimespec.tv_sec,
+            nanoseconds: stat.st_atimespec.tv_nsec,
+          ),
+          modification_time: DarwinTimestamp(
+            seconds: stat.st_mtimespec.tv_sec,
+            nanoseconds: stat.st_mtimespec.tv_nsec,
+          ),
+        );
+      } finally {
+        calloc.free(native_path);
+      }
+    } finally {
+      calloc.free(native_stat);
+    }
+  }
+
+  /// Captures the native error immediately after a failed [operation].
+  FileSystemException _native_error(String operation, String path) {
+    final error_number = _errno().value;
+    return FileSystemException(
+      'Native filesystem metadata unavailable.',
+      path,
+      OSError(operation, error_number),
+    );
+  }
+
+  /// Resolves the Darwin native `lstat` symbol.
+  ///
+  /// The 64-bit inode variant is preferred. Modern macOS toolchains
+  /// may also expose the unsuffixed symbol.
+  ///
+  /// Both variants must be validated against the expected 64-bit
+  /// struct layout by the native integration tests.
+  static _LstatDart _lookup_lstat(DynamicLibrary library) {
+    try {
+      return library.lookupFunction<_LstatNative, _LstatDart>('lstat\$INODE64');
+    } on ArgumentError {
+      return library.lookupFunction<_LstatNative, _LstatDart>('lstat');
+    }
+  }
+}
+
+/// C ABI for Darwin metadata with an extended file security result.
+typedef _LstatExtendedNative = Int Function(
+  Pointer<Utf8>,
+  Pointer<_DarwinStat>,
+  Pointer<Void>,
+);
+
+/// Dart binding for extended no-follow metadata.
+typedef _LstatExtendedDart = int Function(
+  Pointer<Utf8>,
+  Pointer<_DarwinStat>,
+  Pointer<Void>,
+);
+
+/// Resolves the 64-bit inode variant of Darwin's extended stat.
+_LstatExtendedDart _lookup_lstat_extended() {
+  final library = DynamicLibrary.process();
+  try {
+    return library.lookupFunction<_LstatExtendedNative, _LstatExtendedDart>(
+      'lstatx_np\$INODE64',
+    );
+  } on ArgumentError {
+    return library.lookupFunction<_LstatExtendedNative, _LstatExtendedDart>(
+      'lstatx_np',
+    );
+  }
+}
+
+/// Darwin FILESEC_ACL property selector.
+const _filesec_acl = 5;
+
+/// Allocates a native file security result.
+final _filesec_init = DynamicLibrary.process()
+    .lookupFunction<Pointer<Void> Function(), Pointer<Void> Function()>(
+      'filesec_init',
+    );
+
+/// Disposes a native file security result and its owned data.
+final _filesec_free = DynamicLibrary.process()
+    .lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>(
+      'filesec_free',
+    );
+
+/// Queries whether the file security result contains a property.
+final _filesec_query = DynamicLibrary.process()
+    .lookupFunction<
+      Int Function(Pointer<Void>, Int, Pointer<Int>),
+      int Function(Pointer<Void>, int, Pointer<Int>)
+    >('filesec_query_property');

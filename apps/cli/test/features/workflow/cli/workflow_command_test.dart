@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:rudra_cli/rudra_cli.dart';
+import 'package:rudra_cli/rudra_product_cli.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
 import 'package:test/test.dart';
 
@@ -28,7 +29,7 @@ void main() {
     addTearDown(() => directory.delete(recursive: true));
     host = CliHostFixture(
       inspector: _UnusedInspector(),
-      target_id: local_macos_target_id,
+      target_id: 'fixture-filesystem',
       database_file: database_file,
     );
   });
@@ -36,8 +37,8 @@ void main() {
   /// Creates a fresh CLI invocation using the same persistence
   /// location and trusted test identity.
   RudraCli create_cli(StringBuffer output, {StringBuffer? error_output}) {
-    return RudraCli.product(
-      target_composition: host.composition(),
+    return compose_product_cli(
+      sdk_composition: host.composition(),
       output: output,
       error_output: error_output ?? StringBuffer(),
     );
@@ -67,7 +68,7 @@ void main() {
     expect(restored, isNotNull);
     expect(restored!.version, 1);
     expect(restored.identity.os_user_id, 'test-os-user');
-    expect(restored.identity.target_id, 'local-macos');
+    expect(restored.identity.target_id, host.target_id);
     expect(restored.identity.root.value, '/fixture');
   });
 

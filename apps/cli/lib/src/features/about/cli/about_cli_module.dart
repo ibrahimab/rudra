@@ -1,3 +1,7 @@
+import 'package:rudra_sdk/rudra_sdk.dart' show application_name;
+
+import '../presentation/bare_about_renderer.dart';
+
 import 'package:args/command_runner.dart';
 
 import '../../../core/cli/rudra_cli_module.dart';
@@ -31,6 +35,13 @@ import 'about_command.dart';
 /// );
 /// ```
 final class AboutCliModule implements RudraCliModule {
+  /// Assembles About with the product name and its standard [output] renderer.
+  factory AboutCliModule.product({required StringSink output}) =>
+      AboutCliModule(
+        product_name: application_name,
+        renderer: BareAboutRenderer(output: output),
+      );
+
   /// Creates an application-information command module.
   ///
   /// [product_name] is the application identity.

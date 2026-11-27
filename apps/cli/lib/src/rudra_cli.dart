@@ -2,47 +2,8 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 
-import 'package:rudra_sdk/rudra_sdk.dart';
-
-import 'package:rudra_host/rudra_host.dart';
-
-import 'features/host/cli/host_cli_module.dart';
-
-import 'composition/product_sdk_composition.dart';
-
 import 'core/cli/rudra_cli_module.dart';
 import 'core/cli/rudra_exit_code.dart';
-
-import 'core/rendering/bare/ansi_text.dart';
-import 'core/rendering/theme.dart';
-
-import 'features/about/cli/about_cli_module.dart';
-import 'features/about/presentation/bare_about_renderer.dart';
-
-import 'features/filesystem/cli/filesystem_cli_module.dart';
-import 'features/filesystem/presentation/bare_filesystem_renderer.dart';
-
-import 'features/welcome/application/welcome_controller.dart';
-import 'features/welcome/presentation/bare_welcome_renderer.dart';
-
-import 'features/explorer/presentation/bare_explorer_renderer.dart';
-
-import 'features/explorer/terminal/dart_explorer_terminal_host.dart';
-import 'features/explorer/terminal/explorer_terminal_host.dart';
-
-import 'features/explorer/cli/explorer_cli_module.dart';
-
-import 'features/explorer/application/explorer_controller.dart';
-import 'features/explorer/application/explorer_runner.dart';
-
-import 'features/workflow/cli/workflow_cli_module.dart';
-
-import 'features/explorer/application/explorer_action_registry.dart';
-import 'features/workflow/explorer/workflow_start_explorer_action.dart';
-import 'features/workflow/explorer/workflow_stop_explorer_action.dart';
-import 'features/explorer/application/explorer_model.dart';
-import 'features/explorer/presentation/explorer_view_model.dart';
-import 'features/workflow/explorer/workflow_explorer_view_model.dart';
 
 /// Coordinates command registration and execution for Rudra.
 ///
@@ -58,274 +19,30 @@ import 'features/workflow/explorer/workflow_explorer_view_model.dart';
 ///
 /// Example:
 /// ```dart
-/// final cli = RudraCli.product();
-/// final status = await cli.run(['about']);
+/// final cli = RudraCli()..register_module(module);
+/// final status = await cli.run(['help']);
 /// ```
 final class RudraCli {
   /// Creates a CLI framework.
   ///
   /// [error_output] receives usage diagnostics.
   ///
-  /// [welcome_controller] optionally handles an invocation
-  /// without command-line arguments.
+  /// [run_default] optionally handles an invocation without arguments.
+  /// [invoke] optionally wraps command dispatch in an invocation lifecycle.
+  /// The wrapper is responsible for awaiting the supplied dispatch.
   ///
-  /// When no controller is supplied, the existing command
-  /// runner behavior remains unchanged.
-  ///
-  /// Construction registers no commands and performs no
-  /// filesystem operations.
-  RudraCli({StringSink? error_output, WelcomeController? welcome_controller})
-    : _runner = CommandRunner<int>(
-        'rudra',
-        'Rudra - Interactive filesystem exploration and cleanup.',
-      ),
-      _error_output = error_output ?? stderr,
-      _welcome_controller = welcome_controller;
-
-  /// Creates a production CLI with supported application modules.
-  ///
-  /// The application composition boundary owns:
-  /// - Connected SDK configuration and disposal.
-  /// - Starting-directory configuration.
-  /// - Concrete renderer construction.
-  /// - Terminal host construction.
-  /// - Controller, runner, and command-module assembly.
-  ///
-  /// A supplied [target_composition] overrides local target
-  /// discovery for isolated application testing.
-  ///
-  /// [output] receives existing welcome and filesystem command
-  /// presentation. Their established output formats are unchanged.
-  ///
-  /// Interactive Explorer presentation uses the output destination
-  /// supplied by its terminal host. This avoids writing terminal
-  /// control sequences into an unrelated output sink.
-  ///
-  /// [error_output] receives CLI usage and inspection diagnostics.
-  ///
-  /// [explorer_terminal_host_factory] optionally overrides the
-  /// production terminal host constructor.
-  ///
-  /// The terminal factory is invoked only during an Explorer invocation.
-  /// Operational commands connect after argument validation.
-  ///
-  /// Construction does not inspect or modify filesystem content
-  /// or change terminal settings.
-  factory RudraCli.product({
-    StringSink? output,
+  /// Construction registers no commands and performs no filesystem operations.
+  RudraCli({
     StringSink? error_output,
-    ProductSdkComposition? target_composition,
-    ExplorerTerminalHost Function()? explorer_terminal_host_factory,
-  }) {
-    // Resolve the target once so that all application
-    // components share the same SDK and starting directory.
-    final composition =
-        target_composition ?? ProductSdkComposition.for_current_host();
-
-    // Resolve output destinations once at the application
-    // boundary rather than inside individual controllers.
-    final presentation_output = output ?? stdout;
-    final diagnostic_output = error_output ?? stderr;
-
-    // Select the concrete welcome rendering backend here.
-    // Feature controllers depend only on Renderer<TViewModel>.
-    final welcome_renderer = BareWelcomeRenderer(
-      output: presentation_output,
-      error_output: diagnostic_output,
-    );
-
-    final welcome_controller = WelcomeController(
-      connect: composition.connect,
-      starting_directory: composition.working_directory,
-      renderer: welcome_renderer,
-    );
-
-    final cli = RudraCli(
-      error_output: diagnostic_output,
-      welcome_controller: welcome_controller,
-    ).._application_sdk = composition.sdk;
-
-    // About uses the same application-owned output destination
-    // as other non-interactive product commands.
-    //
-    // The command receives only the rendering contract.
-    // It never writes directly to stdout.
-    final about_renderer = BareAboutRenderer(output: presentation_output);
-
-    cli.register_module(
-      AboutCliModule(product_name: application_name, renderer: about_renderer),
-    );
-
-    // Host commands manage the local application lifecycle independently
-    // of filesystem target discovery. Native support is resolved only
-    // when a host operation is explicitly requested.
-    cli.register_module(
-      HostCliModule(
-        run_host: run_local_host,
-        output: presentation_output,
-        error_output: diagnostic_output,
-      ),
-    );
-
-    // The application composition boundary selects the
-    // concrete filesystem rendering implementation.
-    //
-    // Commands receive a backend-independent
-    // Renderer<FilesystemViewModel>.
-    //
-    // The concrete renderer independently presents
-    // directory entries and inspection diagnostics.
-    //
-    // Compact output intentionally remains plain text.
-    final filesystem_renderer = BareFilesystemRenderer(
-      output: presentation_output,
-      error_output: diagnostic_output,
-    );
-
-    cli.register_module(
-      FilesystemCliModule(
-        connect: composition.connect,
-        working_directory: composition.working_directory,
-        renderer: filesystem_renderer,
-      ),
-    );
-
-    Future<WorkflowSnapshot?> current_workflow(RudraSdk sdk) async =>
-        (await sdk.read_state()).workflows.current_workflow;
-
-    cli.register_module(
-      WorkflowCliModule(
-        working_directory: composition.working_directory,
-        current_workflow: () async =>
-            current_workflow(await composition.connect()),
-        start_workflow: (root, idempotency_key) async {
-          final sdk = await composition.connect();
-          return sdk.workflows.start(
-            root: root,
-            idempotency_key: idempotency_key,
-          );
-        },
-        // Stop uses the same session that read and selected the workflow.
-        stop_workflow: (workflow_id, idempotency_key) => composition
-            .sdk
-            .workflows
-            .stop(workflow_id: workflow_id, idempotency_key: idempotency_key),
-        output: presentation_output,
-        error_output: diagnostic_output,
-      ),
-    );
-
-    // Construct terminal hosts lazily so ordinary commands
-    // never probe or modify interactive terminal state.
-    final create_terminal_host =
-        explorer_terminal_host_factory ?? () => DartExplorerTerminalHost();
-
-    cli.register_module(
-      ExplorerCliModule(
-        working_directory: composition.working_directory,
-        create_runner: (directory) async {
-          final sdk = await composition.connect();
-          // Keep one immutable workflow presentation snapshot
-          // for the current Explorer invocation.
-          late WorkflowExplorerViewModel workflow_view_model;
-
-          /// Restores the current workflow through the read-only
-          /// application query.
-          ///
-          /// A missing workflow is represented by a null
-          /// [WorkflowExplorerViewModel.current_workflow].
-          ///
-          /// An unsuccessful restoration propagates its error.
-          Future<void> refresh_workflow_view_model() async {
-            workflow_view_model = WorkflowExplorerViewModel(
-              current_workflow: await current_workflow(sdk),
-            );
-          }
-
-          // Load authoritative state before terminal activation.
-          await refresh_workflow_view_model();
-
-          /// Builds the composed Explorer presentation.
-          ///
-          /// [explorer] is the current navigation snapshot.
-          ///
-          /// [visible_row_limit] is the allocated entry viewport.
-          ///
-          /// [first_visible_index] is the preferred scroll offset.
-          ///
-          /// Returns a complete presentation snapshot.
-          ExplorerViewModel create_view_model(
-            ExplorerModel explorer, {
-            required int visible_row_limit,
-            required int first_visible_index,
-          }) {
-            return ExplorerViewModel.from_navigation(
-              explorer: explorer,
-              workflows: workflow_view_model,
-              visible_row_limit: visible_row_limit,
-              first_visible_index: first_visible_index,
-            );
-          }
-
-          final action_registry = ExplorerActionRegistry([
-            ExplorerFeatureContribution(
-              id: 'workflow',
-              actions: [
-                WorkflowStartExplorerAction(
-                  start_workflow: (root, idempotency_key) => sdk.workflows
-                      .start(root: root, idempotency_key: idempotency_key),
-                ),
-                WorkflowStopExplorerAction(
-                  displayed_workflow: () =>
-                      workflow_view_model.current_workflow,
-                  stop_workflow: (workflow_id, idempotency_key) =>
-                      sdk.workflows.stop(
-                        workflow_id: workflow_id,
-                        idempotency_key: idempotency_key,
-                      ),
-                ),
-              ],
-            ),
-          ]);
-
-          final terminal = create_terminal_host();
-
-          // All filesystem observations pass through the
-          // configured public Rudra SDK.
-          //
-          // The original requested directory is preserved.
-          final controller = ExplorerController(
-            sdk: sdk,
-            starting_directory: directory,
-          );
-
-          // Interactive presentation uses the same output
-          // destination owned by the terminal host.
-          //
-          // The renderer never changes terminal modes.
-          final renderer = BareExplorerRenderer(
-            output: terminal.output,
-            terminal_columns: () => terminal.terminal_columns,
-            theme: TerminalTheme.ansi,
-            ansi_text: const AnsiText(enabled: true),
-            redraw_screen: true,
-          );
-
-          return ExplorerRunner(
-            controller: controller,
-            terminal: terminal,
-            renderer: renderer,
-            error_output: diagnostic_output,
-            create_view_model: create_view_model,
-            refresh_application_state: refresh_workflow_view_model,
-            action_registry: action_registry,
-          );
-        },
-      ),
-    );
-
-    return cli;
-  }
+    Future<int> Function()? run_default,
+    Future<int> Function(Future<int> Function() dispatch)? invoke,
+  }) : _runner = CommandRunner<int>(
+         'rudra',
+         'Rudra - Interactive filesystem exploration and cleanup.',
+       ),
+       _error_output = error_output ?? stderr,
+       _run_default = run_default,
+       _invoke = invoke;
 
   /// Underlying argument parser and command dispatcher.
   final CommandRunner<int> _runner;
@@ -333,14 +50,11 @@ final class RudraCli {
   /// Output destination for usage errors.
   final StringSink _error_output;
 
-  /// Optional controller for the root welcome screen.
-  ///
-  /// Only application compositions explicitly supplying
-  /// a controller enable welcome-screen rendering.
-  final WelcomeController? _welcome_controller;
+  /// Optional application behavior for an invocation without arguments.
+  final Future<int> Function()? _run_default;
 
-  /// Owned SDK in the production composition.
-  RudraSdk? _application_sdk;
+  /// Optional application-owned invocation lifecycle.
+  final Future<int> Function(Future<int> Function() dispatch)? _invoke;
 
   /// Identifiers of registered modules.
   final Set<String> _module_ids = <String>{};
@@ -420,9 +134,8 @@ final class RudraCli {
 
   /// Executes a single CLI invocation.
   ///
-  /// When no arguments are supplied and a welcome controller
-  /// is configured, renders the welcome screen and returns
-  /// [RudraExitCode.success].
+  /// When [arguments] are empty, uses the configured default operation
+  /// if one is supplied. Returns the resulting application exit status.
   ///
   /// Explicit commands continue through the existing
   /// CommandRunner dispatch mechanism.
@@ -443,22 +156,24 @@ final class RudraCli {
 
     _has_started = true;
 
-    try {
-      if (arguments.isEmpty && _welcome_controller != null) {
-        return await _welcome_controller.show();
-      }
+    final invoke = _invoke;
+    return invoke == null
+        ? _dispatch(arguments)
+        : invoke(() => _dispatch(arguments));
+  }
 
+  /// Parses [arguments], dispatches the command and translates usage errors.
+  Future<int> _dispatch(List<String> arguments) async {
+    try {
+      final run_default = _run_default;
+      if (arguments.isEmpty && run_default != null) {
+        return await run_default();
+      }
       final result = await _runner.run(arguments);
       return result ?? RudraExitCode.success.value;
     } on UsageException catch (error) {
       _error_output.writeln(error);
       return RudraExitCode.invalid_usage.value;
-    } on CliHostUnavailableException catch (error) {
-      _error_output.writeln('Rudra Host unavailable: ${error.cause}');
-      return RudraExitCode.host_unavailable.value;
-    } finally {
-      // Explorer's runner restores the terminal before command dispatch returns.
-      await _application_sdk?.close();
     }
   }
 }

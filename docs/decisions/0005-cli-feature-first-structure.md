@@ -107,25 +107,17 @@ when an implemented use case demonstrates genuine reuse.
 
 ### 2.4 Application composition
 
-Application composition is responsible for:
+After Epic 7D.2.1, `compose_product_cli()` assembles and registers product
+features. It supplies the invocation-owned SDK, starting directory and output
+destinations. The host supplies filesystem target identity and selects native
+target inspection.
 
-- Selecting and constructing supported target adapters.
-- Configuring the public Rudra SDK.
-- Supplying the initial target-native directory.
-- Constructing feature controllers and CLI modules.
-- Selecting concrete rendering implementations.
-- Injecting output and diagnostic destinations.
-
-Features MUST NOT depend on `ProductSdkComposition`.
-
-Feature controllers receive the application services and values
-they require through explicit constructor injection.
-
-The existing `RudraCli.product()` entry point remains responsible
-for production application assembly.
-
-The modular command framework established by ADR 0001 remains
-unchanged.
+Feature-owned composition constructs feature controllers, renderers and
+callbacks. Explorer owns terminal and runner assembly, while the workflow
+feature supplies its Explorer actions and verified workflow presentation.
+Features consume explicit dependencies and remain independent of
+`ProductSdkComposition`. `RudraCli` provides generic registration and
+dispatch under ADR 0001.
 
 ### 2.5 SDK-first boundary
 

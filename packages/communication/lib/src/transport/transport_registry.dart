@@ -1,17 +1,7 @@
 import 'contracts/transport.dart';
 import 'macos/unix/macos_unix_transport.dart';
-
-/// Registers one available transport implementation and its default platform.
-///
-/// [id] is a unique implementation key.
-/// [default_platform] is the value of `Platform.operatingSystem` where this
-/// transport is selected by default, or null for explicit activation.
-/// [create] constructs an inactive transport with its default configuration.
-typedef TransportRegistration = ({
-  String id,
-  String? default_platform,
-  Transport Function() create,
-});
+import 'transport_configuration.dart';
+import 'transport_registration.dart';
 
 /// Catalog of available transports and the native default for each platform.
 ///
@@ -21,9 +11,7 @@ typedef TransportRegistration = ({
 /// ### Example
 ///
 /// ```dart
-/// final registry = TransportRegistry([
-///   (id: 'unix', default_platform: 'macos', create: MacOsUnixTransport.new),
-/// ]);
+/// final registry = TransportRegistry([MacOsUnixTransport.registration]);
 /// final transport = registry.create_default('macos');
 /// ```
 final class TransportRegistry {
@@ -56,15 +44,12 @@ final class TransportRegistry {
   }
 
   /// Registers macOS Unix-domain IPC as the first native implementation.
-  static final standard = TransportRegistry([
-    (
-      id: 'macos-unix',
-      default_platform: 'macos',
-      create: MacOsUnixTransport.new,
-    ),
-  ]);
+  static final standard = TransportRegistry([MacOsUnixTransport.registration]);
 
-  final _available = <String, Transport Function()>{};
+  /// Factories indexed by transport implementation ID.
+  final _available = <String, Transport Function(Map<String, String>)>{};
+
+  /// Native local defaults indexed by operating system.
   final _default_ids = <String, String>{};
 
   /// Constructs the inactive native default for [platform].
@@ -75,6 +60,18 @@ final class TransportRegistry {
     if (id == null) {
       throw UnsupportedError('No Rudra transport is available for $platform.');
     }
-    return _available[id]!();
+    return _available[id]!(const {});
+  }
+
+  /// Constructs the inactive transport selected by [endpoint].
+  ///
+  /// Throws [ArgumentError] for an unknown registration. Option validation
+  /// errors from the registered implementation propagate to the caller.
+  Transport create(TransportEndpoint endpoint) {
+    final factory = _available[endpoint.transport_id];
+    if (factory == null) {
+      throw ArgumentError.value(endpoint.transport_id, 'transport_id');
+    }
+    return factory(endpoint.options);
   }
 }

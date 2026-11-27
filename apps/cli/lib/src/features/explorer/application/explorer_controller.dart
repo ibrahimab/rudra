@@ -33,7 +33,7 @@ import 'explorer_model.dart';
 /// explorer.quit();
 /// ```
 final class ExplorerController {
-  /// Creates a controller bound to a configured SDK target.
+  /// Creates a controller bound to a connected SDK.
   ///
   /// [starting_directory] is supplied by application composition.
   /// Its target-native spelling is preserved.
@@ -201,9 +201,10 @@ final class ExplorerController {
     try {
       final listing = await _sdk.filesystem.list(directory: directory);
 
-      // Reject inconsistent SDK observations instead of
-      // silently displaying another target or directory.
-      if (listing.target_id != _sdk.target_id ||
+      // The initial inspection establishes the navigation target. Later
+      // observations must match it and the requested directory.
+      final current_target = _model?.listing.target_id;
+      if ((current_target != null && listing.target_id != current_target) ||
           listing.directory.value != directory.value) {
         throw StateError('SDK returned a listing for an unexpected directory.');
       }

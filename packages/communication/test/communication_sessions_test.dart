@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:rudra_communication/rudra_communication.dart';
 import 'package:test/test.dart';
 
+import 'support/registered_test_communication.dart';
+
 /// Verifies public communication configuration, typed connectivity
 /// and complete application-resource ownership lifecycles.
 void main() {
@@ -30,8 +32,8 @@ void main() {
     final shutdown = Completer<void>();
     final ready = Completer<void>();
 
-    final communication = Communication(
-      listening_transports: [transport],
+    final communication = registered_test_communication(
+      [transport],
       codecs: _create_codecs(),
       handlers: _create_handlers(handler),
     );
@@ -68,8 +70,8 @@ void main() {
     _LoopbackTransport transport, {
     RequestHandler<_EchoResponse, _EchoRequest>? handler,
   }) async {
-    final communication = Communication(
-      listening_transports: [transport],
+    final communication = registered_test_communication(
+      [transport],
       codecs: _create_codecs(),
       handlers: _create_handlers(handler),
     );
@@ -93,10 +95,9 @@ void main() {
     test('invalid session limits prevent listener acquisition', () async {
       final transport = _LoopbackTransport(os_user_id: owner);
 
-      final communication = Communication(
-        listening_transports: [transport],
-        options: const MessageSessionOptions(maximum_incoming: 0),
-      );
+      final communication = registered_test_communication([
+        transport,
+      ], options: const MessageSessionOptions(maximum_incoming: 0));
 
       final lifecycle_failed = expectLater(
         communication.done,
@@ -117,10 +118,9 @@ void main() {
     test('invalid session limits prevent outbound acquisition', () async {
       final transport = _LoopbackTransport(os_user_id: owner);
 
-      final communication = Communication(
-        listening_transports: [transport],
-        options: const MessageSessionOptions(maximum_pending: 0),
-      );
+      final communication = registered_test_communication([
+        transport,
+      ], options: const MessageSessionOptions(maximum_pending: 0));
 
       await expectLater(
         communication.connect(ConnectionParams(transport: transport)),
@@ -141,10 +141,9 @@ void main() {
         const _EchoRequestCodec(),
       );
 
-      final communication = Communication(
-        listening_transports: [transport],
-        codecs: codecs,
-      );
+      final communication = registered_test_communication([
+        transport,
+      ], codecs: codecs);
 
       await expectLater(
         communication.run(shutdown: Future<void>.value()),
@@ -169,8 +168,8 @@ void main() {
           },
         );
 
-        final communication = Communication(
-          listening_transports: [transport],
+        final communication = registered_test_communication(
+          [transport],
           codecs: codecs,
           handlers: handlers,
         );
@@ -194,8 +193,8 @@ void main() {
       final handlers = RequestHandlerRegistry()
         ..freeze(codecs: original_codecs);
 
-      final communication = Communication(
-        listening_transports: [transport],
+      final communication = registered_test_communication(
+        [transport],
         codecs: _create_codecs(),
         handlers: handlers,
       );
@@ -459,7 +458,7 @@ void main() {
     test('failed outbound establishment confirms resource release', () async {
       final transport = _LoopbackTransport(os_user_id: owner);
 
-      final communication = Communication(listening_transports: [transport]);
+      final communication = registered_test_communication([transport]);
 
       final lifecycle_failed = expectLater(
         communication.done,
@@ -490,7 +489,7 @@ void main() {
 
       await start_server(transport);
 
-      final communication = Communication(listening_transports: [transport]);
+      final communication = registered_test_communication([transport]);
 
       final lifecycle_failed = expectLater(
         communication.done,
@@ -520,7 +519,7 @@ void main() {
 
       await start_server(transport);
 
-      final communication = Communication(listening_transports: [transport]);
+      final communication = registered_test_communication([transport]);
 
       final session = await communication.connect(
         ConnectionParams(transport: transport),

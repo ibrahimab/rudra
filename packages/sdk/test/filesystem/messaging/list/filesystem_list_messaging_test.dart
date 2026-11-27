@@ -54,7 +54,7 @@ void main() {
         registry.response_type_for(
           FilesystemListOpenRequest(
             inspection_id: inspection_id,
-            target_id: target_id,
+
             directory: directory,
           ),
         ),
@@ -83,10 +83,13 @@ void main() {
       final messages = <Message>[
         FilesystemListOpenRequest(
           inspection_id: inspection_id,
-          target_id: target_id,
+
           directory: directory,
         ),
-        FilesystemListOpenResponse(inspection_id: inspection_id),
+        FilesystemListOpenResponse(
+          inspection_id: inspection_id,
+          target_id: target_id,
+        ),
         FilesystemListNextRequest(inspection_id: inspection_id, sequence: 1),
         FilesystemListBatchResponse(
           inspection_id: inspection_id,
@@ -120,7 +123,7 @@ void main() {
   group('Inspection admission', () {
     const codec = FilesystemListOpenRequestCodec();
 
-    test('preserves target-native paths and target identifiers', () {
+    test('preserves target-native paths and returns the host target', () {
       final paths = [
         '/workspace',
         '/workspace/../example',
@@ -132,7 +135,7 @@ void main() {
       for (final path in paths) {
         final request = FilesystemListOpenRequest(
           inspection_id: inspection_id,
-          target_id: ' Target-001 ',
+
           directory: TargetPath(path),
         );
 
@@ -141,9 +144,31 @@ void main() {
         );
 
         expect(restored.inspection_id, inspection_id);
-        expect(restored.target_id, ' Target-001 ');
         expect(restored.directory.value, path);
       }
+    });
+
+    test('requires an authoritative target on the admission response', () {
+      const response_codec = FilesystemListOpenResponseCodec();
+      final admission = FilesystemListOpenResponse(
+        inspection_id: inspection_id,
+        target_id: ' Target-001 ',
+      );
+      expect(
+        response_codec.decode(response_codec.encode(admission)).target_id,
+        ' Target-001 ',
+      );
+      expect(
+        () => response_codec.decode({'inspection_id': inspection_id}),
+        throwsFormatException,
+      );
+      expect(
+        () => response_codec.decode({
+          'inspection_id': inspection_id,
+          'target_id': ' ',
+        }),
+        throwsFormatException,
+      );
     });
 
     test('rejects invalid inspection identifiers', () {
@@ -161,7 +186,7 @@ void main() {
         expect(
           () => FilesystemListOpenRequest(
             inspection_id: identifier,
-            target_id: target_id,
+
             directory: directory,
           ),
           throwsArgumentError,
@@ -173,7 +198,7 @@ void main() {
       final payload = codec.encode(
         FilesystemListOpenRequest(
           inspection_id: inspection_id,
-          target_id: target_id,
+
           directory: directory,
         ),
       );
@@ -182,11 +207,11 @@ void main() {
         {...payload, 'os_user_id': 'untrusted-user'},
         {...payload, 'scope_directory': '/untrusted'},
         {...payload, 'scope_id': 'untrusted-scope'},
-        {...payload, 'target_id': ''},
+        {...payload, 'target_id': 'untrusted-target'},
         {...payload, 'directory': ''},
         {...payload, 'directory': '/workspace\u0000'},
         {...payload, 'directory': 42},
-        {...payload}..remove('target_id'),
+        {...payload}..remove('directory'),
       ];
 
       for (final invalid in invalid_payloads) {
@@ -557,10 +582,10 @@ void main() {
 
       final cases = <(String, Object?)>[
         (
-          'rudra.filesystem.list.open.request.v1',
+          'rudra.filesystem.list.open.request.v2',
           {'inspection_id': inspection_id, 'target_id': target_id},
         ),
-        ('rudra.filesystem.list.open.response.v1', {'inspection_id': ''}),
+        ('rudra.filesystem.list.open.response.v2', {'inspection_id': ''}),
         (
           'rudra.filesystem.list.next.request.v1',
           {'inspection_id': inspection_id, 'sequence': '1'},

@@ -17,7 +17,6 @@ void main() {
   );
 
   final start_request = WorkflowStartRequest(
-    target_id: 'local-macos',
     root: TargetPath('/workspace'),
     idempotency_key: 'operation-001',
   );
@@ -105,7 +104,7 @@ void main() {
       expect(identical(client_codecs, host_codecs), isFalse);
 
       final messages = <(Message, String)>[
-        (start_request, 'rudra.workflow.start.request.v1'),
+        (start_request, 'rudra.workflow.start.request.v2'),
         (
           WorkflowStartResponse(
             outcome: WorkflowOperationResolved(resolution: resolution),

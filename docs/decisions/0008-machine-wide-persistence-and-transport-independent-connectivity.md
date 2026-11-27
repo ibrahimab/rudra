@@ -3,7 +3,7 @@
 **Status:** Accepted  
 **Date:** 26 November 2026  
 **Related:** ADR 0004, ADR 0006, ADR 0007  
-**Implementation:** Epic 7D.1.4
+**Implementation:** Epic 7D.1.4 and 7D.2.1
 
 ## Context
 
@@ -43,13 +43,17 @@ Different operating-system users may run independent Rudra hosts concurrently.
 
 ### Communication ownership
 
-Communication owns transport registration, default transport selection, listening endpoint activation, connection establishment, session coordination and transport resource disposal.
+Communication owns transport resolution, listening endpoint activation,
+connection establishment, session coordination and transport resource
+disposal. `TransportRegistry` maps implementation keys to inactive factories.
+Transport implementations declare their registration metadata and encapsulate
+native endpoint configuration and connection mechanics.
 
-RudraHost consumes authenticated application communication without selecting or managing individual transport implementations.
-
-Transport implementations encapsulate native endpoint configuration and connection mechanics.
-
-Registered listening transports are activated according to their configuration before admitting incoming connections.
+The host application owns the enabled listener policy through
+`TransportConfiguration`. Registration alone enables no listeners. The default
+policy selects the registered native local transport. An explicit enabled list
+resolves before endpoint binding, and all listeners bind before session
+admission. A partial bind failure rolls back acquired listeners.
 
 The client selects one transport for each connection lifecycle.
 
@@ -76,6 +80,11 @@ RudraSdk remains the single public frontend application facade.
 Application capabilities are composed independently of connection establishment and transport selection.
 
 The SDK supports default connectivity and explicitly configured connectivity through one application execution architecture.
+
+The connected host owns the filesystem target. The filesystem open response
+supplies its authoritative identity and the workflow Start handler attaches it
+before submitting the durable domain command. Observations, workflow identity
+and persisted history retain their existing target semantics.
 
 Disconnected SDK instances reject application operations.
 
@@ -130,7 +139,11 @@ Native listening endpoints and exclusive host ownership resources remain user-sc
 
 The concrete native provisioning mechanism must establish appropriate directory ownership, permissions and SQLite auxiliary-file accessibility.
 
-Native resource layout and implementation details belong to the relevant platform and persistence capabilities.
+The capability-specific host implementation validates ownership and storage,
+and the Unix transport validates its socket directory. They share the UID,
+runtime location and no-follow metadata primitives under the macOS platform
+package. Filesystem inspection also reuses the Darwin metadata binding.
+Native peer credentials and endpoint handling remain in Communication.
 
 ### Lifecycle and installation
 

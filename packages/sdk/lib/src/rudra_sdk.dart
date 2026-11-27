@@ -20,7 +20,7 @@ import 'workflow/workflow_runtime.dart';
 /// All application operations execute through one authenticated
 /// host connection owned by this SDK.
 ///
-/// The selected target identifies a filesystem environment on the host.
+/// The connected host owns the filesystem target for application operations.
 ///
 /// Construction retains configuration without acquiring external
 /// resources or executing application operations.
@@ -45,10 +45,7 @@ import 'workflow/workflow_runtime.dart';
 /// }
 /// ```
 final class RudraSdk {
-  /// Creates an SDK configured for one filesystem target.
-  ///
-  /// [target_id] identifies the selected filesystem environment. The host
-  /// validates it on application operations.
+  /// Creates an SDK with inactive application services.
   ///
   /// [workflow_runtime] optionally supplies application messaging
   /// serialization configuration. The standard runtime is selected
@@ -57,23 +54,13 @@ final class RudraSdk {
   /// [communication_factory] optionally substitutes default
   /// communication construction.
   ///
-  /// Throws [ArgumentError] for a blank target identifier.
   /// Application messaging configuration failures propagate.
   ///
   /// Construction does not acquire external resources.
   RudraSdk({
-    this.target_id = local_macos_target_id,
     WorkflowRuntime? workflow_runtime,
     ClientCommunicationFactory? communication_factory,
   }) {
-    if (target_id.trim().isEmpty) {
-      throw ArgumentError.value(
-        target_id,
-        'target_id',
-        'The target identifier must not be blank.',
-      );
-    }
-
     _connection = ClientConnection(
       runtime: workflow_runtime ?? WorkflowRuntime.standard(),
       communication_factory: communication_factory,
@@ -82,18 +69,9 @@ final class RudraSdk {
       on_session_unavailable: _state_observer.detach_session,
     );
 
-    filesystem = FilesystemService(
-      target_id: target_id,
-      connection: _connection,
-    );
-
-    workflows = WorkflowService(target_id: target_id, connection: _connection);
+    filesystem = FilesystemService(connection: _connection);
+    workflows = WorkflowService(connection: _connection);
   }
-
-  /// Identifier of the selected filesystem environment.
-  ///
-  /// The identifier is scoped to the host's configured targets.
-  final String target_id;
 
   /// Provides host-backed read-only filesystem operations.
   ///
@@ -250,6 +228,3 @@ final class RudraSdk {
     _state_observer.close();
   }
 }
-
-/// Host-validated identity of Rudra's local macOS filesystem target.
-const local_macos_target_id = 'local-macos';

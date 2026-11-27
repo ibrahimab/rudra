@@ -30,29 +30,12 @@ import '../messaging/submission/workflow_submission_request.dart';
 /// }
 /// ```
 final class WorkflowService {
-  /// Creates a workflow service for the configured [target_id].
+  /// Creates a service using the authenticated [connection].
   ///
-  /// [connection] supplies authenticated application request execution.
-  /// Its ownership and disposal remain with the composing SDK.
-  ///
-  /// Throws [ArgumentError] when the target identifier is blank.
-  ///
-  /// Construction does not establish communication or execute
-  /// application operations.
-  WorkflowService({
-    required this.target_id,
-    required ClientConnection connection,
-  }) : _connection = connection {
-    if (target_id.trim().isEmpty) {
-      throw ArgumentError.value(target_id, 'target_id');
-    }
-  }
-
-  /// Filesystem target associated with this workflow service.
-  ///
-  /// Workflow establishment requests use this identifier without
-  /// requiring consumers to repeat their configured target.
-  final String target_id;
+  /// The owning SDK establishes and disposes the connection.
+  /// Construction performs no application operations.
+  WorkflowService({required ClientConnection connection})
+    : _connection = connection;
 
   /// Borrowed authenticated application request capability.
   ///
@@ -76,7 +59,7 @@ final class WorkflowService {
   ///
   /// A failed response does not establish whether the operation
   /// committed. Explicit retries within the same durable scope
-  /// must preserve the original key, target and root.
+  /// must preserve the original key and root. The host supplies its target.
   ///
   /// Example:
   /// ```dart
@@ -90,11 +73,7 @@ final class WorkflowService {
     required String idempotency_key,
   }) async {
     final response = await _connection.request(
-      WorkflowStartRequest(
-        target_id: target_id,
-        root: root,
-        idempotency_key: idempotency_key,
-      ),
+      WorkflowStartRequest(root: root, idempotency_key: idempotency_key),
     );
 
     return response.outcome;

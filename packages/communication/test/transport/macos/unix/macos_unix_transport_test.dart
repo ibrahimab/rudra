@@ -60,6 +60,25 @@ void main() {
       return socket;
     }
 
+    test('rejects a private socket directory with an extended ACL', () async {
+      final result = await Process.run('/bin/chmod', [
+        '+a',
+        'everyone allow search',
+        scope,
+      ]);
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+
+      await expectLater(listen(), throwsA(isA<FileSystemException>()));
+      await expectLater(
+        MacOsUnixTransport(socket_path: socket_path).connect(),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(
+        await FileSystemEntity.type(socket_path),
+        FileSystemEntityType.notFound,
+      );
+    });
+
     test('accepts multiple authenticated connections', () async {
       final listener = await listen();
 
