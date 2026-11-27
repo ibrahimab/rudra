@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/isolate.dart' show DriftRemoteException;
 import 'package:rudra_persistence_sqlite/src/database/rudra_database.dart';
 import 'package:rudra_sdk/rudra_sdk.dart';
@@ -12,6 +13,18 @@ import 'fixtures/shared_database_worker.dart';
 
 void main() {
   late File file;
+
+  setUpAll(() {
+    // we're disabling the warning because we're deliberately testing independent
+    // connections. That's precisely what our multi-user host architecture requires.
+    final previous_value = driftRuntimeOptions.dontWarnAboutMultipleDatabases;
+
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+    addTearDown(() {
+      driftRuntimeOptions.dontWarnAboutMultipleDatabases = previous_value;
+    });
+  });
 
   setUp(() async {
     final directory = await Directory.systemTemp.createTemp('rudra-shared-db-');
